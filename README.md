@@ -9,11 +9,10 @@ Void Crew Community Modding Discord: \
 
 # [VoidCrewTerminus]
 
-Version [0.1]  
+Version [0.0.1]  
 Developed by [VisualSource]  
 Requires: [Dependencies]
-
-
+    
 ---------------------
 
 ### 💡 Function(s)

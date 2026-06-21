@@ -18,6 +18,7 @@ namespace VoidCrewTerminus
         {
             Log = Logger;
             Harmony.CreateAndPatchAll(Assembly.GetExecutingAssembly());
+            AssetLoader.TryLoadAssetBundlesNextToDLL();
             Logger.LogInfo($"Plugin {MyPluginInfo.PLUGIN_GUID} is loaded!");
         }
     }
