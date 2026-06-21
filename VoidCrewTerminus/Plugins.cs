@@ -4,7 +4,6 @@ using HarmonyLib;
 using System.Reflection;
 using VoidManager;
 using VoidManager.MPModChecks;
-
 namespace VoidCrewTerminus
 {
     [BepInPlugin(MyPluginInfo.PLUGIN_GUID, MyPluginInfo.USERS_PLUGIN_NAME, MyPluginInfo.PLUGIN_VERSION)]
