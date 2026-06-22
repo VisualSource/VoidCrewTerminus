@@ -1,0 +1,1045 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VoidCrew.GameLibs — Modder's Guide</title>
+  <style>
+    :root {
+      --bg:      #0f1117;
+      --surface: #181c27;
+      --border:  #2a2f42;
+      --accent:  #5c8aff;
+      --accent2: #9b59f5;
+      --text:    #d4d8e8;
+      --muted:   #7a80a0;
+      --code-bg: #12151f;
+      --tag-bg:  #1e2436;
+      --danger:  #e05c5c;
+      --warn:    #e0a35c;
+      --ok:      #5ce08a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* ── Sidebar ── */
+    nav {
+      width: 260px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 28px 20px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+    nav .logo {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+    nav .subtitle {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 28px;
+    }
+    nav ul { list-style: none; }
+    nav ul li { margin-bottom: 2px; }
+    nav ul li a {
+      display: block;
+      padding: 5px 10px;
+      border-radius: 6px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 13px;
+      transition: color .15s, background .15s;
+    }
+    nav ul li a:hover,
+    nav ul li a.active { color: var(--text); background: var(--border); }
+    nav .section-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--accent2);
+      margin: 18px 0 6px 10px;
+    }
+
+    /* ── Main content ── */
+    main {
+      flex: 1;
+      padding: 48px 64px;
+      max-width: 900px;
+    }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    .page-meta {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 40px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    h2 {
+      font-size: 20px;
+      font-weight: 700;
+      color: #fff;
+      margin: 48px 0 16px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    h3 {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--accent);
+      margin: 28px 0 10px;
+    }
+    p { margin-bottom: 14px; color: var(--text); }
+
+    /* ── Code ── */
+    pre, code {
+      font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+      font-size: 13px;
+    }
+    code {
+      background: var(--tag-bg);
+      padding: 1px 6px;
+      border-radius: 4px;
+      color: #a8c0ff;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px 24px;
+      overflow-x: auto;
+      margin: 14px 0 20px;
+      line-height: 1.6;
+    }
+    pre code {
+      background: none;
+      padding: 0;
+      color: var(--text);
+    }
+
+    /* Syntax tones */
+    .kw  { color: #7ec4ff; }   /* keywords */
+    .ty  { color: #9cdcfe; }   /* types */
+    .mth { color: #dcdcaa; }   /* methods */
+    .cm  { color: #608b4e; }   /* comments */
+    .str { color: #ce9178; }   /* strings */
+    .num { color: #b5cea8; }   /* numbers */
+    .at  { color: #c586c0; }   /* attributes */
+
+    /* ── Callouts ── */
+    .callout {
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin: 18px 0;
+      font-size: 13.5px;
+      border-left: 4px solid;
+    }
+    .callout.note   { background: #1a2035; border-color: var(--accent);  color: #b8c8f0; }
+    .callout.warn   { background: #241e12; border-color: var(--warn);   color: #e8d3b0; }
+    .callout.danger { background: #241212; border-color: var(--danger);  color: #e8c0c0; }
+    .callout strong { color: inherit; font-weight: 700; }
+
+    /* ── Type cards ── */
+    .type-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px 24px;
+      margin: 14px 0 22px;
+    }
+    .type-card .type-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .type-card .type-name {
+      font-family: 'Cascadia Code', monospace;
+      font-size: 14px;
+      color: #9cdcfe;
+      font-weight: 700;
+    }
+    .type-card .type-ns {
+      font-family: 'Cascadia Code', monospace;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+    .badge.class   { background: #1e3055; color: #7ec4ff; }
+    .badge.mono    { background: #1e2a1e; color: #5ce08a; }
+    .badge.pun     { background: #2a1e35; color: #c586c0; }
+    .badge.singleton { background: #2a2012; color: #e0a35c; }
+    .type-card .type-desc { color: var(--muted); font-size: 13px; margin-bottom: 14px; }
+    .type-card table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .type-card table th {
+      text-align: left;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      padding: 0 8px 8px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .type-card table td {
+      padding: 7px 8px 7px 0;
+      border-bottom: 1px solid #1a1f2e;
+      vertical-align: top;
+    }
+    .type-card table tr:last-child td { border-bottom: none; }
+    .type-card table td:first-child {
+      font-family: 'Cascadia Code', monospace;
+      color: #dcdcaa;
+      white-space: nowrap;
+      padding-right: 20px;
+    }
+    .type-card table td.sig {
+      color: #9cdcfe;
+      font-family: 'Cascadia Code', monospace;
+    }
+    .type-card table td.desc { color: var(--muted); }
+
+    /* ── Patch stub labels ── */
+    .patch-label {
+      display: inline-block;
+      background: #1a1f2e;
+      border: 1px solid var(--border);
+      border-radius: 6px 6px 0 0;
+      border-bottom: none;
+      padding: 5px 14px;
+      font-size: 11px;
+      color: var(--muted);
+      font-family: 'Cascadia Code', monospace;
+      margin-bottom: -1px;
+    }
+    .patch-label + pre { border-radius: 0 8px 8px 8px; margin-top: 0; }
+
+    hr { border: none; border-top: 1px solid var(--border); margin: 40px 0; }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════ SIDEBAR ═══════════ -->
+<nav>
+  <div class="logo">VoidCrew GameLibs</div>
+  <div class="subtitle">Modder's Reference · v1.3.0</div>
+  <ul>
+    <li><a href="#overview">Overview</a></li>
+  </ul>
+  <div class="section-label">Enemy System</div>
+  <ul>
+    <li><a href="#enemy-overview">How it works</a></li>
+    <li><a href="#enemy-types">Key types</a></li>
+    <li><a href="#enemy-patches">Patch stubs</a></li>
+  </ul>
+  <div class="section-label">Ship Modules</div>
+  <ul>
+    <li><a href="#ship-overview">How it works</a></li>
+    <li><a href="#ship-types">Key types</a></li>
+    <li><a href="#ship-patches">Patch stubs</a></li>
+  </ul>
+  <div class="section-label">Relics</div>
+  <ul>
+    <li><a href="#relic-overview">How it works</a></li>
+    <li><a href="#relic-types">Key types</a></li>
+    <li><a href="#relic-patches">Patch stubs</a></li>
+  </ul>
+  <div class="section-label">Photon / Replication</div>
+  <ul>
+    <li><a href="#net-overview">How it works</a></li>
+    <li><a href="#net-types">Key types</a></li>
+    <li><a href="#net-patches">Patch stubs</a></li>
+  </ul>
+</nav>
+
+<!-- ═══════════ MAIN ═══════════ -->
+<main>
+
+  <h1>VoidCrew.GameLibs — Modder's Guide</h1>
+  <div class="page-meta">
+    Assembly-CSharp.dll · v1.3.0 &nbsp;|&nbsp; Target: net472 &nbsp;|&nbsp;
+    Decompiled stubs — bodies are <code>throw null</code>; patch, don't call directly.
+  </div>
+
+  <!-- ─── Overview ─── -->
+  <section id="overview">
+    <h2>Overview</h2>
+
+    <p>
+      <code>VoidCrew.GameLibs</code> is the NuGet package that bundles all of Void Crew's
+      game assemblies as reference stubs. The key game-logic DLLs are:
+    </p>
+    <ul style="margin: 0 0 14px 24px; color: var(--muted);">
+      <li><strong style="color:var(--text)">Assembly-CSharp.dll</strong> — all game gameplay code</li>
+      <li><strong style="color:var(--text)">VoidCrewCommon.dll</strong> — shared utilities, common types</li>
+      <li><strong style="color:var(--text)">ResourceAssets.dll</strong> — asset reference types (<code>CloneStarObjectRef</code>, <code>GUIDUnion</code>)</li>
+    </ul>
+    <p>
+      Because these are decompiled stubs, every method body is <code>throw null</code>.
+      You interact with the game via <strong>Harmony patches</strong> — you never instantiate or call
+      these types directly; you hook into the game's own call stack.
+    </p>
+
+    <div class="callout note">
+      <strong>Multiplayer authority:</strong> Void Crew uses Photon PUN2. Most mutating operations
+      only run on the <em>master client</em> (room host). Before writing state in a patch, check
+      <code>PhotonNetwork.IsMasterClient</code> or the object's <code>.AmOwner</code> property.
+    </div>
+
+    <div class="callout warn">
+      <strong>Stubs throw null:</strong> Method bodies are stubs. Calling
+      <code>base.SomeMethod()</code> from a Transpiler or calling game methods from your own
+      non-patch code will throw at runtime. Patches work because Harmony replaces the body
+      before it executes.
+    </div>
+  </section>
+
+  <hr />
+
+  <!-- ═══════════ ENEMY SYSTEM ═══════════ -->
+  <section id="enemy-system">
+    <h2 id="enemy-overview">Enemy System</h2>
+
+    <p>
+      Enemy ships in Void Crew are <strong>OrbitObjects</strong> — the base for every
+      space entity. On top of <code>OrbitObject</code>, NPC ships carry an <code>NpcAI</code>
+      component that drives behaviour. The <code>AIDirector</code> singleton owns a list of
+      <code>Spawner</code> instances; each <code>Spawner</code> manages a pool of
+      <code>SpawnerUnitEntry</code> groups and decides when to instantiate new enemies via
+      <code>ObjectFactory</code>.
+    </p>
+
+    <p>
+      The lifecycle looks like this:
+    </p>
+    <pre><code><span class="cm">// Simplified flow (not actual source)
+// 1. AIDirector ticks each Spawner on an interval
+// 2. Spawner picks a SpawnerUnitEntry that fits current intensity budget
+// 3. SpawnerUnitEntry contains SpawnerUnitDef objects (each = an enemy prefab + intensity cost)
+// 4. ObjectFactory.InstantiateSpaceObjectByGUID spawns the prefab over Photon
+// 5. IPunInstantiateMagicCallback.OnPhotonInstantiate fires on NpcAI → wires up behaviours</span></code></pre>
+
+    <p>
+      Once alive, the <code>NpcAI</code> runs a simple state machine driven by
+      <strong>Behaviours</strong> (e.g. <code>BehAttack</code>, <code>BehOrbitAroundTarget</code>),
+      <strong>Commands</strong> (external instructions queued on the AI), and
+      <strong>Signals</strong> (event messages like <code>SignalHitFromSource</code>).
+      The active behaviour is selected by the <code>SignalResolver</code> field.
+    </p>
+
+    <h3 id="enemy-types">Key types</h3>
+
+    <div class="type-card">
+      <div class="type-header">
+        <span class="badge pun">MonoBehaviourPun</span>
+        <span class="type-name">OrbitObject</span>
+        <span class="type-ns">CG.Space</span>
+      </div>
+      <div class="type-desc">
+        Base class for every destructible space entity — player ships, NPC ships, asteroids.
+        Implements <code>IDamageable</code>, <code>IStatCollectionHolder</code>, <code>ITaggable</code>.
+      </div>
+      <table>
+        <tr><th>Member</th><th class="sig">Signature</th><th class="desc">Notes</th></tr>
+        <tr>
+          <td>HitPoints</td>
+          <td class="sig">float HitPoints { get; set; }</td>
+          <td class="desc">Current HP. Settable but prefer <code>ApplyHitDamage</code> so events fire.</td>
+        </tr>
+        <tr>
+          <td>MaxHitPoints</td>
+          <td class="sig">ModifiableFloat MaxHitPoints</td>
+          <td class="desc">Public field — directly modifiable. Affects the health bar cap.</td>
+        </tr>
+        <tr>
+          <td>Faction</td>
+          <td class="sig">int Faction { get; set; }</td>
+          <td class="desc">0 = player, non-zero = enemy. Used by <code>IsObjectFromEnemyFaction</code>.</td>
+        </tr>
+        <tr>
+          <td>ApplyHitDamage</td>
+          <td class="sig">void ApplyHitDamage(float damage, OrbitObject source, DamageType dmgType, Vector3 point, Quaternion rot, bool friendlyFire)</td>
+          <td class="desc">Preferred damage entry point; fires <code>DamageReceived</code> event.</td>
+        </tr>
+        <tr>
+          <td>Kill</td>
+          <td class="sig">virtual void Kill()</td>
+          <td class="desc">Triggers destruction. Override in a Prefix to prevent or modify.</td>
+        </tr>
+        <tr>
+          <td>OnDestroyed</td>
+          <td class="sig">Action&lt;OrbitObject&gt; OnDestroyed</td>
+          <td class="desc">Public event — subscribe in Postfix of <code>Awake</code> to hook destroy.</td>
+        </tr>
+        <tr>
+          <td>Stats</td>
+          <td class="sig">StatTagCollection Stats { get; }</td>
+          <td class="desc">Stat bag — use to read/write numeric stats by tag key.</td>
+        </tr>
+        <tr>
+          <td>CsTags</td>
+          <td class="sig">CsTag[] CsTags { get; set; }</td>
+          <td class="desc">Tag array. Use <code>AddTag(CsTag)</code> to append at runtime.</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="type-card">
+      <div class="type-header">
+        <span class="badge pun">MonoBehaviourPun</span>
+        <span class="type-name">NpcAI</span>
+        <span class="type-ns">Gameplay.NPC.AI</span>
+      </div>
+      <div class="type-desc">
+        The brain of every NPC ship. Holds a list of <code>BaseBehaviour</code> entries;
+        the active one drives movement and combat. Serialized fields are set on the prefab.
+      </div>
+      <table>
+        <tr><th>Member</th><th class="sig">Signature</th><th class="desc">Notes</th></tr>
+        <tr>
+          <td>Behaviours</td>
+          <td class="sig">BaseBehaviour[] Behaviours</td>
+          <td class="desc">All behaviours defined on the prefab. Index matches <code>SetActiveBehaviour</code>.</td>
+        </tr>
+        <tr>
+          <td>ActiveBehaviour</td>
+          <td class="sig">BaseBehaviour ActiveBehaviour</td>
+          <td class="desc">Currently running behaviour. Read-only via normal use.</td>
+        </tr>
+        <tr>
+          <td>AggroHandler</td>
+          <td class="sig">AggroHandler AggroHandler</td>
+          <td class="desc">Tracks aggro per target. See <code>IncreaseAggroTowards</code>.</td>
+        </tr>
+        <tr>
+          <td>SendCommand</td>
+          <td class="sig">void SendCommand(BaseCommand command, bool setAsFallback = false)</td>
+          <td class="desc">Issue an order to the AI — e.g. <code>CommandAttack</code>, <code>CommandMoveTo</code>.</td>
+        </tr>
+        <tr>
+          <td>HandleSignal</td>
+          <td class="sig">void HandleSignal(BaseSignal signal)</td>
+          <td class="desc">Inject a signal — trigger phase transitions or state changes.</td>
+        </tr>
+        <tr>
+          <td>IncreaseAggroTowards</td>
+          <td class="sig">void IncreaseAggroTowards(OrbitObject enemy, float aggroIncrease)</td>
+          <td class="desc">Force the NPC to aggro a specific target.</td>
+        </tr>
+        <tr>
+          <td>GetNpcAbility&lt;T&gt;</td>
+          <td class="sig">T GetNpcAbility&lt;T&gt;(int abilityIndex = -1) where T : BaseNpcAbility</td>
+          <td class="desc">Retrieve a typed ability — useful to enable/disable special attacks.</td>
+        </tr>
+        <tr>
+          <td>OnActiveBehaviourChanged</td>
+          <td class="sig">Action&lt;BaseBehaviour&gt; OnActiveBehaviourChanged</td>
+          <td class="desc">Event fired on every behaviour transition.</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="type-card">
+      <div class="type-header">
+        <span class="badge singleton">Singleton</span>
+        <span class="type-name">AIDirector</span>
+        <span class="type-ns">Gameplay.NPC.AI</span>
+      </div>
+      <div class="type-desc">
+        Global enemy director. Owns all active <code>Spawner</code> instances.
+        Access via <code>AIDirector.Instance</code>. Only meaningful on master client.
+      </div>
+      <table>
+        <tr><th>Member</th><th class="sig">Signature</th><th class="desc">Notes</th></tr>
+        <tr>
+          <td>spawners</td>
+          <td class="sig">List&lt;Spawner&gt; spawners</td>
+          <td class="desc">All registered spawners. Iterate to inspect or modify live spawners.</td>
+        </tr>
+        <tr>
+          <td>CreateSpawner</td>
+          <td class="sig">void CreateSpawner(SpawnerProfile profile)</td>
+          <td class="desc">Instantiate a new spawner from a profile asset.</td>
+        </tr>
+        <tr>
+          <td>GetSpawner</td>
+          <td class="sig">Spawner GetSpawner(ScriptableObjectRef identifier, bool canBeNull = false)</td>
+          <td class="desc">Look up an existing spawner by its identifier ref.</td>
+        </tr>
+        <tr>
+          <td>SetSpawnerTargetIntensity</td>
+          <td class="sig">void SetSpawnerTargetIntensity(ScriptableObjectRef id, int intensity)</td>
+          <td class="desc">Directly set how many intensity-points of enemies to maintain.</td>
+        </tr>
+        <tr>
+          <td>AddSpawnerSpawnGroup</td>
+          <td class="sig">void AddSpawnerSpawnGroup(ScriptableObjectRef id, SpawnerUnitEntry entry)</td>
+          <td class="desc">Inject a new spawn group (your custom enemy type) at runtime.</td>
+        </tr>
+        <tr>
+          <td>OnSpawnerAdded</td>
+          <td class="sig">Action OnSpawnerAdded</td>
+          <td class="desc">Hook this event to react when a new spawner comes online.</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="type-card">
+      <div class="type-header">
+        <span class="badge pun">MonoBehaviourPun</span>
+        <span class="type-name">Spawner</span>
+        <span class="type-ns">Gameplay.NPC.AI</span>
+      </div>
+      <div class="type-desc">
+        Manages a wave budget. Tracks <em>currentIntensity</em> (what's alive) vs.
+        <em>targetIntensity</em> (what should exist). Spawns units when current &lt; target.
+      </div>
+      <table>
+        <tr><th>Member</th><th class="sig">Signature</th><th class="desc">Notes</th></tr>
+        <tr>
+          <td>possibleUnitsToSpawn</td>
+          <td class="sig">List&lt;SpawnerUnitEntry&gt; possibleUnitsToSpawn</td>
+          <td class="desc">Pool of spawn groups. Add to inject new enemy types.</td>
+        </tr>
+        <tr>
+          <td>trackedUnits</td>
+          <td class="sig">List&lt;OrbitObject&gt; trackedUnits</td>
+          <td class="desc">All currently alive enemies owned by this spawner.</td>
+        </tr>
+        <tr>
+          <td>SetTargetIntensity</td>
+          <td class="sig">void SetTargetIntensity(int desiredIntensity)</td>
+          <td class="desc">Override the wave size directly.</td>
+        </tr>
+        <tr>
+          <td>AddSpawnerUnitEntry</td>
+          <td class="sig">void AddSpawnerUnitEntry(SpawnerUnitEntry unitEntry)</td>
+          <td class="desc">Register a new spawn-group entry at runtime.</td>
+        </tr>
+        <tr>
+          <td>SpawnUnitEntry</td>
+          <td class="sig">void SpawnUnitEntry()</td>
+          <td class="desc">Manually trigger one spawn tick.</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="type-card">
+      <div class="type-header">
+        <span class="badge class">class</span>
+        <span class="type-name">SpawnerUnitDef</span>
+        <span class="type-ns">Gameplay.NPC.AI</span>
+      </div>
+      <div class="type-desc">
+        A single enemy type entry: a prefab GUID + intensity cost. Wrap one or more in a
+        <code>SpawnerUnitEntry</code> (group) to add to a spawner.
+      </div>
+      <table>
+        <tr><th>Member</th><th class="sig">Signature</th><th class="desc">Notes</th></tr>
+        <tr>
+          <td>OrbitObjectRef</td>
+          <td class="sig">CloneStarObjectRef OrbitObjectRef</td>
+          <td class="desc">Prefab reference. Build with a <code>GUIDUnion</code> for your custom enemy.</td>
+        </tr>
+        <tr>
+          <td>Intensity</td>
+          <td class="sig">int Intensity</td>
+          <td class="desc">Cost in the spawner's intensity budget. Harder enemies cost more.</td>
+        </tr>
+        <tr>
+          <td>ctor</td>
+          <td class="sig">SpawnerUnitDef(int intensity, GUIDUnion guid, string path)</td>
+          <td class="desc">Only constructor — provide intensity, asset GUID, and resource path.</td>
+        </tr>
+      </table>
+    </div>
+
+    <h3 id="enemy-patches">Patch stubs</h3>
+
+    <p>Hook new enemy on spawn to modify its stats or aggro:</p>
+    <div class="patch-label">EnemySpawnPatch.cs — postfix NpcAI.OnPhotonInstantiate</div>
+<pre><code><span class="kw">using</span> <span class="ty">Gameplay.NPC.AI</span>;
+<span class="kw">using</span> <span class="ty">CG.Space</span>;
+<span class="kw">using</span> <span class="ty">HarmonyLib</span>;
+<span class="kw">using</span> <span class="ty">Photon.Pun</span>;
+
+[<span class="at">HarmonyPatch</span>(<span class="kw">typeof</span>(<span class="ty">NpcAI</span>), <span class="str">"OnPhotonInstantiate"</span>)]
+<span class="kw">internal class</span> <span class="ty">NpcAISpawnPatch</span>
+{
+    <span class="kw">static void</span> <span class="mth">Postfix</span>(<span class="ty">NpcAI</span> __instance, <span class="ty">PhotonMessageInfo</span> info)
+    {
+        <span class="cm">// Runs on ALL clients after the NPC prefab is instantiated over Photon.</span>
+        <span class="kw">var</span> orbitObj = __instance.<span class="mth">GetComponent</span>&lt;<span class="ty">OrbitObject</span>&gt;();
+        <span class="kw">if</span> (orbitObj == <span class="kw">null</span>) <span class="kw">return</span>;
+
+        <span class="cm">// Example: scale up max HP for all NPCs</span>
+        orbitObj.MaxHitPoints.BaseValue *= <span class="num">1.5f</span>;
+        orbitObj.hitPoints = orbitObj.MaxHitPointsValue;
+    }
+}</code></pre>
+
+    <p>Inject a new spawn group into the default spawner at session start:</p>
+    <div class="patch-label">CustomEnemyInjector.cs — postfix AIDirector.OnEnable</div>
+<pre><code>[<span class="at">HarmonyPatch</span>(<span class="kw">typeof</span>(<span class="ty">AIDirector</span>), <span class="str">"OnEnable"</span>)]
+<span class="kw">internal class</span> <span class="ty">AIDirectorPatch</span>
+{
+    <span class="kw">static void</span> <span class="mth">Postfix</span>(<span class="ty">AIDirector</span> __instance)
+    {
+        <span class="cm">// Only the master client controls spawning.</span>
+        <span class="kw">if</span> (!<span class="ty">PhotonNetwork</span>.IsMasterClient) <span class="kw">return</span>;
+
+        <span class="cm">// Build a unit def pointing at your custom enemy prefab.</span>
+        <span class="cm">// Replace the GUIDUnion with your actual asset GUID.</span>
+        <span class="kw">var</span> customDef = <span class="kw">new</span> <span class="ty">SpawnerUnitDef</span>(
+            intensity: <span class="num">2</span>,
+            guid: <span class="kw">new</span> <span class="ty">GUIDUnion</span>(<span class="str">"your-asset-guid-here"</span>),
+            path: <span class="str">"Enemies/Lech"</span>
+        );
+
+        <span class="cm">// Wrap in an entry and add to the default spawner.</span>
+        <span class="kw">var</span> entry = <span class="kw">new</span> <span class="ty">SpawnerUnitEntry</span>();
+        entry.UnitDefs.Add(customDef);
+        __instance.defaultSpawner?.<span class="mth">AddSpawnerUnitEntry</span>(entry);
+    }
+}</code></pre>
+
+    <p>React when an enemy is destroyed (for loot drops, spawn triggers, etc.):</p>
+    <div class="patch-label">EnemyDeathPatch.cs — postfix OrbitObject.Kill</div>
+<pre><code>[<span class="at">HarmonyPatch</span>(<span class="kw">typeof</span>(<span class="ty">OrbitObject</span>), <span class="str">"Kill"</span>)]
+<span class="kw">internal class</span> <span class="ty">OrbitObjectKillPatch</span>
+{
+    <span class="kw">static void</span> <span class="mth">Prefix</span>(<span class="ty">OrbitObject</span> __instance)
+    {
+        <span class="cm">// Fires before destruction on all clients (OrbitObject.Kill is called via PunRPC).</span>
+        <span class="kw">if</span> (__instance.<span class="mth">GetComponent</span>&lt;<span class="ty">NpcAI</span>&gt;() == <span class="kw">null</span>) <span class="kw">return</span>; <span class="cm">// skip non-NPCs</span>
+        <span class="ty">BepinPlugin</span>.Log.<span class="mth">LogInfo</span>($<span class="str">"Enemy killed: {__instance.gameObject.name}"</span>);
+        <span class="cm">// TODO: spawn attachment mechanic here</span>
+    }
+}</code></pre>
+  </section>
+
+  <hr />
+
+  <!-- ═══════════ SHIP MODULES ═══════════ -->
+  <section id="ship-modules">
+    <h2 id="ship-overview">Ship Modules &amp; Hull Damage</h2>
+
+    <p>
+      The player ship is a <code>PlayerControlledShip</code> (extends <code>OrbitObject</code>)
+      built from a <code>ShipHull</code> containing rooms and <code>ModSocket</code> sockets.
+      Each socket can hold a <code>CellModule</code> subclass — weapons, shields, engines, relics, etc.
+    </p>
+    <p>
+      Hull damage is tracked separately from hit points.
+      <code>HullDamageController</code> listens to the ship's <code>DamageReceived</code> event,
+      accumulates damage, and creates <code>HullBreach</code> objects (minor or major) when
+      thresholds are crossed. Breaches must be manually repaired by players.
+    </p>
+
+    <h3 id="ship-types">Key types</h3>
+
+    <div class="type-card">
+      <div class="type-header">
+        <span class="badge pun">MonoBehaviourPun</span>
+        <span class="type-name">HullDamageController</span>
+        <span class="type-ns">CG.Ship.Repair</span>
+      </div>
+      <div class="type-desc">
+        Converts incoming damage into hull breaches. Attached to the player ship.
+        Breach state is networked via PUN; RPC <code>SetAccumulatedDamage</code> syncs late-joiners.
+      </div>
+      <table>
+        <tr><th>Member</th><th class="sig">Signature</th><th class="desc">Notes</th></tr>
+        <tr>
+          <td>Breaches</td>
+          <td class="sig">List&lt;HullBreach&gt; Breaches { get; }</td>
+          <td class="desc">All breach instances, active or not.</td>
+        </tr>
+        <tr>
+          <td>ActiveBreachesAmount</td>
+          <td class="sig">int ActiveBreachesAmount { get; }</td>
+          <td class="desc">How many breaches are currently open.</td>
+        </tr>
+        <tr>
+          <td>AccumulatedDamage</td>
+          <td class="sig">float AccumulatedDamage { get; }</td>
+          <td class="desc">Running damage total since last reset — drives breach creation threshold.</td>
+        </tr>
+        <tr>
+          <td>OnDamageReceived</td>
+          <td class="sig">void OnDamageReceived(float damage, Vector3 hitPos, OrbitObject source, DamageType dmgType)</td>
+          <td class="desc">Called by the ship's <code>DamageReceived</code> event. Patch here to intercept all hull hits.</td>
+        </tr>
+        <tr>
+          <td>CreateBreach</td>
+          <td class="sig">void CreateBreach()</td>
+          <td class="desc">Manually force a new breach — useful for mod mechanics.</td>
+        </tr>
+        <tr>
+          <td>ApplyHullDamage</td>
+          <td class="sig">void ApplyHullDamage(float damage)</td>
+          <td class="desc">Directly add hull damage without going through the event system.</td>
+        </tr>
+        <tr>
+          <td>Reset</td>
+          <td class="sig">void Reset()</td>
+          <td class="desc">Clear all accumulated damage and close all breaches.</td>
+        </tr>
+        <tr>
+          <td>NumberOfMajorBreaches</td>
+          <td class="sig">int NumberOfMajorBreaches()</td>
+          <td class="desc">Count of major (larger) hull breaches only.</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="type-card">
+      <div class="type-header">
+        <span class="badge mono">MonoBehaviour</span>
+        <span class="type-name">WeaponModule</span>
+        <span class="type-ns">CG.Ship.Modules.Weapons</span>
+      </div>
+      <div class="type-desc">
+        Extends <code>CellModule</code>. Represents a turret or gun installed in a ship socket.
+        Holds ammo sockets, barrel references, and firing parameters.
+      </div>
+      <table>
+        <tr><th>Member</th><th class="sig">Signature</th><th class="desc">Notes</th></tr>
+        <tr>
+          <td>cooldownDuration</td>
+          <td class="sig">float cooldownDuration</td>
+          <td class="desc">Serialized field — base fire rate. Modify via Postfix of <code>Awake</code>.</td>
+        </tr>
+        <tr>
+          <td>CooldownDuration</td>
+          <td class="sig">float CooldownDuration { get; set; }</td>
+          <td class="desc">Property wrapper with setter — safer to use at runtime.</td>
+        </tr>
+        <tr>
+          <td>maxFireDistance</td>
+          <td class="sig">float maxFireDistance</td>
+          <td class="desc">Max range of this weapon. Adjustable for range upgrades.</td>
+        </tr>
+        <tr>
+          <td>AmmunitionMode</td>
+          <td class="sig">ProjectileAmmunitionMode AmmunitionMode { get; }</td>
+          <td class="desc">Whether the weapon uses ammo sockets or is ammo-free.</td>
+        </tr>
+        <tr>
+          <td>AvailableAmmo</td>
+          <td class="sig">int AvailableAmmo { get; }</td>
+          <td class="desc">Current ammo count across all sockets.</td>
+        </tr>
+        <tr>
+          <td>SetNextShotTime</td>
+          <td class="sig">void SetNextShotTime()</td>
+          <td class="desc">Resets the cooldown timer. Patch to implement haste effects.</td>
+        </tr>
+        <tr>
+          <td>angleLimitX / angleLimitY</td>
+          <td class="sig">float angleLimitX, angleLimitY</td>
+          <td class="desc">Turret traverse limits in degrees. Increase for wider arc upgrades.</td>
+        </tr>
+      </table>
+    </div>
+
+    <h3 id="ship-patches">Patch stubs</h3>
+
+    <p>Intercept all hull damage before it causes breaches:</p>
+    <div class="patch-label">HullDamagePatch.cs — prefix HullDamageController.OnDamageReceived</div>
+<pre><code>[<span class="at">HarmonyPatch</span>(<span class="kw">typeof</span>(<span class="ty">HullDamageController</span>), <span class="str">"OnDamageReceived"</span>)]
+<span class="kw">internal class</span> <span class="ty">HullDamagePatch</span>
+{
+    <span class="kw">static void</span> <span class="mth">Prefix</span>(<span class="ty">HullDamageController</span> __instance, <span class="kw">ref</span> <span class="ty">float</span> damage, <span class="ty">OrbitObject</span> source)
+    {
+        <span class="cm">// Halve breach-accumulation damage for all sources.</span>
+        damage *= <span class="num">0.5f</span>;
+    }
+}</code></pre>
+
+    <p>Modify weapon cooldown when a weapon module wakes up (apply a level-based stat):</p>
+    <div class="patch-label">WeaponLevelPatch.cs — postfix WeaponModule.Awake</div>
+<pre><code>[<span class="at">HarmonyPatch</span>(<span class="kw">typeof</span>(<span class="ty">WeaponModule</span>), <span class="str">"Awake"</span>)]
+<span class="kw">internal class</span> <span class="ty">WeaponAwakePatch</span>
+{
+    <span class="kw">static void</span> <span class="mth">Postfix</span>(<span class="ty">WeaponModule</span> __instance)
+    {
+        <span class="cm">// Example: retrieve a stored level from your mod's state and apply it.</span>
+        <span class="kw">int</span> level = <span class="ty">WeaponLevelState</span>.<span class="mth">GetLevel</span>(__instance);
+        <span class="kw">float</span> reduction = level * <span class="num">0.05f</span>; <span class="cm">// 5% cooldown reduction per level</span>
+        __instance.CooldownDuration *= (<span class="num">1f</span> - reduction);
+    }
+}</code></pre>
+  </section>
+
+  <hr />
+
+  <!-- ═══════════ RELICS ═══════════ -->
+  <section id="relics">
+    <h2 id="relic-overview">Relics</h2>
+
+    <p>
+      Relics are <strong>CarryableObjects</strong> that slot into <code>ModSocket</code> sockets.
+      The relic shrine module (<code>RelicShrineModule</code>) configures the sockets on the ship
+      and resolves which <code>OrbitObject</code> stat effects to apply when a relic is inserted.
+    </p>
+    <p>
+      The <code>RelicSocketController</code> is the networked glue:
+      it listens to <code>ICarryablesSocket</code> events (<code>OnRelicAdded</code> / <code>OnRelicRemoved</code>)
+      and serializes socket state to late-joining clients via <code>OnPhotonSerializeView</code>.
+      The <code>DestroyRelicTrigger</code> field is a <code>ChangeResponsiveBool</code> that, when flipped,
+      starts a coroutine to remove and destroy the carried relic.
+    </p>
+
+    <div class="callout warn">
+      <strong>Replication note:</strong> Relic state is serialized in <code>RelicSocketController.OnPhotonSerializeView</code>.
+      To disable replication of relic state to other clients, patch that method. Be aware this means
+      late-joiners won't see which relics are socketed.
+    </div>
+
+    <h3 id="relic-types">Key types</h3>
+
+    <div class="type-card">
+      <div class="type-header">
+        <span class="badge mono">MonoBehaviour</span>
+        <span class="type-name">RelicShrineModule</span>
+        <span class="type-ns">CG.Ship.Modules</span>
+      </div>
+      <div class="type-desc">
+        Extends <code>CellModule</code>. Placed in a ship socket, configures the relic sockets
+        and connects each socket to an <code>OrbitObject</code> stat target.
+      </div>
+      <table>
+        <tr><th>Member</th><th class="sig">Signature</th><th class="desc">Notes</th></tr>
+        <tr>
+          <td>ConfigureModSockets</td>
+          <td class="sig">void ConfigureModSockets()</td>
+          <td class="desc">Called during <code>Start</code>. Patch here to modify socket count or types.</td>
+        </tr>
+        <tr>
+          <td>ResolveModSocketTarget</td>
+          <td class="sig">OrbitObject ResolveModSocketTarget(ModSocket socket)</td>
+          <td class="desc">Returns the <code>OrbitObject</code> whose stats the socketed relic affects.</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="type-card">
+      <div class="type-header">
+        <span class="badge pun">MonoBehaviourPun</span>
+        <span class="type-name">RelicSocketController</span>
+        <span class="type-ns">(global)</span>
+      </div>
+      <div class="type-desc">
+        Networked controller for a single relic socket. Syncs add/remove events.
+        <code>DestroyRelicTrigger</code> is the flag that triggers the destruction coroutine.
+      </div>
+      <table>
+        <tr><th>Member</th><th class="sig">Signature</th><th class="desc">Notes</th></tr>
+        <tr>
+          <td>RelicSocket</td>
+          <td class="sig">ModSocket RelicSocket</td>
+          <td class="desc">The socket this controller watches.</td>
+        </tr>
+        <tr>
+          <td>DestroyRelicTrigger</td>
+          <td class="sig">ChangeResponsiveBool DestroyRelicTrigger</td>
+          <td class="desc">Set to <code>true</code> to trigger destroy. Watched in <code>OnPhotonSerializeView</code>.</td>
+        </tr>
+        <tr>
+          <td>OnRelicAdded</td>
+          <td class="sig">void OnRelicAdded(ICarrier _, CarryableObject __, ICarrier ___)</td>
+          <td class="desc">Fires when a relic is placed in the socket. Good place to apply mod effects.</td>
+        </tr>
+        <tr>
+          <td>OnRelicRemoved</td>
+          <td class="sig">void OnRelicRemoved(ICarrier _, CarryableObject __)</td>
+          <td class="desc">Fires when a relic is removed. Clean up mod effects here.</td>
+        </tr>
+        <tr>
+          <td>OnPhotonSerializeView</td>
+          <td class="sig">void OnPhotonSerializeView(PhotonStream stream, PhotonMessageInfo info)</td>
+          <td class="desc">Serializes relic state to network. <strong>Patch here to disable replication.</strong></td>
+        </tr>
+      </table>
+    </div>
+
+    <h3 id="relic-patches">Patch stubs</h3>
+
+    <p>Disable relic replication to other clients:</p>
+    <div class="patch-label">RelicNoReplicatePatch.cs — prefix RelicSocketController.OnPhotonSerializeView</div>
+<pre><code>[<span class="at">HarmonyPatch</span>(<span class="kw">typeof</span>(<span class="ty">RelicSocketController</span>), <span class="str">"OnPhotonSerializeView"</span>)]
+<span class="kw">internal class</span> <span class="ty">RelicReplicationPatch</span>
+{
+    <span class="kw">static bool</span> <span class="mth">Prefix</span>(<span class="ty">RelicSocketController</span> __instance, <span class="ty">PhotonStream</span> stream, <span class="ty">PhotonMessageInfo</span> info)
+    {
+        <span class="cm">// Return false to skip the original serialization entirely.</span>
+        <span class="cm">// WARNING: late-joiners will not see relic socket state.</span>
+        <span class="kw">return false</span>; <span class="cm">// skip original</span>
+    }
+}</code></pre>
+
+    <p>Apply a custom buff when a relic is socketed:</p>
+    <div class="patch-label">RelicEffectPatch.cs — postfix RelicSocketController.OnRelicAdded</div>
+<pre><code>[<span class="at">HarmonyPatch</span>(<span class="kw">typeof</span>(<span class="ty">RelicSocketController</span>), <span class="str">"OnRelicAdded"</span>)]
+<span class="kw">internal class</span> <span class="ty">RelicAddedPatch</span>
+{
+    <span class="kw">static void</span> <span class="mth">Postfix</span>(<span class="ty">RelicSocketController</span> __instance, <span class="ty">CarryableObject</span> __2)
+    {
+        <span class="cm">// __2 = the relic that was added (second param, CarryableObject)</span>
+        <span class="ty">BepinPlugin</span>.Log.<span class="mth">LogInfo</span>($<span class="str">"Relic socketed: {__2?.gameObject.name}"</span>);
+        <span class="cm">// Apply your relic level effects here</span>
+    }
+}</code></pre>
+  </section>
+
+  <hr />
+
+  <!-- ═══════════ PHOTON / REPLICATION ═══════════ -->
+  <section id="photon-net">
+    <h2 id="net-overview">Photon Networking &amp; Replication</h2>
+
+    <p>
+      Void Crew uses <strong>Photon PUN2</strong> with a master-client authority model.
+      The master client is the room host and owns the simulation: spawning enemies,
+      driving the <code>AIDirector</code>, managing sector transitions.
+    </p>
+    <p>
+      Game objects that need to be synchronized extend <code>MonoBehaviourPun</code> and
+      implement <code>IPunObservable</code> (<code>OnPhotonSerializeView</code>).
+      New network objects are created through <code>ObjectFactory</code> — not directly
+      via <code>PhotonNetwork.Instantiate</code> — so that the game's GUID-based asset registry
+      is used instead of resource paths.
+    </p>
+    <p>
+      Late-joiners receive state via <code>IPunInstantiateMagicCallback.OnPhotonInstantiate</code>
+      plus the serialized stream from <code>OnPhotonSerializeView</code>. Some types (like
+      <code>NpcAI</code>) split their serialization across <code>IPunSplitSerialize</code>
+      to avoid single-stream size limits.
+    </p>
+
+    <div class="callout note">
+      <strong>Master-client guard:</strong> Any mutation of shared state must be gated on
+      <code>PhotonNetwork.IsMasterClient</code>. Non-master clients should read state, not write it.
+    </div>
+
+    <h3 id="net-types">Key types</h3>
+
+    <div class="type-card">
+      <div class="type-header">
+        <span class="badge mono">MonoBehaviour</span>
+        <span class="type-name">ObjectFactory</span>
+        <span class="type-ns">CG.Network</span>
+      </div>
+      <div class="type-desc">
+        Singleton. The only sanctioned way to instantiate networked objects at runtime.
+        Queues instantiations when Photon isn't ready; all callbacks fire on instantiation.
+      </div>
+      <table>
+        <tr><th>Member</th><th class="sig">Signature</th><th class="desc">Notes</th></tr>
+        <tr>
+          <td>Instance</td>
+          <td class="sig">static ObjectFactory Instance { get; }</td>
+          <td class="desc">Singleton access.</td>
+        </tr>
+        <tr>
+          <td>InstantiateSpaceObjectByGUID&lt;T&gt;</td>
+          <td class="sig">static T InstantiateSpaceObjectByGUID&lt;T&gt;(GUIDUnion guid, Vector3 pos, Quaternion rot, Dictionary&lt;byte,object&gt; data = null) where T : AbstractCloneStarObject</td>
+          <td class="desc">Synchronous instantiation. Use for enemies and ship objects.</td>
+        </tr>
+        <tr>
+          <td>QueuedInstantiateSpaceObject</td>
+          <td class="sig">static InstantiationCallback QueuedInstantiateSpaceObject(GUIDUnion guid, Vector3 pos, Quaternion rot, Dictionary&lt;byte,object&gt; data = null)</td>
+          <td class="desc">Queued/deferred instantiation. Returns a callback object with <code>OnInstantiated</code>.</td>
+        </tr>
+        <tr>
+          <td>DestroyCloneStarObject</td>
+          <td class="sig">static void DestroyCloneStarObject(AbstractCloneStarObject obj)</td>
+          <td class="desc">Network-safe destruction — cleans up PhotonView and notifies all clients.</td>
+        </tr>
+        <tr>
+          <td>CheckForLevelUpdate</td>
+          <td class="sig">static void CheckForLevelUpdate(GUIDUnion guid, ref Dictionary&lt;byte,object&gt; data)</td>
+          <td class="desc">Injects level data into instantiation data before spawning. Hook here for custom level systems.</td>
+        </tr>
+        <tr>
+          <td>GetNewPhotonViewId</td>
+          <td class="sig">static int GetNewPhotonViewId { get; }</td>
+          <td class="desc">Allocates a fresh Photon view ID — needed if constructing custom networked objects.</td>
+        </tr>
+      </table>
+    </div>
+
+    <h3 id="net-patches">Patch stubs</h3>
+
+    <p>Intercept all networked object instantiation to inject custom data (e.g., level):</p>
+    <div class="patch-label">SpawnDataPatch.cs — prefix ObjectFactory.CheckForLevelUpdate</div>
+<pre><code>[<span class="at">HarmonyPatch</span>(<span class="kw">typeof</span>(<span class="ty">ObjectFactory</span>), <span class="str">"CheckForLevelUpdate"</span>)]
+<span class="kw">internal class</span> <span class="ty">SpawnLevelPatch</span>
+{
+    <span class="kw">static void</span> <span class="mth">Prefix</span>(<span class="ty">GUIDUnion</span> guid, <span class="kw">ref</span> <span class="ty">Dictionary</span>&lt;<span class="kw">byte</span>, <span class="kw">object</span>&gt; instantiationData)
+    {
+        <span class="cm">// Runs before the game injects its level data.
+        // Add your mod's custom byte-keyed data into instantiationData here.
+        // Keys 0-127 are used by the game; use 200+ for mod data to avoid collisions.</span>
+        instantiationData ??= <span class="kw">new</span> <span class="ty">Dictionary</span>&lt;<span class="kw">byte</span>, <span class="kw">object</span>&gt;();
+        instantiationData[<span class="num">200</span>] = <span class="ty">MyModState</span>.<span class="mth">GetLevelForGuid</span>(guid);
+    }
+}</code></pre>
+
+    <p>Read custom data when an NPC is instantiated on all clients:</p>
+    <div class="patch-label">NpcInitPatch.cs — postfix NpcAI.OnPhotonInstantiate</div>
+<pre><code>[<span class="at">HarmonyPatch</span>(<span class="kw">typeof</span>(<span class="ty">NpcAI</span>), <span class="str">"OnPhotonInstantiate"</span>)]
+<span class="kw">internal class</span> <span class="ty">NpcInitDataPatch</span>
+{
+    <span class="kw">static void</span> <span class="mth">Postfix</span>(<span class="ty">NpcAI</span> __instance, <span class="ty">PhotonMessageInfo</span> info)
+    {
+        <span class="kw">var</span> data = info.photonView.InstantiationData;
+        <span class="kw">if</span> (data == <span class="kw">null</span> || !data.<span class="mth">ContainsKey</span>(<span class="num">200</span>)) <span class="kw">return</span>;
+
+        <span class="kw">int</span> modLevel = (<span class="kw">int</span>)data[<span class="num">200</span>];
+        <span class="ty">BepinPlugin</span>.Log.<span class="mth">LogInfo</span>($<span class="str">"NPC spawned at mod-level {modLevel}"</span>);
+        <span class="cm">// Apply level-scaled stats to the OrbitObject here</span>
+    }
+}</code></pre>
+
+  </section>
+
+</main>
+
+</body>
+</html>
