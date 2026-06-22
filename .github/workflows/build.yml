@@ -20,7 +20,7 @@ jobs:
     - name: Restore dependencies
       run: dotnet restore
     - name: Build
-      run: dotnet build VoidCrewTerminus.slnx --no-restore
+      run: dotnet build VoidCrewTerminus.slnx --no-restore -c Release
     - name: release
       uses: actions/create-release@v1
       id: create_release
@@ -41,5 +41,5 @@ jobs:
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
         asset_path: ./VoidCrewTerminus/bin/Release/net472/Releases/VoidCrewTerminus-${{steps.tagName.outputs.tag}}.zip
-        asset_name: VoidCrewTeminus.zip
+        asset_name: VoidCrewTerminus-${{steps.tagName.outputs.tag}}.zip
         asset_content_type: application/zip
