@@ -1,6 +1,6 @@
 [![](https://img.shields.io/badge/-Hutlihut_Games-111111?style=just-the-label&logo=github&labelColor=24292f)](https://github.com/HutlihutGames)
 [![](https://img.shields.io/badge/-Nihility_Shift-111111?style=just-the-label&logo=github&labelColor=24292f)](https://github.com/Nihility-Shift)\
-![](https://img.shields.io/badge/Game%20Version-[GameVersion]-111111?style=flat&labelColor=24292f&color=111111)
+![](https://img.shields.io/badge/Game%20Version-1.3.0-111111?style=flat&labelColor=24292f&color=111111)
 
 Void Crew Official Discord: \
 [![](https://img.shields.io/discord/814811296390053888.svg?&logo=discord&logoColor=ffffff&style=flat&label=Discord&labelColor=24292f&color=111111)](https://discord.com/invite/joinvoidcrew "Void Crew Official Discord")\
@@ -11,13 +11,13 @@ Void Crew Community Modding Discord: \
 
 Version [0.0.1]  
 Developed by [VisualSource]  
-Requires: [Dependencies]
+Requires:  BepInEx-BepInExPack-5.4.2100, NihilityShift-VoidManager-1.2.10
     
 ---------------------
 
 ### 💡 Function(s)
 
-- [Description]
+- VoidCrewTerminus
 
 ### 🎮 Client Usage
 
@@ -25,7 +25,6 @@ Requires: [Dependencies]
 
 ### 👥 Multiplayer Functionality
 
-# Note to mod developer: Remove all but those which match, and describe any custom functionality.
 - ✅ Session
   - Requires the room to be marked as Mod_Session for functionality.
   - Requires the room to be marked as Mod_Session for joining.

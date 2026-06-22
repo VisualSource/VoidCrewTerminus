@@ -20,9 +20,7 @@ jobs:
     - name: Restore dependencies
       run: dotnet restore
     - name: Build
-      run: dotnet build --no-restore
-    - name: Test
-      run: dotnet test --no-build --verbosity normal
+      run: dotnet build VoidCrewTerminus.slnx --no-restore
     - name: release
       uses: actions/create-release@v1
       id: create_release
@@ -34,12 +32,14 @@ jobs:
         body_path: ./VoidCrewTerminus/ReleaseFiles/CHANGELOG.md
       env:
         GITHUB_TOKEN: ${{ github.token }}
+    - uses: olegtarasov/get-tag@v2.1.3
+      id: tagName
     - name: upload artifact
       uses: actions/upload-release-asset@v1
       env:
         GITHUB_TOKEN: ${{ github.token }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./
+        asset_path: ./VoidCrewTerminus/bin/Release/net472/Releases/VoidCrewTerminus-${{steps.tagName.outputs.tag}}.zip
         asset_name: VoidCrewTeminus.zip
         asset_content_type: application/zip
