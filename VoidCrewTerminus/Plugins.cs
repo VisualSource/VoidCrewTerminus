@@ -16,6 +16,7 @@ namespace VoidCrewTerminus
         private void Awake()
         {
             Log = Logger;
+            TerminusConfig.Init(Config);
             Harmony.CreateAndPatchAll(Assembly.GetExecutingAssembly());
             AssetLoader.TryLoadAssetBundlesNextToDLL();
             Logger.LogInfo($"Plugin {MyPluginInfo.PLUGIN_GUID} is loaded!");

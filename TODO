@@ -14,7 +14,7 @@ Want:
         - new leveling system for weapons (or ship modules in general)
             * lean into the roguelike aspects of the game
        	    * levels 4-10 use relics to upgrade
-        - disable replication of relics
+        - disable replication/copying of relics in Fabricator ui
 
 Maybe:
 	- player class

@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>In-Game UI Modding — Modder's Guide</title>
+  <style>
+    :root {
+      --bg:      #0f1117;
+      --surface: #181c27;
+      --border:  #2a2f42;
+      --accent:  #5c8aff;
+      --accent2: #9b59f5;
+      --text:    #d4d8e8;
+      --muted:   #7a80a0;
+      --code-bg: #12151f;
+      --tag-bg:  #1e2436;
+      --danger:  #e05c5c;
+      --warn:    #e0a35c;
+      --ok:      #5ce08a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* ── Sidebar ── */
+    nav {
+      width: 260px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 28px 20px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+    nav .logo {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+    nav .subtitle {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 28px;
+    }
+    nav ul { list-style: none; }
+    nav ul li { margin-bottom: 2px; }
+    nav ul li a {
+      display: block;
+      padding: 5px 10px;
+      border-radius: 6px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 13px;
+      transition: color .15s, background .15s;
+    }
+    nav ul li a:hover,
+    nav ul li a.active { color: var(--text); background: var(--border); }
+    nav .section-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--accent2);
+      margin: 18px 0 6px 10px;
+    }
+
+    /* ── Main content ── */
+    main {
+      flex: 1;
+      padding: 48px 64px;
+      max-width: 900px;
+    }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    .page-meta {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 40px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    h2 {
+      font-size: 20px;
+      font-weight: 700;
+      color: #fff;
+      margin: 48px 0 16px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    h3 {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--accent);
+      margin: 28px 0 10px;
+    }
+    p { margin-bottom: 14px; color: var(--text); }
+    ul.bullets { margin: 0 0 14px 24px; color: var(--text); }
+    ul.bullets li { margin-bottom: 6px; }
+
+    /* ── Code ── */
+    pre, code {
+      font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+      font-size: 13px;
+    }
+    code {
+      background: var(--tag-bg);
+      padding: 1px 6px;
+      border-radius: 4px;
+      color: #a8c0ff;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px 24px;
+      overflow-x: auto;
+      margin: 14px 0 20px;
+      line-height: 1.6;
+    }
+    pre code {
+      background: none;
+      padding: 0;
+      color: var(--text);
+    }
+
+    /* Syntax tones */
+    .kw  { color: #7ec4ff; }   /* keywords */
+    .ty  { color: #9cdcfe; }   /* types */
+    .mth { color: #dcdcaa; }   /* methods */
+    .cm  { color: #608b4e; }   /* comments */
+    .str { color: #ce9178; }   /* strings */
+    .num { color: #b5cea8; }   /* numbers */
+    .at  { color: #c586c0; }   /* attributes */
+
+    /* ── Callouts ── */
+    .callout {
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin: 18px 0;
+      font-size: 13.5px;
+      border-left: 4px solid;
+    }
+    .callout.note   { background: #1a2035; border-color: var(--accent);  color: #b8c8f0; }
+    .callout.warn   { background: #241e12; border-color: var(--warn);    color: #e8d3b0; }
+    .callout.danger { background: #241212; border-color: var(--danger);  color: #e8c0c0; }
+    .callout.ok     { background: #122414; border-color: var(--ok);      color: #b8e8c8; }
+    .callout strong { color: inherit; font-weight: 700; }
+
+    /* ── Reference tables ── */
+    .ref-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px 24px;
+      margin: 14px 0 22px;
+    }
+    .ref-card .ref-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .ref-card .ref-title {
+      font-family: 'Cascadia Code', monospace;
+      font-size: 14px;
+      color: #9cdcfe;
+      font-weight: 700;
+    }
+    .ref-card .ref-desc { color: var(--muted); font-size: 13px; margin-bottom: 14px; }
+    .badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+    .badge.attr  { background: #2a1e35; color: #c586c0; }
+    .badge.param { background: #1e3055; color: #7ec4ff; }
+    .badge.hook  { background: #1e2a1e; color: #5ce08a; }
+    .ref-card table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .ref-card table th {
+      text-align: left;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      padding: 0 8px 8px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .ref-card table td {
+      padding: 7px 8px 7px 0;
+      border-bottom: 1px solid #1a1f2e;
+      vertical-align: top;
+    }
+    .ref-card table tr:last-child td { border-bottom: none; }
+    .ref-card table td:first-child {
+      font-family: 'Cascadia Code', monospace;
+      color: #dcdcaa;
+      white-space: nowrap;
+      padding-right: 20px;
+    }
+    .ref-card table td.desc { color: var(--muted); }
+
+    /* ── Patch stub labels ── */
+    .patch-label {
+      display: inline-block;
+      background: #1a1f2e;
+      border: 1px solid var(--border);
+      border-radius: 6px 6px 0 0;
+      border-bottom: none;
+      padding: 5px 14px;
+      font-size: 11px;
+      color: var(--muted);
+      font-family: 'Cascadia Code', monospace;
+      margin-bottom: -1px;
+    }
+    .patch-label + pre { border-radius: 0 8px 8px 8px; margin-top: 0; }
+
+    hr { border: none; border-top: 1px solid var(--border); margin: 40px 0; }
+
+    /* ── Lifecycle diagram ── */
+    .lifecycle {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      margin: 14px 0 22px;
+      font-family: 'Cascadia Code', monospace;
+      font-size: 13px;
+    }
+    .lifecycle .step {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .lifecycle .arrow {
+      color: var(--muted);
+      padding-left: 14px;
+    }
+    .lifecycle .pill {
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 700;
+      min-width: 80px;
+      text-align: center;
+    }
+    .lifecycle .pill.pref { background: #1e3055; color: #7ec4ff; }
+    .lifecycle .pill.orig { background: #2a2012; color: #e0a35c; }
+    .lifecycle .pill.post { background: #1e2a1e; color: #5ce08a; }
+    .lifecycle .pill.fin  { background: #241212; color: #e05c5c; }
+    .lifecycle .pill.trn  { background: #2a1e35; color: #c586c0; }
+    .lifecycle .label { color: var(--text); }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════ SIDEBAR ═══════════ -->
+<nav>
+  <div class="logo">In-Game UI Modding</div>
+  <div class="subtitle">Modder's Reference · VoidCrewTerminus</div>
+  <ul>
+    <li><a href="#overview">Overview</a></li>
+    <li><a href="#toolkit">The mod toolkit</a></li>
+    <li><a href="#choosing">Choosing an approach</a></li>
+  </ul>
+  <div class="section-label">Station UI</div>
+  <ul>
+    <li><a href="#targets">Target classes</a></li>
+    <li><a href="#stubs-warning">Stubs vs. real DLL</a></li>
+  </ul>
+  <div class="section-label">Worked example</div>
+  <ul>
+    <li><a href="#example-config">Config entry</a></li>
+    <li><a href="#example-patch">Harmony patch</a></li>
+    <li><a href="#example-wireup">Wire-up</a></li>
+    <li><a href="#example-toggle">Settings toggle</a></li>
+  </ul>
+  <div class="section-label">Practical</div>
+  <ul>
+    <li><a href="#verification">Verification</a></li>
+    <li><a href="#pitfalls">Pitfalls &amp; next steps</a></li>
+    <li><a href="#related">Related reading</a></li>
+  </ul>
+</nav>
+
+<!-- ═══════════ MAIN ═══════════ -->
+<main>
+
+  <h1>In-Game UI Modding — Modder's Guide</h1>
+  <div class="page-meta">
+    BepInEx 5 &nbsp;|&nbsp; VoidManager 1.2.10 &nbsp;|&nbsp; Harmony 2.x &nbsp;|&nbsp; Target: net472 &nbsp;|&nbsp;
+    Worked example: hiding the helm <code>TacticalMap</code>.
+  </div>
+
+  <!-- ─── Overview ─── -->
+  <section id="overview">
+    <h2>Overview</h2>
+
+    <p>
+      Void Crew's UI is Unity-driven and ships in compiled assemblies. To modify it, you don't edit
+      the game's DLLs — you write small <em>patch methods</em> that <strong>Harmony</strong> injects
+      around the originals at runtime, optionally driven by a runtime toggle exposed in
+      <strong>VoidManager</strong>'s settings panel.
+    </p>
+
+    <p>
+      This guide walks the full toolkit available in <code>VoidCrewTerminus</code>, then uses one
+      concrete goal as the worked example: <strong>hiding the helm tactical map</strong>. The same
+      pattern scales to any other UI element you want to remove, restyle, or extend.
+    </p>
+
+    <div class="callout note">
+      <strong>Sibling doc:</strong> If you want a deeper dive on Harmony itself — patch types,
+      injected parameters, transpilers, common pitfalls — read
+      <a href="harmony-patch-guide.html" style="color: var(--accent);">harmony-patch-guide.html</a>
+      alongside this one.
+    </div>
+  </section>
+
+  <hr />
+
+  <!-- ─── Toolkit ─── -->
+  <section id="toolkit">
+    <h2>The mod toolkit</h2>
+
+    <p>
+      These are the building blocks already wired into the project. Reach for whichever fits the job.
+    </p>
+
+    <div class="ref-card">
+      <div class="ref-header">
+        <span class="ref-title">Mechanisms available</span>
+      </div>
+      <table>
+        <tr>
+          <th>Mechanism</th>
+          <th>Where it lives</th>
+          <th>Use it for</th>
+        </tr>
+        <tr>
+          <td>Harmony patches</td>
+          <td class="desc"><code>HarmonyLib</code>, applied by <code>Plugins.cs</code> in <code>BepinPlugin.Awake()</code></td>
+          <td class="desc">Modifying existing game UI — Pre/Postfix on Unity lifecycle methods (<code>Awake</code>, <code>Start</code>, <code>OnEnable</code>).</td>
+        </tr>
+        <tr>
+          <td>ModSettingsMenu</td>
+          <td class="desc"><code>VoidManager.CustomGUI</code> — stubbed at <code>UI/ModSettingsMenu.cs</code></td>
+          <td class="desc">F5 in-game settings panel for your mod. IMGUI-based; subclass and override <code>Draw()</code>.</td>
+        </tr>
+        <tr>
+          <td>GUITools</td>
+          <td class="desc"><code>VoidManager.Utilities</code></td>
+          <td class="desc"><code>DrawCheckbox</code>, <code>DrawSlider</code>, <code>DrawTextField</code>, <code>DrawChangeKeybindButton</code> — pre-built IMGUI helpers.</td>
+        </tr>
+        <tr>
+          <td>Messaging</td>
+          <td class="desc"><code>VoidManager.Utilities.Messaging</code></td>
+          <td class="desc"><code>Notification(...)</code> / <code>Echo(...)</code> — chat-style on-screen messages.</td>
+        </tr>
+        <tr>
+          <td>RuntimeAssetsAPI</td>
+          <td class="desc"><code>RuntimeAssets</code> — wired via <code>AssetLoader.cs</code></td>
+          <td class="desc">Loading custom Unity prefabs from <code>.metem</code> asset bundles. For <em>adding</em> UI, not hiding.</td>
+        </tr>
+        <tr>
+          <td>ConfigFile</td>
+          <td class="desc"><code>BepInEx.Configuration</code> — exposed as <code>Config</code> on <code>BaseUnityPlugin</code></td>
+          <td class="desc">Persistent settings written to <code>BepInEx/config/&lt;guid&gt;.cfg</code>. The state your patch reads at runtime.</td>
+        </tr>
+      </table>
+    </div>
+  </section>
+
+  <hr />
+
+  <!-- ─── Choosing an approach ─── -->
+  <section id="choosing">
+    <h2>Choosing an approach</h2>
+
+    <p>
+      Match the mechanism to the goal. The right starting point depends on whether the UI already
+      exists in the game and what you want to do with it.
+    </p>
+
+    <div class="lifecycle">
+      <div class="step"><span class="pill post">Hide existing</span> <span class="label">Harmony Postfix on the element's <code>OnEnable</code> → <code>gameObject.SetActive(false)</code>.</span></div>
+      <div class="arrow">↓</div>
+      <div class="step"><span class="pill pref">Restyle existing</span> <span class="label">Harmony Postfix mutating <code>RectTransform</code> / <code>Image</code> / <code>Text</code> fields after the game sets them up.</span></div>
+      <div class="arrow">↓</div>
+      <div class="step"><span class="pill trn">Inject into existing</span> <span class="label">Harmony Postfix on the panel's <code>Start</code>/<code>Awake</code> adding children under <code>__instance.transform</code>.</span></div>
+      <div class="arrow">↓</div>
+      <div class="step"><span class="pill orig">Add brand-new HUD</span> <span class="label">Load a prefab via <code>RuntimeAssetsAPI</code>, instantiate it under a Canvas, drive it from a <code>MonoBehaviour</code>.</span></div>
+      <div class="arrow">↓</div>
+      <div class="step"><span class="pill fin">Settings panel</span> <span class="label">Subclass <code>VoidManager.CustomGUI.ModSettingsMenu</code> and draw IMGUI controls.</span></div>
+    </div>
+
+    <p>
+      For our worked example — hiding the helm tactical map — the answer is the first row:
+      a Postfix that deactivates the GameObject, gated by a config toggle.
+    </p>
+  </section>
+
+  <hr />
+
+  <!-- ─── Targets ─── -->
+  <section id="targets">
+    <h2>Station UI: target classes</h2>
+
+    <p>
+      The game ships station UI under <code>CG.Client.UI.Terminals</code>. These are the candidate
+      types — picked from <code>VoidCrew.GameLibs</code> 1.3.0 / <code>Assembly-CSharp.dll</code> —
+      that a Harmony patch can target.
+    </p>
+
+    <div class="ref-card">
+      <div class="ref-header">
+        <span class="badge hook">PRIMARY</span>
+        <span class="ref-title">Top-level controllers</span>
+      </div>
+      <table>
+        <tr>
+          <td>CG.Client.UI.Terminals</td>
+          <td class="desc">Root terminal UI controller. Broadest target — patch here to affect every terminal.</td>
+        </tr>
+        <tr>
+          <td>CG.Client.UI.Terminals.TacticalMap</td>
+          <td class="desc">Tactical map display at the helm station. The worked example below targets this one.</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="ref-card">
+      <div class="ref-header">
+        <span class="badge param">PER-PANEL</span>
+        <span class="ref-title">Visible UI elements at a station</span>
+      </div>
+      <table>
+        <tr>
+          <td>CG.Client.UI.Terminals.HealthBarElement</td>
+          <td class="desc">Ship health / status readout widget.</td>
+        </tr>
+        <tr>
+          <td>CG.Client.UI.Terminals.RepeatTexturedElement</td>
+          <td class="desc">Repeating-texture decorative panel.</td>
+        </tr>
+        <tr>
+          <td>CG.Client.UI.Terminals.TacticalMap.RadialFillVE</td>
+          <td class="desc">Radial progress / gauge inside the tactical map.</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="ref-card">
+      <div class="ref-header">
+        <span class="badge attr">ADJACENT</span>
+        <span class="ref-title">Player HUD (not station UI, but often modified together)</span>
+      </div>
+      <table>
+        <tr>
+          <td>CG.Client.Player.HUD.WeaponControlFrame</td>
+          <td class="desc">Weapon control display panel (turret operator HUD).</td>
+        </tr>
+        <tr>
+          <td>CG.Client.Player.HUD.AmmoReloadGizmo</td>
+          <td class="desc">Ammo / reload indicator.</td>
+        </tr>
+        <tr>
+          <td>CG.Client.Player.HUD.ReticleChargeUp</td>
+          <td class="desc">Charge-up progress indicator for chargeable weapons.</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="callout danger">
+      <strong>Don't patch this to hide UI:</strong>
+      <code>CG.Client.Ship.Modules.Mediators.TerminalModuleMediator</code> wires terminal UI to gameplay.
+      Disabling it will break interaction (you'll see the panel but can't use the station, or vice versa).
+      Patch the visual element directly instead.
+    </div>
+  </section>
+
+  <hr />
+
+  <!-- ─── Stubs warning ─── -->
+  <section id="stubs-warning">
+    <h2>Stubs vs. real DLL</h2>
+
+    <p>
+      The <code>VoidCrew.GameLibs</code> NuGet package ships <em>stub</em> assemblies — they expose
+      type and method <em>signatures</em> so your code compiles, but the method bodies are empty.
+      That's enough to write a Harmony patch, but <strong>not</strong> enough to know which lifecycle
+      method actually does the work you want to hook.
+    </p>
+
+    <div class="callout warn">
+      <strong>Before writing a patch:</strong> open the <em>real</em>
+      <code>Assembly-CSharp.dll</code> from
+      <code>&lt;Void Crew install&gt;/Void Crew_Data/Managed/</code> in
+      <a href="https://github.com/dnSpy/dnSpy" style="color: var(--warn);">dnSpy</a>
+      or <a href="https://github.com/icsharpcode/ILSpy" style="color: var(--warn);">ILSpy</a>,
+      navigate to your target class, and confirm which method to hook.
+      Stubs identify <em>what</em> exists; the real DLL tells you <em>how</em> it behaves.
+    </div>
+
+    <p>What you're looking for in the decompiled class:</p>
+    <ul class="bullets">
+      <li>What does it inherit from? <code>MonoBehaviour</code> means <code>OnEnable</code>/<code>SetActive</code> apply. <code>VisualElement</code> (UI Toolkit) means you'll be setting <code>style.display</code> instead.</li>
+      <li>Which method first makes the element visible? <code>OnEnable</code> usually. Sometimes <code>Refresh</code>, <code>Show</code>, or a custom name.</li>
+      <li>Exact method signature — parameter types and return type. Harmony needs to match it.</li>
+      <li>Visibility: if the method is <code>private</code> / <code>internal</code>, use <code>AccessTools.Method(typeof(...), "Name")</code> instead of <code>nameof</code>.</li>
+    </ul>
+  </section>
+
+  <hr />
+
+  <!-- ═══════════ WORKED EXAMPLE ═══════════ -->
+  <section id="example">
+    <h2>Worked example — hide the tactical map</h2>
+
+    <p>
+      The full pattern is four small pieces: a config holder, a Harmony patch that reads it, a
+      one-line wire-up in <code>Plugins.cs</code>, and a toggle in the existing settings menu. Once
+      this is in place, every additional UI element you want to hide is just one more
+      <code>ConfigEntry&lt;bool&gt;</code> and one more patch class.
+    </p>
+
+    <h3 id="example-config">1. Config holder</h3>
+
+    <p>
+      Centralize all your mod's runtime toggles in one place. Using
+      <code>BepInEx.Configuration.ConfigEntry</code> gives you free persistence to
+      <code>BepInEx/config/&lt;guid&gt;.cfg</code> and a value the patch can read on every hook.
+    </p>
+
+    <div class="patch-label">VoidCrewTerminus/TerminusConfig.cs</div>
+<pre><code><span class="kw">using</span> <span class="ty">BepInEx.Configuration</span>;
+
+<span class="kw">namespace</span> <span class="ty">VoidCrewTerminus</span>;
+
+<span class="kw">internal static class</span> <span class="ty">TerminusConfig</span>
+{
+    <span class="kw">internal static</span> <span class="ty">ConfigEntry</span>&lt;<span class="kw">bool</span>&gt; HideTacticalMap;
+
+    <span class="kw">internal static void</span> <span class="mth">Init</span>(<span class="ty">ConfigFile</span> cfg)
+    {
+        HideTacticalMap = cfg.<span class="mth">Bind</span>(<span class="str">"StationUI"</span>, <span class="str">"HideTacticalMap"</span>, <span class="kw">false</span>,
+            <span class="str">"Hide the tactical map display at the helm station."</span>);
+    }
+}</code></pre>
+
+    <h3 id="example-patch">2. Harmony patch</h3>
+
+    <p>
+      A <code>Postfix</code> on <code>OnEnable</code> runs every time the element is shown. We check
+      the config and deactivate the GameObject if the user has opted in. Because the Postfix runs
+      <em>after</em> the original, the game's own setup and event wiring complete first — we only
+      hide the final result.
+    </p>
+
+    <div class="patch-label">VoidCrewTerminus/Patches/HideTacticalMapPatch.cs</div>
+<pre><code><span class="kw">using</span> <span class="ty">CG.Client.UI.Terminals</span>;
+<span class="kw">using</span> <span class="ty">HarmonyLib</span>;
+
+<span class="kw">namespace</span> <span class="ty">VoidCrewTerminus.Patches</span>;
+
+[<span class="at">HarmonyPatch</span>(<span class="kw">typeof</span>(<span class="ty">TacticalMap</span>), <span class="str">"OnEnable"</span>)]
+<span class="kw">internal static class</span> <span class="ty">HideTacticalMapPatch</span>
+{
+    <span class="kw">static void</span> <span class="mth">Postfix</span>(<span class="ty">TacticalMap</span> __instance)
+    {
+        <span class="kw">if</span> (<span class="ty">TerminusConfig</span>.HideTacticalMap.Value)
+            __instance.gameObject.<span class="mth">SetActive</span>(<span class="kw">false</span>);
+    }
+}</code></pre>
+
+    <div class="callout note">
+      <strong>Why Postfix, not Prefix-returning-false?</strong> A Prefix that returns <code>false</code>
+      skips the original entirely — but the original is where the game wires up event subscriptions,
+      caches references, and initializes child elements. Skipping it can break the station's interaction
+      logic even though you only wanted to hide the visual. Postfix lets all that setup complete; you
+      simply deactivate the result.
+    </div>
+
+    <h3 id="example-wireup">3. Wire-up in Plugins.cs</h3>
+
+    <p>
+      Initialize the config <em>before</em> <code>CreateAndPatchAll</code> runs, so the patch has
+      a valid <code>ConfigEntry</code> to read on its first invocation.
+    </p>
+
+    <div class="patch-label">VoidCrewTerminus/Plugins.cs — inside <code>BepinPlugin.Awake()</code></div>
+<pre><code>Log = Logger;
+<span class="ty">TerminusConfig</span>.<span class="mth">Init</span>(Config);  <span class="cm">// ← add this</span>
+<span class="ty">Harmony</span>.<span class="mth">CreateAndPatchAll</span>(<span class="ty">Assembly</span>.<span class="mth">GetExecutingAssembly</span>());
+<span class="ty">AssetLoader</span>.<span class="mth">TryLoadAssetBundlesNextToDLL</span>();
+Logger.<span class="mth">LogInfo</span>(<span class="str">$"Plugin {MyPluginInfo.PLUGIN_GUID} is loaded!"</span>);</code></pre>
+
+    <h3 id="example-toggle">4. Expose the toggle in the settings menu</h3>
+
+    <p>
+      Replace the placeholder <code>ToggleBool</code> in <code>TerminusModMenu</code> with a binding
+      to the config entry. The user can flip it at runtime; the next time they enter the helm station,
+      the patch sees the new value.
+    </p>
+
+    <div class="patch-label">VoidCrewTerminus/UI/ModSettingsMenu.cs — <code>Draw()</code></div>
+<pre><code><span class="kw">public override void</span> <span class="mth">Draw</span>()
+{
+    <span class="mth">Label</span>(<span class="str">"Terminus"</span>);
+
+    <span class="ty">TerminusConfig</span>.HideTacticalMap.Value =
+        <span class="mth">Toggle</span>(<span class="ty">TerminusConfig</span>.HideTacticalMap.Value, <span class="str">"Hide tactical map"</span>);
+}</code></pre>
+
+    <div class="callout ok">
+      <strong>Scaling out:</strong> For each additional UI element you want to hide, add one more
+      <code>ConfigEntry&lt;bool&gt;</code> in <code>TerminusConfig</code>, one more
+      <code>[HarmonyPatch]</code> class in <code>Patches/</code>, and one more <code>Toggle</code>
+      line in <code>Draw()</code>. No central registry needed — Harmony auto-discovers every patch
+      class on assembly load.
+    </div>
+  </section>
+
+  <hr />
+
+  <!-- ─── Verification ─── -->
+  <section id="verification">
+    <h2>Verification</h2>
+
+    <p>End-to-end check that the toggle actually does what it claims.</p>
+
+    <ul class="bullets">
+      <li><strong>Build:</strong> <code>dotnet build</code> from the repo root. Confirm clean build, no warnings on the new files.</li>
+      <li><strong>Deploy:</strong> copy <code>VoidCrewTerminus/bin/Debug/net472/VoidCrewTerminus.dll</code> to <code>&lt;Void Crew install&gt;/BepInEx/plugins/VoidCrewTerminus/</code>.</li>
+      <li><strong>Launch:</strong> start Void Crew. Tail <code>BepInEx/LogOutput.log</code> — you should see the <code>Plugin ... is loaded!</code> line and no Harmony exceptions.</li>
+      <li><strong>Toggle:</strong> press <strong>F5</strong> → open the <em>Terminus</em> mod panel → flip <em>Hide tactical map</em> on.</li>
+      <li><strong>Sit at helm:</strong> the tactical map should be hidden. Stand up, re-enter the station — still hidden (patch runs on each <code>OnEnable</code>).</li>
+      <li><strong>Toggle off:</strong> flip the setting off, re-enter — map returns.</li>
+      <li><strong>Persistence:</strong> restart the game; the setting should persist (it's written to <code>BepInEx/config/&lt;guid&gt;.cfg</code>).</li>
+    </ul>
+  </section>
+
+  <hr />
+
+  <!-- ─── Pitfalls ─── -->
+  <section id="pitfalls">
+    <h2>Pitfalls &amp; next steps</h2>
+
+    <ul class="bullets">
+      <li>
+        <strong>Don't patch <code>TerminalModuleMediator</code> to hide things.</strong>
+        It owns the interaction wiring that connects the player's terminal input to gameplay
+        modules. Disabling it breaks usability even when the visual disappears as expected.
+        Always patch the visual element directly.
+      </li>
+      <li>
+        <strong>UI Toolkit elements aren't GameObjects.</strong>
+        If the target inherits from <code>VisualElement</code> rather than <code>MonoBehaviour</code>,
+        <code>gameObject.SetActive(false)</code> won't apply (there's no GameObject). Set
+        <code>__instance.style.display = DisplayStyle.None</code> in the Postfix instead.
+      </li>
+      <li>
+        <strong>Internal / private targets need <code>AccessTools</code>.</strong>
+        <code>[HarmonyPatch(typeof(T), nameof(T.Method))]</code> only works for public members.
+        For private methods use the string-literal form or <code>AccessTools.Method(typeof(T), "Method")</code>.
+      </li>
+      <li>
+        <strong>Multiplayer:</strong> <code>VoidManagerPlugin.MPType = MultiplayerType.All</code> means
+        every player has the mod, but each runs their own patch with their own config. Hiding UI is a
+        local-view change — no networking required.
+      </li>
+      <li>
+        <strong>Logging:</strong> use <code>BepinPlugin.Log.LogInfo(...)</code> liberally inside the
+        Postfix while you're iterating. Once it works, drop the logs — they spam every <code>OnEnable</code>.
+      </li>
+    </ul>
+  </section>
+
+  <hr />
+
+  <!-- ─── Related ─── -->
+  <section id="related">
+    <h2>Related reading</h2>
+
+    <ul class="bullets">
+      <li><a href="harmony-patch-guide.html" style="color: var(--accent);">harmony-patch-guide.html</a> — patch types, injected parameters, transpilers, common pitfalls.</li>
+      <li><a href="https://hutlihutgames.github.io/void_crow_modding_documentation/" style="color: var(--accent);">Void Crew Modding Docs</a> — official documentation.</li>
+      <li><a href="https://github.com/Nihility-Shift/VoidManager" style="color: var(--accent);">VoidManager source</a> — examples of <code>ModSettingsMenu</code>, <code>GUITools</code>, <code>Messaging</code>.</li>
+      <li><a href="https://github.com/pardeike/Harmony" style="color: var(--accent);">Harmony</a> — upstream documentation.</li>
+    </ul>
+  </section>
+
+</main>
+
+</body>
+</html>
