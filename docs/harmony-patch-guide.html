@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HarmonyPatch — Modder's Guide</title>
+  <style>
+    :root {
+      --bg:      #0f1117;
+      --surface: #181c27;
+      --border:  #2a2f42;
+      --accent:  #5c8aff;
+      --accent2: #9b59f5;
+      --text:    #d4d8e8;
+      --muted:   #7a80a0;
+      --code-bg: #12151f;
+      --tag-bg:  #1e2436;
+      --danger:  #e05c5c;
+      --warn:    #e0a35c;
+      --ok:      #5ce08a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* ── Sidebar ── */
+    nav {
+      width: 260px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 28px 20px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+    nav .logo {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+    nav .subtitle {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 28px;
+    }
+    nav ul { list-style: none; }
+    nav ul li { margin-bottom: 2px; }
+    nav ul li a {
+      display: block;
+      padding: 5px 10px;
+      border-radius: 6px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 13px;
+      transition: color .15s, background .15s;
+    }
+    nav ul li a:hover,
+    nav ul li a.active { color: var(--text); background: var(--border); }
+    nav .section-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--accent2);
+      margin: 18px 0 6px 10px;
+    }
+
+    /* ── Main content ── */
+    main {
+      flex: 1;
+      padding: 48px 64px;
+      max-width: 900px;
+    }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    .page-meta {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 40px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    h2 {
+      font-size: 20px;
+      font-weight: 700;
+      color: #fff;
+      margin: 48px 0 16px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    h3 {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--accent);
+      margin: 28px 0 10px;
+    }
+    p { margin-bottom: 14px; color: var(--text); }
+    ul.bullets { margin: 0 0 14px 24px; color: var(--text); }
+    ul.bullets li { margin-bottom: 6px; }
+
+    /* ── Code ── */
+    pre, code {
+      font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+      font-size: 13px;
+    }
+    code {
+      background: var(--tag-bg);
+      padding: 1px 6px;
+      border-radius: 4px;
+      color: #a8c0ff;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px 24px;
+      overflow-x: auto;
+      margin: 14px 0 20px;
+      line-height: 1.6;
+    }
+    pre code {
+      background: none;
+      padding: 0;
+      color: var(--text);
+    }
+
+    /* Syntax tones */
+    .kw  { color: #7ec4ff; }   /* keywords */
+    .ty  { color: #9cdcfe; }   /* types */
+    .mth { color: #dcdcaa; }   /* methods */
+    .cm  { color: #608b4e; }   /* comments */
+    .str { color: #ce9178; }   /* strings */
+    .num { color: #b5cea8; }   /* numbers */
+    .at  { color: #c586c0; }   /* attributes */
+
+    /* ── Callouts ── */
+    .callout {
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin: 18px 0;
+      font-size: 13.5px;
+      border-left: 4px solid;
+    }
+    .callout.note   { background: #1a2035; border-color: var(--accent);  color: #b8c8f0; }
+    .callout.warn   { background: #241e12; border-color: var(--warn);    color: #e8d3b0; }
+    .callout.danger { background: #241212; border-color: var(--danger);  color: #e8c0c0; }
+    .callout.ok     { background: #122414; border-color: var(--ok);      color: #b8e8c8; }
+    .callout strong { color: inherit; font-weight: 700; }
+
+    /* ── Reference tables ── */
+    .ref-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px 24px;
+      margin: 14px 0 22px;
+    }
+    .ref-card .ref-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .ref-card .ref-title {
+      font-family: 'Cascadia Code', monospace;
+      font-size: 14px;
+      color: #9cdcfe;
+      font-weight: 700;
+    }
+    .ref-card .ref-desc { color: var(--muted); font-size: 13px; margin-bottom: 14px; }
+    .badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+    .badge.attr  { background: #2a1e35; color: #c586c0; }
+    .badge.param { background: #1e3055; color: #7ec4ff; }
+    .badge.hook  { background: #1e2a1e; color: #5ce08a; }
+    .ref-card table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .ref-card table th {
+      text-align: left;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      padding: 0 8px 8px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .ref-card table td {
+      padding: 7px 8px 7px 0;
+      border-bottom: 1px solid #1a1f2e;
+      vertical-align: top;
+    }
+    .ref-card table tr:last-child td { border-bottom: none; }
+    .ref-card table td:first-child {
+      font-family: 'Cascadia Code', monospace;
+      color: #dcdcaa;
+      white-space: nowrap;
+      padding-right: 20px;
+    }
+    .ref-card table td.desc { color: var(--muted); }
+
+    /* ── Patch stub labels ── */
+    .patch-label {
+      display: inline-block;
+      background: #1a1f2e;
+      border: 1px solid var(--border);
+      border-radius: 6px 6px 0 0;
+      border-bottom: none;
+      padding: 5px 14px;
+      font-size: 11px;
+      color: var(--muted);
+      font-family: 'Cascadia Code', monospace;
+      margin-bottom: -1px;
+    }
+    .patch-label + pre { border-radius: 0 8px 8px 8px; margin-top: 0; }
+
+    hr { border: none; border-top: 1px solid var(--border); margin: 40px 0; }
+
+    /* ── Lifecycle diagram ── */
+    .lifecycle {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      margin: 14px 0 22px;
+      font-family: 'Cascadia Code', monospace;
+      font-size: 13px;
+    }
+    .lifecycle .step {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .lifecycle .arrow {
+      color: var(--muted);
+      padding-left: 14px;
+    }
+    .lifecycle .pill {
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 700;
+      min-width: 80px;
+      text-align: center;
+    }
+    .lifecycle .pill.pref { background: #1e3055; color: #7ec4ff; }
+    .lifecycle .pill.orig { background: #2a2012; color: #e0a35c; }
+    .lifecycle .pill.post { background: #1e2a1e; color: #5ce08a; }
+    .lifecycle .pill.fin  { background: #241212; color: #e05c5c; }
+    .lifecycle .pill.trn  { background: #2a1e35; color: #c586c0; }
+    .lifecycle .label { color: var(--text); }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════ SIDEBAR ═══════════ -->
+<nav>
+  <div class="logo">Harmony for Void Crew</div>
+  <div class="subtitle">Modder's Reference · Harmony 2.x</div>
+  <ul>
+    <li><a href="#overview">Overview</a></li>
+    <li><a href="#how-it-works">How it works</a></li>
+    <li><a href="#lifecycle">Patch lifecycle</a></li>
+  </ul>
+  <div class="section-label">Patch types</div>
+  <ul>
+    <li><a href="#prefix">Prefix</a></li>
+    <li><a href="#postfix">Postfix</a></li>
+    <li><a href="#transpiler">Transpiler</a></li>
+    <li><a href="#finalizer">Finalizer</a></li>
+  </ul>
+  <div class="section-label">Targeting</div>
+  <ul>
+    <li><a href="#targeting">[HarmonyPatch] forms</a></li>
+    <li><a href="#overloads">Overloads &amp; properties</a></li>
+    <li><a href="#generics">Generics &amp; nested types</a></li>
+  </ul>
+  <div class="section-label">Injected parameters</div>
+  <ul>
+    <li><a href="#injected">__instance, __result, etc.</a></li>
+    <li><a href="#state">__state passing</a></li>
+  </ul>
+  <div class="section-label">Practical</div>
+  <ul>
+    <li><a href="#registration">Registering patches</a></li>
+    <li><a href="#pitfalls">Common pitfalls</a></li>
+    <li><a href="#debugging">Debugging</a></li>
+  </ul>
+</nav>
+
+<!-- ═══════════ MAIN ═══════════ -->
+<main>
+
+  <h1>HarmonyPatch — Modder's Guide</h1>
+  <div class="page-meta">
+    Harmony 2.x &nbsp;|&nbsp; Target: net472 &nbsp;|&nbsp;
+    Applies to <code>VoidCrewTerminus</code> via <code>Harmony.CreateAndPatchAll</code> in <code>BepinPlugin.Awake</code>.
+  </div>
+
+  <!-- ─── Overview ─── -->
+  <section id="overview">
+    <h2>Overview</h2>
+
+    <p>
+      <strong>Harmony</strong> is a runtime-patching library for .NET that lets you change the behaviour
+      of methods you don't own — including game code that ships as compiled assemblies. Instead of editing
+      the game's DLLs (which would break with every patch the developer ships), you write small
+      <em>patch methods</em> that Harmony injects around the original at runtime.
+    </p>
+
+    <p>
+      In this project, Harmony is brought in via VoidManager / BepInEx and activated in one line:
+    </p>
+
+    <div class="patch-label">VoidCrewTerminus/Plugins.cs — entry point</div>
+<pre><code><span class="ty">Harmony</span>.<span class="mth">CreateAndPatchAll</span>(<span class="ty">Assembly</span>.<span class="mth">GetExecutingAssembly</span>());</code></pre>
+
+    <p>
+      That single call scans the assembly for every class annotated with <code>[HarmonyPatch]</code>
+      and wires up the patch methods inside them. After that, anytime the game calls the targeted method,
+      your patch runs.
+    </p>
+
+    <div class="callout note">
+      <strong>Mental model:</strong> Harmony does not edit DLLs on disk. It rewrites the JIT-compiled
+      method body in memory using a stub that calls your <em>Prefix</em>, the <em>original</em>, and your
+      <em>Postfix</em> in sequence. From the game's perspective, the method just behaves differently.
+    </div>
+  </section>
+
+  <hr />
+
+  <!-- ─── How it works ─── -->
+  <section id="how-it-works">
+    <h2 id="how-it-works">How it works</h2>
+
+    <p>
+      You write a <strong>patch class</strong> annotated with <code>[HarmonyPatch]</code>. Inside it,
+      you add static methods named <code>Prefix</code>, <code>Postfix</code>, <code>Transpiler</code>,
+      or <code>Finalizer</code> — Harmony recognizes them by name and slots them into the right place.
+    </p>
+
+    <div class="patch-label">Minimal patch example</div>
+<pre><code><span class="kw">using</span> <span class="ty">CG.Client.UI</span>;
+<span class="kw">using</span> <span class="ty">HarmonyLib</span>;
+
+<span class="kw">namespace</span> <span class="ty">VoidCrewTerminus</span>
+{
+    [<span class="at">HarmonyPatch</span>(<span class="kw">typeof</span>(<span class="ty">FadeController</span>), <span class="str">"Start"</span>)]
+    <span class="kw">internal class</span> <span class="ty">FadePatch</span>
+    {
+        <span class="kw">static void</span> <span class="mth">Postfix</span>()
+        {
+            <span class="ty">BepinPlugin</span>.Log.<span class="mth">LogInfo</span>(<span class="str">"FadeController.Start finished"</span>);
+        }
+    }
+}</code></pre>
+
+    <p>
+      That's the entire pattern. The attribute tells Harmony <em>what</em> to patch, the static
+      <code>Postfix</code> method is <em>your code</em>, and Harmony does the wiring at startup.
+    </p>
+  </section>
+
+  <hr />
+
+  <!-- ─── Lifecycle ─── -->
+  <section id="lifecycle">
+    <h2 id="lifecycle">Patch lifecycle</h2>
+
+    <p>
+      For a single call to the patched method, here is the order in which patches run:
+    </p>
+
+    <div class="lifecycle">
+      <div class="step"><span class="pill pref">Prefix</span> <span class="label">runs first — can skip the original by returning <code>false</code>.</span></div>
+      <div class="arrow">↓</div>
+      <div class="step"><span class="pill orig">Original</span> <span class="label">runs unless any Prefix returned <code>false</code>.</span></div>
+      <div class="arrow">↓</div>
+      <div class="step"><span class="pill post">Postfix</span> <span class="label">runs after the original — sees the result, can modify it.</span></div>
+      <div class="arrow">↓</div>
+      <div class="step"><span class="pill fin">Finalizer</span> <span class="label">runs last — like a <code>finally</code>, observes / suppresses exceptions.</span></div>
+    </div>
+
+    <p>
+      <strong>Transpilers</strong> sit outside this sequence — they don't run at call time. They run
+      <em>once</em> when Harmony first compiles the patched method and rewrite its IL instructions.
+    </p>
+
+    <div class="callout warn">
+      <strong>Multiple patches:</strong> Many mods can patch the same method. Prefixes run in priority order;
+      Postfixes also stack. Use <code>[HarmonyPriority]</code> and <code>[HarmonyBefore]</code> /
+      <code>[HarmonyAfter]</code> if you need to control ordering relative to other mods.
+    </div>
+  </section>
+
+  <hr />
+
+  <!-- ═══════════ PATCH TYPES ═══════════ -->
+  <section id="patch-types">
+    <h2>Patch types</h2>
+
+    <!-- Prefix -->
+    <h3 id="prefix">Prefix</h3>
+    <p>
+      A <code>Prefix</code> runs <em>before</em> the original. Use it to inspect or modify the arguments,
+      to short-circuit the original entirely, or to record state for the matching <code>Postfix</code>.
+    </p>
+
+    <div class="ref-card">
+      <div class="ref-header">
+        <span class="badge hook">Prefix</span>
+        <span class="ref-title">static void / static bool Prefix(...)</span>
+      </div>
+      <table>
+        <tr><th>Return type</th><th>Meaning</th></tr>
+        <tr>
+          <td>void</td>
+          <td class="desc">Inspect / modify args. Original always runs.</td>
+        </tr>
+        <tr>
+          <td>bool</td>
+          <td class="desc">Return <code>true</code> to continue, <code>false</code> to <strong>skip</strong> the original and all later prefixes. Postfix still runs.</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="patch-label">Prefix: modify an argument before the original sees it</div>
+<pre><code>[<span class="at">HarmonyPatch</span>(<span class="kw">typeof</span>(<span class="ty">OrbitObject</span>), <span class="kw">nameof</span>(<span class="ty">OrbitObject</span>.<span class="mth">ApplyHitDamage</span>))]
+<span class="kw">internal class</span> <span class="ty">DamageScalerPatch</span>
+{
+    <span class="kw">static void</span> <span class="mth">Prefix</span>(<span class="kw">ref</span> <span class="ty">float</span> damage)
+    {
+        damage *= <span class="num">0.5f</span>; <span class="cm">// halve incoming damage for everyone</span>
+    }
+}</code></pre>
+
+    <div class="patch-label">Prefix: skip the original entirely</div>
+<pre><code>[<span class="at">HarmonyPatch</span>(<span class="kw">typeof</span>(<span class="ty">OrbitObject</span>), <span class="kw">nameof</span>(<span class="ty">OrbitObject</span>.<span class="mth">Kill</span>))]
+<span class="kw">internal class</span> <span class="ty">GodModePatch</span>
+{
+    <span class="kw">static bool</span> <span class="mth">Prefix</span>(<span class="ty">OrbitObject</span> __instance)
+    {
+        <span class="kw">if</span> (__instance.Faction == <span class="num">0</span>) <span class="kw">return false</span>; <span class="cm">// suppress death for player faction</span>
+        <span class="kw">return true</span>;
+    }
+}</code></pre>
+
+    <div class="callout danger">
+      <strong>Skipping is contagious:</strong> Returning <code>false</code> from your prefix prevents
+      the original from running, which can break other mods that expected its side effects (events,
+      state mutations, Photon sync). Use it sparingly and prefer transpilers when you only need to tweak
+      part of the behaviour.
+    </div>
+
+    <!-- Postfix -->
+    <h3 id="postfix">Postfix</h3>
+    <p>
+      A <code>Postfix</code> runs <em>after</em> the original. Use it to react to a completed call,
+      modify the return value, or initialize state on a freshly-constructed object.
+    </p>
+
+    <div class="ref-card">
+      <div class="ref-header">
+        <span class="badge hook">Postfix</span>
+        <span class="ref-title">static void Postfix(...)</span>
+      </div>
+      <table>
+        <tr><th>Pattern</th><th>Use case</th></tr>
+        <tr>
+          <td>Modify __result</td>
+          <td class="desc">Take a <code>ref</code> parameter to <code>__result</code> and overwrite it.</td>
+        </tr>
+        <tr>
+          <td>Pass-through return</td>
+          <td class="desc">A Postfix may declare a return value of the same type — Harmony chains it as the new return.</td>
+        </tr>
+        <tr>
+          <td>Side effects</td>
+          <td class="desc">Logging, registering events, applying buffs after construction.</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="patch-label">Postfix: log every NPC instantiation</div>
+<pre><code>[<span class="at">HarmonyPatch</span>(<span class="kw">typeof</span>(<span class="ty">NpcAI</span>), <span class="str">"OnPhotonInstantiate"</span>)]
+<span class="kw">internal class</span> <span class="ty">NpcSpawnLogPatch</span>
+{
+    <span class="kw">static void</span> <span class="mth">Postfix</span>(<span class="ty">NpcAI</span> __instance)
+    {
+        <span class="ty">BepinPlugin</span>.Log.<span class="mth">LogInfo</span>($<span class="str">"NPC spawned: {__instance.gameObject.name}"</span>);
+    }
+}</code></pre>
+
+    <div class="patch-label">Postfix: rewrite a return value</div>
+<pre><code>[<span class="at">HarmonyPatch</span>(<span class="kw">typeof</span>(<span class="ty">WeaponModule</span>), <span class="str">"get_CooldownDuration"</span>)]
+<span class="kw">internal class</span> <span class="ty">FasterFiringPatch</span>
+{
+    <span class="kw">static void</span> <span class="mth">Postfix</span>(<span class="kw">ref</span> <span class="ty">float</span> __result)
+    {
+        __result *= <span class="num">0.75f</span>; <span class="cm">// 25% faster fire rate</span>
+    }
+}</code></pre>
+
+    <!-- Transpiler -->
+    <h3 id="transpiler">Transpiler</h3>
+    <p>
+      A <code>Transpiler</code> rewrites the original method's <strong>IL instructions</strong> at patch
+      time. It receives an <code>IEnumerable&lt;CodeInstruction&gt;</code> and must return one. Use it
+      when you need to surgically change a constant, replace a method call, or insert logic mid-method
+      without dropping the rest.
+    </p>
+
+    <div class="patch-label">Transpiler skeleton</div>
+<pre><code>[<span class="at">HarmonyPatch</span>(<span class="kw">typeof</span>(<span class="ty">SomeClass</span>), <span class="str">"SomeMethod"</span>)]
+<span class="kw">internal class</span> <span class="ty">ConstantPatch</span>
+{
+    <span class="kw">static</span> <span class="ty">IEnumerable</span>&lt;<span class="ty">CodeInstruction</span>&gt; <span class="mth">Transpiler</span>(<span class="ty">IEnumerable</span>&lt;<span class="ty">CodeInstruction</span>&gt; instructions)
+    {
+        <span class="kw">foreach</span> (<span class="kw">var</span> ins <span class="kw">in</span> instructions)
+        {
+            <span class="cm">// Replace any "ldc.r4 1.0" with "ldc.r4 2.0".</span>
+            <span class="kw">if</span> (ins.opcode == <span class="ty">OpCodes</span>.Ldc_R4 &amp;&amp; (<span class="kw">float</span>)ins.operand == <span class="num">1f</span>)
+                <span class="kw">yield return new</span> <span class="ty">CodeInstruction</span>(<span class="ty">OpCodes</span>.Ldc_R4, <span class="num">2f</span>);
+            <span class="kw">else</span>
+                <span class="kw">yield return</span> ins;
+        }
+    }
+}</code></pre>
+
+    <div class="callout warn">
+      <strong>Transpilers are powerful but fragile:</strong> they reference IL opcodes that may shift
+      across game updates. Prefer Prefix/Postfix where possible; reach for a Transpiler only when you
+      need to change behaviour in the middle of a method that you can't otherwise hook.
+    </div>
+
+    <!-- Finalizer -->
+    <h3 id="finalizer">Finalizer</h3>
+    <p>
+      A <code>Finalizer</code> behaves like a <code>finally</code> block wrapped around the original.
+      It runs whether or not an exception was thrown, can observe the exception via the
+      <code>__exception</code> parameter, and can suppress it by returning <code>null</code>.
+    </p>
+
+    <div class="patch-label">Finalizer: swallow an exception so the game doesn't crash</div>
+<pre><code>[<span class="at">HarmonyPatch</span>(<span class="kw">typeof</span>(<span class="ty">SomeFlakyClass</span>), <span class="str">"Update"</span>)]
+<span class="kw">internal class</span> <span class="ty">SafeUpdatePatch</span>
+{
+    <span class="kw">static</span> <span class="ty">Exception</span> <span class="mth">Finalizer</span>(<span class="ty">Exception</span> __exception)
+    {
+        <span class="kw">if</span> (__exception != <span class="kw">null</span>)
+            <span class="ty">BepinPlugin</span>.Log.<span class="mth">LogWarning</span>($<span class="str">"Suppressed: {__exception}"</span>);
+        <span class="kw">return null</span>; <span class="cm">// swallow it</span>
+    }
+}</code></pre>
+
+    <div class="callout danger">
+      <strong>Don't silence everything:</strong> swallowing exceptions in a Finalizer can mask real bugs.
+      Only use it when you've confirmed the underlying error is benign and you want to prevent a crash.
+    </div>
+  </section>
+
+  <hr />
+
+  <!-- ═══════════ TARGETING ═══════════ -->
+  <section id="targeting-section">
+    <h2 id="targeting">Targeting: forms of [HarmonyPatch]</h2>
+
+    <p>
+      The <code>[HarmonyPatch]</code> attribute can be stacked or combined in several ways. The most
+      common forms:
+    </p>
+
+    <div class="ref-card">
+      <div class="ref-header">
+        <span class="badge attr">attribute</span>
+        <span class="ref-title">[HarmonyPatch] — common forms</span>
+      </div>
+      <table>
+        <tr><th>Form</th><th>Use case</th></tr>
+        <tr>
+          <td>[HarmonyPatch(typeof(T), "MethodName")]</td>
+          <td class="desc">Most common. Patches the named method on type <code>T</code>.</td>
+        </tr>
+        <tr>
+          <td>[HarmonyPatch(typeof(T), nameof(T.Method))]</td>
+          <td class="desc">Refactor-safe: renaming the method breaks the build, not the runtime.</td>
+        </tr>
+        <tr>
+          <td>[HarmonyPatch(typeof(T), MethodType.Constructor)]</td>
+          <td class="desc">Patches the constructor(s) of <code>T</code>.</td>
+        </tr>
+        <tr>
+          <td>[HarmonyPatch(typeof(T), MethodType.Getter, nameof(T.Prop))]</td>
+          <td class="desc">Patches the <code>get_Prop</code> accessor. <code>Setter</code> for <code>set_Prop</code>.</td>
+        </tr>
+        <tr>
+          <td>[HarmonyPatch(typeof(T), "Method", new[]{ typeof(int), typeof(string) })]</td>
+          <td class="desc">Disambiguates overloads by parameter types.</td>
+        </tr>
+      </table>
+    </div>
+
+    <h3 id="overloads">Overloads &amp; properties</h3>
+    <p>
+      When a method has overloads, you must specify the parameter types explicitly — otherwise Harmony
+      throws "ambiguous match":
+    </p>
+
+    <div class="patch-label">Disambiguating an overloaded method</div>
+<pre><code>[<span class="at">HarmonyPatch</span>(
+    <span class="kw">typeof</span>(<span class="ty">SomeType</span>),
+    <span class="str">"DoThing"</span>,
+    <span class="kw">new</span>[] { <span class="kw">typeof</span>(<span class="kw">int</span>), <span class="kw">typeof</span>(<span class="ty">OrbitObject</span>) })]
+<span class="kw">internal class</span> <span class="ty">DoThingIntOrbitPatch</span> { ... }</code></pre>
+
+    <p>
+      For properties, target the auto-generated accessor by name (<code>get_X</code> / <code>set_X</code>)
+      or use the <code>MethodType.Getter</code> / <code>MethodType.Setter</code> form:
+    </p>
+
+    <div class="patch-label">Patching a property setter</div>
+<pre><code>[<span class="at">HarmonyPatch</span>(<span class="kw">typeof</span>(<span class="ty">OrbitObject</span>), <span class="ty">MethodType</span>.Setter, <span class="kw">nameof</span>(<span class="ty">OrbitObject</span>.HitPoints))]
+<span class="kw">internal class</span> <span class="ty">HitPointsSetPatch</span>
+{
+    <span class="kw">static void</span> <span class="mth">Postfix</span>(<span class="ty">OrbitObject</span> __instance, <span class="ty">float</span> value)
+    {
+        <span class="ty">BepinPlugin</span>.Log.<span class="mth">LogInfo</span>($<span class="str">"{__instance.name} HP set to {value}"</span>);
+    }
+}</code></pre>
+
+    <h3 id="generics">Generics &amp; nested types</h3>
+    <p>
+      Patching generic methods or nested types is possible but verbose — you must reference the
+      closed generic type. For nested types, use the <code>+</code> syntax in <code>Type.GetType</code>
+      or reference them directly:
+    </p>
+
+    <div class="patch-label">Targeting a nested type</div>
+<pre><code>[<span class="at">HarmonyPatch</span>(<span class="kw">typeof</span>(<span class="ty">Outer</span>.<span class="ty">Inner</span>), <span class="str">"Method"</span>)]
+<span class="kw">internal class</span> <span class="ty">InnerPatch</span> { ... }</code></pre>
+  </section>
+
+  <hr />
+
+  <!-- ═══════════ INJECTED ═══════════ -->
+  <section id="injected-section">
+    <h2 id="injected">Injected parameters</h2>
+
+    <p>
+      Harmony recognizes specially-named parameters in your patch method signatures and fills them in.
+      You only declare the ones you need.
+    </p>
+
+    <div class="ref-card">
+      <div class="ref-header">
+        <span class="badge param">injected</span>
+        <span class="ref-title">Special parameter names</span>
+      </div>
+      <table>
+        <tr><th>Name</th><th>Type</th><th class="desc">Meaning</th></tr>
+        <tr>
+          <td>__instance</td>
+          <td><em>the target type</em></td>
+          <td class="desc"><code>this</code> of the patched method (instance methods only).</td>
+        </tr>
+        <tr>
+          <td>__result</td>
+          <td><em>method return type</em></td>
+          <td class="desc">The original's return value. Make it <code>ref</code> to overwrite.</td>
+        </tr>
+        <tr>
+          <td>__state</td>
+          <td><em>your choice</em></td>
+          <td class="desc">A value passed from Prefix → Postfix. Set in Prefix as <code>out</code>, read in Postfix.</td>
+        </tr>
+        <tr>
+          <td>__originalMethod</td>
+          <td>MethodBase</td>
+          <td class="desc">Reflection handle to the original, useful in shared patches.</td>
+        </tr>
+        <tr>
+          <td>__exception</td>
+          <td>Exception</td>
+          <td class="desc">Finalizer only — the exception thrown by the original (or null).</td>
+        </tr>
+        <tr>
+          <td>__args</td>
+          <td>object[]</td>
+          <td class="desc">All arguments as a boxed array.</td>
+        </tr>
+        <tr>
+          <td>___fieldName</td>
+          <td><em>field type</em></td>
+          <td class="desc">Access a private field of the target instance. Three underscores + field name.</td>
+        </tr>
+        <tr>
+          <td><em>same-named parameter</em></td>
+          <td><em>argument type</em></td>
+          <td class="desc">Declare a parameter with the same name as an original argument to read/modify it.</td>
+        </tr>
+      </table>
+    </div>
+
+    <h3 id="state">Passing __state from Prefix to Postfix</h3>
+    <p>
+      A common pattern: snapshot something in the Prefix and react to the change in the Postfix.
+      Harmony auto-threads a <code>__state</code> parameter between them — typed however you like.
+    </p>
+
+    <div class="patch-label">__state: detect when HP changes across a method call</div>
+<pre><code>[<span class="at">HarmonyPatch</span>(<span class="kw">typeof</span>(<span class="ty">OrbitObject</span>), <span class="kw">nameof</span>(<span class="ty">OrbitObject</span>.<span class="mth">ApplyHitDamage</span>))]
+<span class="kw">internal class</span> <span class="ty">HpDeltaPatch</span>
+{
+    <span class="kw">static void</span> <span class="mth">Prefix</span>(<span class="ty">OrbitObject</span> __instance, <span class="kw">out</span> <span class="ty">float</span> __state)
+    {
+        __state = __instance.HitPoints; <span class="cm">// snapshot BEFORE damage</span>
+    }
+
+    <span class="kw">static void</span> <span class="mth">Postfix</span>(<span class="ty">OrbitObject</span> __instance, <span class="ty">float</span> __state)
+    {
+        <span class="kw">float</span> delta = __state - __instance.HitPoints;
+        <span class="kw">if</span> (delta &gt; <span class="num">0</span>)
+            <span class="ty">BepinPlugin</span>.Log.<span class="mth">LogInfo</span>($<span class="str">"{__instance.name} lost {delta} HP"</span>);
+    }
+}</code></pre>
+
+    <div class="patch-label">Accessing a private field with three underscores</div>
+<pre><code>[<span class="at">HarmonyPatch</span>(<span class="kw">typeof</span>(<span class="ty">HullDamageController</span>), <span class="str">"OnDamageReceived"</span>)]
+<span class="kw">internal class</span> <span class="ty">HullPrivateFieldPatch</span>
+{
+    <span class="cm">// ___accumulatedDamage maps to the private field "accumulatedDamage"</span>
+    <span class="kw">static void</span> <span class="mth">Postfix</span>(<span class="kw">ref</span> <span class="ty">float</span> ___accumulatedDamage)
+    {
+        ___accumulatedDamage *= <span class="num">0.9f</span>; <span class="cm">// scale down accumulation directly</span>
+    }
+}</code></pre>
+  </section>
+
+  <hr />
+
+  <!-- ═══════════ REGISTRATION ═══════════ -->
+  <section id="registration-section">
+    <h2 id="registration">Registering patches</h2>
+
+    <p>
+      In this project, all patches are auto-discovered by a single <code>CreateAndPatchAll</code> call
+      in the plugin entry point. You don't have to manually register each patch class — just decorate it
+      with <code>[HarmonyPatch]</code> and Harmony will find it.
+    </p>
+
+    <div class="patch-label">VoidCrewTerminus/Plugins.cs — what already runs at startup</div>
+<pre><code><span class="kw">public class</span> <span class="ty">BepinPlugin</span> : <span class="ty">BaseUnityPlugin</span>
+{
+    <span class="kw">public static</span> <span class="ty">ManualLogSource</span> Log;
+
+    <span class="kw">private void</span> <span class="mth">Awake</span>()
+    {
+        Log = Logger;
+        <span class="ty">Harmony</span>.<span class="mth">CreateAndPatchAll</span>(<span class="ty">Assembly</span>.<span class="mth">GetExecutingAssembly</span>());
+        Log.<span class="mth">LogInfo</span>(<span class="str">"VoidCrewTerminus loaded"</span>);
+    }
+}</code></pre>
+
+    <p>
+      That means adding a new patch is one step: drop a new class file in the project with
+      <code>[HarmonyPatch(...)]</code> on it. Rebuild, drop the DLL in BepInEx, done.
+    </p>
+
+    <div class="callout ok">
+      <strong>Convention:</strong> Keep patch classes <code>internal</code> and group related patches in
+      one file. Match the existing <code>VoidCrewTerminus/Patch.cs</code> pattern as a starting point.
+    </div>
+  </section>
+
+  <hr />
+
+  <!-- ═══════════ PITFALLS ═══════════ -->
+  <section id="pitfalls-section">
+    <h2 id="pitfalls">Common pitfalls</h2>
+
+    <ul class="bullets">
+      <li>
+        <strong>Forgetting <code>static</code>:</strong> Patch methods must be <code>static</code>.
+        Harmony will silently skip non-static patch methods.
+      </li>
+      <li>
+        <strong>Wrong method name spelling:</strong> Strings like <code>"Start"</code> aren't checked at
+        compile time. Prefer <code>nameof(...)</code> where possible.
+      </li>
+      <li>
+        <strong>Ambiguous overloads:</strong> If the target method is overloaded, pass an explicit
+        parameter-type array in <code>[HarmonyPatch]</code> or you'll get a runtime error.
+      </li>
+      <li>
+        <strong>Patching <code>throw null</code> stubs directly:</strong> <code>VoidCrew.GameLibs</code>
+        ships stubbed bodies. Patching them is fine; <em>calling them</em> from your own non-patch code is
+        not — they'll throw <code>NullReferenceException</code>. See <code>gamelibs-guide.html</code>.
+      </li>
+      <li>
+        <strong>Skipping Photon side effects:</strong> A Prefix that returns <code>false</code> can
+        silently desync clients if the original sent an RPC. Verify what state the original mutates
+        before suppressing it.
+      </li>
+      <li>
+        <strong>Holding instance references:</strong> Don't cache <code>__instance</code> in a static
+        dictionary without a cleanup hook — destroyed Unity objects will still satisfy
+        <code>!= null</code> in some contexts (the "fake null") and leak memory.
+      </li>
+    </ul>
+  </section>
+
+  <hr />
+
+  <!-- ═══════════ DEBUGGING ═══════════ -->
+  <section id="debugging-section">
+    <h2 id="debugging">Debugging</h2>
+
+    <p>
+      When a patch doesn't fire or behaves wrong, the first thing to check is whether Harmony actually
+      attached it. A few techniques:
+    </p>
+
+    <div class="patch-label">Log on first run to confirm the patch is wired up</div>
+<pre><code>[<span class="at">HarmonyPatch</span>(<span class="kw">typeof</span>(<span class="ty">FadeController</span>), <span class="str">"Start"</span>)]
+<span class="kw">internal class</span> <span class="ty">FadePatch</span>
+{
+    <span class="kw">static bool</span> _logged;
+
+    <span class="kw">static void</span> <span class="mth">Postfix</span>()
+    {
+        <span class="kw">if</span> (!_logged)
+        {
+            <span class="ty">BepinPlugin</span>.Log.<span class="mth">LogInfo</span>(<span class="str">"FadePatch attached and firing"</span>);
+            _logged = <span class="kw">true</span>;
+        }
+    }
+}</code></pre>
+
+    <p>Other useful techniques:</p>
+    <ul class="bullets">
+      <li>
+        Inspect everything Harmony has patched at startup with
+        <code>Harmony.GetAllPatchedMethods()</code> and log the result — confirms your patch class was discovered.
+      </li>
+      <li>
+        Set <code>HarmonyFileLog.Enabled = true</code> before patching to dump generated IL to disk —
+        invaluable when a Transpiler isn't producing the right code.
+      </li>
+      <li>
+        Watch BepInEx's console (<code>BepInEx/LogOutput.log</code>) — exceptions inside patch methods
+        are logged there, not surfaced to the user.
+      </li>
+      <li>
+        If <code>Harmony.CreateAndPatchAll</code> throws, the message names the offending patch class
+        and usually the reason (ambiguous match, missing method, signature mismatch).
+      </li>
+    </ul>
+
+    <div class="callout note">
+      <strong>Hot reload:</strong> Harmony does not unpatch when you reload the mod. Use
+      <code>harmony.UnpatchSelf()</code> in a custom unload hook if you need clean reload behaviour
+      during iteration.
+    </div>
+  </section>
+
+</main>
+
+</body>
+</html>
