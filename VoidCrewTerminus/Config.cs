@@ -61,11 +61,8 @@ internal class BindConfig : Attribute
 {
     public string Section { get; set; } = "";
     public string Description { get; set; } = "";
-
     public object DefaultValue { get; set; }
-
     public object[] Tags { get; set; }
-
     public AcceptableValueBase AcceptableValues { get; set; } = null;
 
     public BindConfig(string section, object defaultValue, string desc)

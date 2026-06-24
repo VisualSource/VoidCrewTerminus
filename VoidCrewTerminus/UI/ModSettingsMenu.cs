@@ -5,7 +5,6 @@ namespace VoidCrewTerminus;
 
 class TerminusModMenu : ModSettingsMenu
 {
-    bool ToggleBool = false;
 
     public override string Name()
     {
@@ -14,9 +13,7 @@ class TerminusModMenu : ModSettingsMenu
 
     public override void Draw()
     {
-        Label("Terminus");
-
-        ToggleBool = Toggle(ToggleBool, "Label");
+        TerminusConfig.AllowRelicReplication.Value = Toggle(TerminusConfig.AllowRelicReplication.Value, "Allow Relic replication in fabractor");
     }
 
     public override void OnClose()
