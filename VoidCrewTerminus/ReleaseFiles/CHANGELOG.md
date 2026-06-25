@@ -1,3 +1,6 @@
+## 0.0.5
+- add dev mode config option 
+- add spawn command
 ## 0.0.4
 - config setup
 - relic crafting disable patch

@@ -14,6 +14,7 @@ class TerminusModMenu : ModSettingsMenu
     public override void Draw()
     {
         TerminusConfig.AllowRelicReplication.Value = Toggle(TerminusConfig.AllowRelicReplication.Value, "Allow Relic replication in fabractor");
+        TerminusConfig.EnableDevMode.Value = Toggle(TerminusConfig.EnableDevMode.Value, "Enable dev mode, allows for spawning items amoung other things");
     }
 
     public override void OnClose()

@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chat Commands &amp; Item Spawning — Modder's Guide</title>
+  <style>
+    :root {
+      --bg:      #0f1117;
+      --surface: #181c27;
+      --border:  #2a2f42;
+      --accent:  #5c8aff;
+      --accent2: #9b59f5;
+      --text:    #d4d8e8;
+      --muted:   #7a80a0;
+      --code-bg: #12151f;
+      --tag-bg:  #1e2436;
+      --danger:  #e05c5c;
+      --warn:    #e0a35c;
+      --ok:      #5ce08a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    nav {
+      width: 260px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 28px 20px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+    nav .logo { font-size: 13px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; }
+    nav .subtitle { font-size: 11px; color: var(--muted); margin-bottom: 28px; }
+    nav ul { list-style: none; }
+    nav ul li { margin-bottom: 2px; }
+    nav ul li a { display: block; padding: 5px 10px; border-radius: 6px; color: var(--muted); text-decoration: none; font-size: 13px; transition: color .15s, background .15s; }
+    nav ul li a:hover { color: var(--text); background: var(--border); }
+    nav .section-label { font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--accent2); margin: 18px 0 6px 10px; }
+
+    main { flex: 1; padding: 48px 64px; max-width: 900px; }
+
+    h1 { font-size: 28px; font-weight: 700; color: #fff; margin-bottom: 8px; }
+    .page-meta { font-size: 12px; color: var(--muted); margin-bottom: 40px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+    h2 { font-size: 20px; font-weight: 700; color: #fff; margin: 48px 0 16px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+    h3 { font-size: 15px; font-weight: 700; color: var(--accent); margin: 28px 0 10px; }
+    p { margin-bottom: 14px; }
+    ul.bullets { margin: 0 0 14px 24px; }
+    ul.bullets li { margin-bottom: 6px; }
+
+    pre, code { font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', Consolas, monospace; font-size: 13px; }
+    code { background: var(--tag-bg); padding: 1px 6px; border-radius: 4px; color: #a8c0ff; }
+    pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 20px 24px; overflow-x: auto; margin: 14px 0 20px; line-height: 1.6; }
+    pre code { background: none; padding: 0; color: var(--text); }
+
+    .kw  { color: #7ec4ff; }
+    .ty  { color: #9cdcfe; }
+    .mth { color: #dcdcaa; }
+    .cm  { color: #608b4e; }
+    .str { color: #ce9178; }
+    .num { color: #b5cea8; }
+
+    .callout { border-radius: 8px; padding: 14px 18px; margin: 18px 0; font-size: 13.5px; border-left: 4px solid; }
+    .callout.note   { background: #1a2035; border-color: var(--accent);  color: #b8c8f0; }
+    .callout.warn   { background: #241e12; border-color: var(--warn);    color: #e8d3b0; }
+    .callout strong { color: inherit; font-weight: 700; }
+
+    .ref-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px 24px; margin: 14px 0 22px; }
+    .ref-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+    .ref-title { font-size: 14px; font-weight: 700; color: #fff; }
+    .ref-ns { font-size: 11px; color: var(--muted); background: var(--tag-bg); padding: 2px 8px; border-radius: 4px; font-family: monospace; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; padding: 8px 12px; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--border); }
+    td { padding: 9px 12px; border-bottom: 1px solid #1e2338; vertical-align: top; }
+    tr:last-child td { border-bottom: none; }
+    td code { font-size: 12px; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">VoidCrewTerminus</div>
+  <div class="subtitle">Modding Reference</div>
+  <div class="section-label">On This Page</div>
+  <ul>
+    <li><a href="#overview">Overview</a></li>
+    <li><a href="#command-types">ChatCommand vs PublicCommand</a></li>
+    <li><a href="#arguments">Argument Trees</a></li>
+    <li><a href="#messaging">Messaging API</a></li>
+    <li><a href="#spawning">Item Spawning</a></li>
+    <li><a href="#localplayer">LocalPlayer</a></li>
+    <li><a href="#guids">Known Item GUIDs</a></li>
+    <li><a href="#full-example">Full Example</a></li>
+  </ul>
+  <div class="section-label">Other Guides</div>
+  <ul>
+    <li><a href="harmony-patch-guide.html">HarmonyPatch</a></li>
+    <li><a href="ingame-ui-modding-guide.html">In-Game UI</a></li>
+    <li><a href="gamelibs-guide.html">GameLibs Reference</a></li>
+  </ul>
+</nav>
+
+<main>
+  <h1>Chat Commands &amp; Item Spawning</h1>
+  <div class="page-meta">VoidManager 1.2.10 &nbsp;·&nbsp; VoidCrew.GameLibs 1.3.0 &nbsp;·&nbsp; Assembly-CSharp (IL2CPP stubs)</div>
+
+  <h2 id="overview">Overview</h2>
+  <p>
+    VoidManager auto-discovers any class that inherits from <code>ChatCommand</code> or
+    <code>PublicCommand</code> via reflection — no manual registration is needed.
+    Item spawning is handled by <code>SpawnUtils.SpawnCarryable</code>, which calls into
+    Photon to synchronise the spawned object across all connected clients.
+  </p>
+
+  <h2 id="command-types">ChatCommand vs PublicCommand</h2>
+
+  <div class="ref-card">
+    <div class="ref-header">
+      <span class="ref-title">ChatCommand</span>
+      <span class="ref-ns">VoidManager.Chat.Router</span>
+    </div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:10px;">Invoked with a leading <code>/</code>. Runs only on the local client.</p>
+    <table>
+      <thead><tr><th>Member</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>string[] CommandAliases()</code></td><td>Trigger words. First entry is the primary name.</td></tr>
+        <tr><td><code>string Description()</code></td><td>Shown in the in-game help list.</td></tr>
+        <tr><td><code>List&lt;Argument&gt; Arguments()</code></td><td>Argument tree used for tab-completion.</td></tr>
+        <tr><td><code>string[] UsageExamples()</code></td><td>Shown in detailed help. Default: <code>/alias</code>.</td></tr>
+        <tr><td><code>void Execute(string arguments)</code></td><td>Called with everything typed after the alias, trimmed.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="ref-card">
+    <div class="ref-header">
+      <span class="ref-title">PublicCommand</span>
+      <span class="ref-ns">VoidManager.Chat.Router</span>
+    </div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:10px;">Invoked with a leading <code>!</code>. Runs on <em>all</em> clients in the session.</p>
+    <table>
+      <thead><tr><th>Member</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>void Execute(string arguments, int sender)</code></td><td><code>sender</code> is the Photon actor number of the player who typed the command.</td></tr>
+        <tr><td colspan="2" style="color:var(--muted);font-size:12px;">All other members are identical to <code>ChatCommand</code>.</td></tr>
+      </tbody>
+    </table>
+    <div class="callout warn" style="margin-top:14px;">
+      <strong>Heads-up:</strong> Because <code>Execute</code> runs on every client, actions that
+      mutate game state (like spawning items) should be gated to one client to avoid duplicates.
+      Use <code>PhotonNetwork.IsMasterClient</code> or
+      <code>PhotonNetwork.LocalPlayer.ActorNumber == sender</code>.
+    </div>
+  </div>
+
+  <h2 id="arguments">Argument Trees</h2>
+  <p>
+    <code>Argument</code> builds a tree that drives tab-completion. Each node holds one or more
+    option names and optional child nodes.
+  </p>
+
+  <div class="ref-card">
+    <div class="ref-header">
+      <span class="ref-title">Argument</span>
+      <span class="ref-ns">VoidManager.Chat.Router</span>
+    </div>
+    <table>
+      <thead><tr><th>Constructor</th><th>Use</th></tr></thead>
+      <tbody>
+        <tr><td><code>new Argument(params string[] names)</code></td><td>Leaf node — one or more completable options at this level.</td></tr>
+        <tr><td><code>new Argument(string name, Argument child)</code></td><td>Node that leads to a single required sub-argument.</td></tr>
+        <tr><td><code>new Argument(string[] names, List&lt;Argument&gt; children)</code></td><td>Node with multiple sub-argument branches.</td></tr>
+      </tbody>
+    </table>
+    <p style="margin-top:12px;font-size:13px;color:var(--muted);">Special placeholder names:</p>
+    <table>
+      <thead><tr><th>Placeholder</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>%player_name</code></td><td>Expanded at runtime with the current player list.</td></tr>
+        <tr><td><code>%integer</code> / <code>%number</code></td><td>Signals a numeric input is expected.</td></tr>
+        <tr><td><code>%item_name</code></td><td>Free-text placeholder (documentary only).</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+<pre><code><span class="kw">public override</span> <span class="ty">List</span>&lt;<span class="ty">Argument</span>&gt; <span class="mth">Arguments</span>() =&gt;
+[
+    <span class="kw">new</span>(<span class="str">"list"</span>),        <span class="cm">// !spawn list</span>
+    <span class="kw">new</span>(<span class="str">"%item_name"</span>)  <span class="cm">// !spawn &lt;anything&gt;</span>
+];</code></pre>
+
+  <h2 id="messaging">Messaging API</h2>
+
+  <div class="ref-card">
+    <div class="ref-header">
+      <span class="ref-title">Messaging</span>
+      <span class="ref-ns">VoidManager.Utilities</span>
+    </div>
+    <table>
+      <thead><tr><th>Method</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>Notification(string msg)</code></td><td>Local-only notification displayed in the chat area.</td></tr>
+        <tr><td><code>Notification(string msg, long timeoutMs, bool noPrefix)</code></td><td>Same, auto-dismisses after <code>timeoutMs</code> ms.</td></tr>
+        <tr><td><code>Echo(string msg, bool local = true)</code></td><td>When <code>local = false</code>, broadcasts as a real chat message via <code>VoipService.SendTextMessage</code>.</td></tr>
+        <tr><td><code>Echo(string msg, string prefix, bool local)</code></td><td>Same with a custom message prefix.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="spawning">Item Spawning</h2>
+
+  <div class="ref-card">
+    <div class="ref-header">
+      <span class="ref-title">SpawnUtils</span>
+      <span class="ref-ns">CG.Game.Scenarios</span>
+    </div>
+    <table>
+      <thead><tr><th>Method</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>SpawnCarryable(GUIDUnion guid, Vector3 pos, Quaternion rot)</code></td>
+          <td>Spawns a carryable item over the network. Returns the <code>OrbitObject</code> on success, <code>null</code> on failure.</td>
+        </tr>
+        <tr>
+          <td><code>SpawnCarePackage(GUIDUnion guid, int amount, Vector3 pos)</code></td>
+          <td>Spawns <code>amount</code> copies as a care-package drop.</td>
+        </tr>
+        <tr>
+          <td><code>SpawnCompositeWeaponBuildBox(CompositeWeaponDataDef, Vector3, Quaternion)</code></td>
+          <td>Spawns a composite weapon build box.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Enumerating Spawnable Items</h3>
+  <p>
+    The game maintains a pre-built list of all spawnable assets in
+    <code>DebugSpawnObjects.SpawnablesList</code> (<code>CG</code> namespace). Each entry exposes:
+  </p>
+  <ul class="bullets">
+    <li><code>name</code> — display name of the item</li>
+    <li><code>_guidUnion</code> — the <code>GUIDUnion</code> to pass to <code>SpawnCarryable</code></li>
+    <li><code>_objectType</code> — <code>System.Type</code> for filtering (e.g. <code>typeof(CarryableObject)</code>)</li>
+  </ul>
+  <p>
+    Call <code>DebugSpawnObjects.PopulateList()</code> lazily before first use.
+    Filter to carryables with <code>entry._objectType == typeof(CarryableObject)</code> (<code>CG.Objects</code> namespace).
+  </p>
+
+<pre><code><span class="kw">using</span> CG;
+<span class="kw">using</span> CG.Objects;
+<span class="kw">using</span> CG.Game.Scenarios;
+
+<span class="kw">if</span> (<span class="ty">DebugSpawnObjects</span>.SpawnablesList.Count == <span class="num">0</span>)
+    <span class="ty">DebugSpawnObjects</span>.<span class="mth">PopulateList</span>();
+
+<span class="kw">var</span> carryables = <span class="ty">DebugSpawnObjects</span>.SpawnablesList
+    .<span class="mth">Where</span>(s =&gt; s._objectType == <span class="kw">typeof</span>(<span class="ty">CarryableObject</span>))
+    .<span class="mth">ToList</span>();
+
+<span class="kw">var</span> item = carryables
+    .<span class="mth">FirstOrDefault</span>(s =&gt; s.name.<span class="mth">Contains</span>(search, <span class="ty">StringComparison</span>.OrdinalIgnoreCase));
+
+<span class="kw">if</span> (item != <span class="kw">null</span>)
+    <span class="ty">SpawnUtils</span>.<span class="mth">SpawnCarryable</span>(item._guidUnion, position, <span class="ty">Quaternion</span>.identity);</code></pre>
+
+  <div class="callout note">
+    <strong>Multiplayer:</strong> <code>SpawnCarryable</code> calls into Photon internally.
+    In a <code>PublicCommand</code> (which runs on all clients), gate the spawn call to one
+    client — e.g. <code>if (PhotonNetwork.IsMasterClient)</code> — to avoid N duplicates.
+  </div>
+
+  <h2 id="localplayer">LocalPlayer</h2>
+
+  <div class="ref-card">
+    <div class="ref-header">
+      <span class="ref-title">LocalPlayer</span>
+      <span class="ref-ns">CG.Game.Player</span>
+    </div>
+    <table>
+      <thead><tr><th>Member</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>static LocalPlayer Instance</code></td><td>The local player, or <code>null</code> when not in a session.</td></tr>
+        <tr><td><code>static LocalPlayer I</code></td><td>Shorthand alias for <code>Instance</code>.</td></tr>
+        <tr><td><code>static bool IsActive</code></td><td><code>true</code> when the local player exists in the world.</td></tr>
+        <tr><td><code>transform.position</code></td><td>World-space position (inherited from <code>MonoBehaviour</code>).</td></tr>
+        <tr><td><code>transform.forward</code></td><td>Forward direction — useful for placing spawned items in front of the player.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+<pre><code><span class="kw">var</span> player = <span class="ty">LocalPlayer</span>.Instance;
+<span class="kw">if</span> (player == <span class="kw">null</span>) { <span class="ty">Messaging</span>.<span class="mth">Notification</span>(<span class="str">"Not in a session"</span>); <span class="kw">return</span>; }
+
+<span class="cm">// 2 units in front of the player</span>
+<span class="ty">Vector3</span> spawnPos = player.transform.position + player.transform.forward * <span class="num">2f</span>;</code></pre>
+
+  <h2 id="guids">Known Item GUIDs</h2>
+  <p>
+    These can be passed directly to <code>new GUIDUnion(string)</code>
+    (<code>ResourceAssets</code> namespace) if you need to hardcode a specific item.
+  </p>
+
+  <div class="ref-card">
+    <table>
+      <thead><tr><th>Item</th><th>GUID</th></tr></thead>
+      <tbody>
+        <tr><td>Power Fuse</td><td><code>ec0fc0790a706ef4facab39da5d9de04</code></td></tr>
+        <tr><td>Oxygen Tank</td><td><code>6c37b5363f7ef7844881a301dca76572</code></td></tr>
+        <tr><td>Enemy Lurer</td><td><code>8124ed58f064e384cb0314005b84be1b</code></td></tr>
+      </tbody>
+    </table>
+    <div class="callout note" style="margin-top:14px;">
+      <strong>Prefer runtime lookup.</strong> GUIDs can change between game updates.
+      Use <code>DebugSpawnObjects.SpawnablesList</code> to discover them at runtime.
+    </div>
+  </div>
+
+  <h2 id="full-example">Full Example — !spawn command</h2>
+  <p>Full source: <code>VoidCrewTerminus/Commands/SpawnItem.cs</code></p>
+
+<pre><code><span class="kw">using</span> System;
+<span class="kw">using</span> System.Collections.Generic;
+<span class="kw">using</span> System.Linq;
+<span class="kw">using</span> CG;
+<span class="kw">using</span> CG.Game.Player;
+<span class="kw">using</span> CG.Game.Scenarios;
+<span class="kw">using</span> CG.Objects;
+<span class="kw">using</span> UnityEngine;
+<span class="kw">using</span> VoidManager.Chat.Router;
+<span class="kw">using</span> VoidManager.Utilities;
+
+<span class="kw">internal class</span> <span class="ty">SpawnItemCommand</span> : <span class="ty">PublicCommand</span>
+{
+    <span class="kw">public override</span> <span class="ty">string</span>[] <span class="mth">CommandAliases</span>() =&gt; [<span class="str">"spawn"</span>];
+    <span class="kw">public override</span> <span class="ty">string</span> <span class="mth">Description</span>() =&gt; <span class="str">"Spawn a carryable item at your position for testing"</span>;
+
+    <span class="kw">public override</span> <span class="ty">List</span>&lt;<span class="ty">Argument</span>&gt; <span class="mth">Arguments</span>() =&gt;
+    [<span class="kw">new</span>(<span class="str">"list"</span>), <span class="kw">new</span>(<span class="str">"%item_name"</span>)];
+
+    <span class="kw">public override</span> <span class="kw">void</span> <span class="mth">Execute</span>(<span class="ty">string</span> arguments, <span class="ty">int</span> sender)
+    {
+        <span class="kw">if</span> (<span class="ty">string</span>.<span class="mth">IsNullOrWhiteSpace</span>(arguments))
+        {
+            <span class="ty">Messaging</span>.<span class="mth">Notification</span>(<span class="str">"Usage: !spawn &lt;name&gt;  |  !spawn list [filter]"</span>);
+            <span class="kw">return</span>;
+        }
+
+        <span class="kw">if</span> (<span class="ty">DebugSpawnObjects</span>.SpawnablesList.Count == <span class="num">0</span>)
+            <span class="ty">DebugSpawnObjects</span>.<span class="mth">PopulateList</span>();
+
+        <span class="kw">var</span> carryables = <span class="ty">DebugSpawnObjects</span>.SpawnablesList
+            .<span class="mth">Where</span>(s =&gt; s._objectType == <span class="kw">typeof</span>(<span class="ty">CarryableObject</span>)).<span class="mth">ToList</span>();
+
+        <span class="kw">if</span> (arguments.<span class="mth">StartsWith</span>(<span class="str">"list"</span>, <span class="ty">StringComparison</span>.OrdinalIgnoreCase))
+        {
+            <span class="kw">var</span> filter = arguments.Length &gt; <span class="num">4</span> ? arguments[<span class="num">4</span>..].Trim() : <span class="ty">string</span>.Empty;
+            <span class="kw">var</span> hits = <span class="ty">string</span>.<span class="mth">IsNullOrEmpty</span>(filter)
+                ? carryables
+                : carryables.<span class="mth">Where</span>(s =&gt; s.name.<span class="mth">Contains</span>(filter, <span class="ty">StringComparison</span>.OrdinalIgnoreCase)).<span class="mth">ToList</span>();
+            <span class="kw">for</span> (<span class="ty">int</span> i = <span class="num">0</span>; i &lt; hits.Count; i += <span class="num">10</span>)
+                <span class="ty">Messaging</span>.<span class="mth">Notification</span>(<span class="ty">string</span>.<span class="mth">Join</span>(<span class="str">", "</span>, hits.<span class="mth">Skip</span>(i).<span class="mth">Take</span>(<span class="num">10</span>).<span class="mth">Select</span>(s =&gt; s.name)));
+            <span class="kw">return</span>;
+        }
+
+        <span class="kw">var</span> player = <span class="ty">LocalPlayer</span>.Instance;
+        <span class="kw">if</span> (player == <span class="kw">null</span>) { <span class="ty">Messaging</span>.<span class="mth">Notification</span>(<span class="str">"Not in an active session"</span>); <span class="kw">return</span>; }
+
+        <span class="kw">var</span> item =
+            carryables.<span class="mth">FirstOrDefault</span>(s =&gt; s.name.<span class="mth">Equals</span>(arguments, <span class="ty">StringComparison</span>.OrdinalIgnoreCase))
+            ?? carryables.<span class="mth">FirstOrDefault</span>(s =&gt; s.name.<span class="mth">Contains</span>(arguments, <span class="ty">StringComparison</span>.OrdinalIgnoreCase));
+
+        <span class="kw">if</span> (item == <span class="kw">null</span>)
+        {
+            <span class="ty">Messaging</span>.<span class="mth">Notification</span>(<span class="str">$"No carryable found matching '{arguments}'. Use !spawn list to browse."</span>);
+            <span class="kw">return</span>;
+        }
+
+        <span class="kw">var</span> pos = player.transform.position + player.transform.forward * <span class="num">2f</span>;
+        <span class="kw">var</span> spawned = <span class="ty">SpawnUtils</span>.<span class="mth">SpawnCarryable</span>(item._guidUnion, pos, <span class="ty">Quaternion</span>.identity);
+        <span class="ty">Messaging</span>.<span class="mth">Notification</span>(spawned != <span class="kw">null</span> ? <span class="str">$"Spawned: {item.name}"</span> : <span class="str">$"Failed: {item.name}"</span>);
+    }
+}</code></pre>
+
+</main>
+</body>
+</html>

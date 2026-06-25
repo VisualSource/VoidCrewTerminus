@@ -31,7 +31,7 @@ jobs:
         prerelease: false
         release_name: VoidCrewTerminus
         tag_name: ${{ github.ref }}
-        body_path: ./VoidCrewTerminus/ReleaseFiles/CHANGELOG.md
+        body_path: ./RELEASE.md
       env:
         GITHUB_TOKEN: ${{ github.token }}
     - uses: olegtarasov/get-tag@v2.1.3

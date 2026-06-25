@@ -13,6 +13,9 @@ internal static class TerminusConfig
     [BindConfig("ui", false, "Control if relics are allowed to be created from the fabricator")]
     internal static ConfigEntry<bool> AllowRelicReplication;
 
+    [BindConfig("dev", false, "Enable dev mode")]
+    internal static ConfigEntry<bool> EnableDevMode;
+
 
     internal static void Init(ConfigFile cfg)
     {
