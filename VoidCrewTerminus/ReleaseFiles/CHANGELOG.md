@@ -1,3 +1,6 @@
+## 0.0.6
+- hide relic tab in fab
+- start lobby ship
 ## 0.0.5
 - add dev mode config option 
 - add spawn command

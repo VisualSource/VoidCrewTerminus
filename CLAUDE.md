@@ -48,3 +48,4 @@ The prebuild step will propagate these values into `MyPluginInfo.cs`, the Thunde
 - [Void Crew Modding Docs](https://hutlihutgames.github.io/void_crew_modding_documentation/)
 - [VoidManager source / examples](https://github.com/Nihility-Shift/VoidManager)
 - [Example mod with similar structure](https://github.com/Maverik/VoidCrewMods/tree/main/HigherDifficulty)
+                
