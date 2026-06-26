@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Leech Carrier Encounter — System Design</title>
+  <style>
+    :root {
+      --bg:      #0f1117;
+      --surface: #181c27;
+      --border:  #2a2f42;
+      --accent:  #5c8aff;
+      --accent2: #9b59f5;
+      --text:    #d4d8e8;
+      --muted:   #7a80a0;
+      --code-bg: #12151f;
+      --tag-bg:  #1e2436;
+      --danger:  #e05c5c;
+      --warn:    #e0a35c;
+      --ok:      #5ce08a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 15.5px;
+      line-height: 1.75;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    nav {
+      width: 260px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 28px 20px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+    nav .logo {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+    nav .subtitle {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 28px;
+    }
+    nav ul { list-style: none; }
+    nav ul li { margin-bottom: 2px; }
+    nav ul li a {
+      display: block;
+      padding: 5px 10px;
+      border-radius: 6px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 13px;
+    }
+    nav ul li a:hover { color: var(--text); background: var(--border); }
+    nav .section-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--accent2);
+      margin: 18px 0 6px 10px;
+    }
+
+    main {
+      flex: 1;
+      padding: 56px 72px;
+      max-width: 900px;
+    }
+
+    h1 {
+      font-size: 30px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    .page-meta {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 40px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .page-meta .pill {
+      display: inline-block;
+      background: var(--tag-bg);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 2px 10px;
+      font-size: 11px;
+      margin-right: 6px;
+      color: var(--accent);
+    }
+
+    h2 {
+      font-size: 22px;
+      font-weight: 700;
+      color: #fff;
+      margin: 56px 0 16px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    h3 {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--accent);
+      margin: 32px 0 10px;
+    }
+    h4 {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--accent2);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      margin: 22px 0 8px;
+    }
+    p { margin-bottom: 16px; color: var(--text); }
+    p.lead {
+      font-size: 17px;
+      color: #e8ebf5;
+      line-height: 1.7;
+      margin-bottom: 22px;
+    }
+    ul.bullets, ol.bullets { margin: 0 0 16px 24px; }
+    ul.bullets li, ol.bullets li { margin-bottom: 8px; }
+
+    ol.flow {
+      counter-reset: step;
+      list-style: none;
+      margin: 0 0 18px 0;
+      padding-left: 0;
+    }
+    ol.flow li {
+      counter-increment: step;
+      position: relative;
+      padding-left: 38px;
+      margin-bottom: 10px;
+    }
+    ol.flow li::before {
+      content: counter(step);
+      position: absolute;
+      left: 0;
+      top: 2px;
+      width: 24px;
+      height: 24px;
+      background: var(--accent);
+      color: #0f1117;
+      border-radius: 50%;
+      font-size: 12px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    strong { color: #fff; }
+    em { color: var(--text); }
+
+    code {
+      font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+      font-size: 13px;
+      background: var(--tag-bg);
+      padding: 1px 6px;
+      border-radius: 4px;
+      color: #a8c0ff;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 18px;
+      overflow-x: auto;
+      margin: 14px 0 20px;
+    }
+    pre code {
+      background: none;
+      padding: 0;
+      color: #d4d8e8;
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .callout {
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin: 20px 0;
+      font-size: 14px;
+      border-left: 4px solid;
+    }
+    .callout.note   { background: #1a2035; border-color: var(--accent);  color: #b8c8f0; }
+    .callout.warn   { background: #241e12; border-color: var(--warn);    color: #e8d3b0; }
+    .callout.danger { background: #241212; border-color: var(--danger);  color: #e8c0c0; }
+    .callout.ok     { background: #122414; border-color: var(--ok);      color: #b8e8c8; }
+    .callout strong { color: inherit; font-weight: 700; }
+    .callout .label {
+      display: inline-block;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      font-size: 11px;
+      margin-right: 8px;
+    }
+
+    table.data {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      margin: 14px 0 22px;
+    }
+    table.data th {
+      text-align: left;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      padding: 0 14px 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    table.data td {
+      padding: 10px 14px 10px 0;
+      border-bottom: 1px solid #1a1f2e;
+      vertical-align: top;
+      color: var(--text);
+    }
+    table.data tr:last-child td { border-bottom: none; }
+    table.data td.k {
+      font-weight: 700;
+      color: #9cdcfe;
+      white-space: nowrap;
+    }
+    table.data td.muted { color: var(--muted); }
+
+    .pillrow { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 18px; }
+    .pillrow .pill {
+      background: var(--tag-bg);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 3px 12px;
+      font-size: 12px;
+      color: var(--accent);
+    }
+
+    dl.glossary { margin: 0 0 18px 0; }
+    dl.glossary dt {
+      font-weight: 700;
+      color: var(--accent);
+      margin-top: 12px;
+    }
+    dl.glossary dd {
+      margin: 4px 0 12px 0;
+      color: var(--text);
+    }
+
+    .ref-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 22px 26px;
+      margin: 16px 0;
+    }
+    .ref-card h4 { margin-top: 0; }
+
+    hr { border: none; border-top: 1px solid var(--border); margin: 48px 0; }
+
+    .footer {
+      font-size: 12px;
+      color: var(--muted);
+      text-align: center;
+      margin-top: 56px;
+    }
+    .footer a { color: var(--accent); text-decoration: none; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">VoidCrewTerminus</div>
+  <div class="subtitle">Leech Carrier — Design</div>
+
+  <div class="section-label">Overview</div>
+  <ul>
+    <li><a href="#context">Context</a></li>
+    <li><a href="#summary">System Summary</a></li>
+    <li><a href="#glossary">Glossary</a></li>
+  </ul>
+
+  <div class="section-label">Mechanics</div>
+  <ul>
+    <li><a href="#host">Host Ship</a></li>
+    <li><a href="#missile">Leech Missile</a></li>
+    <li><a href="#spawn">Spawn on Impact</a></li>
+    <li><a href="#bvariant">Module-Biter (B-type)</a></li>
+    <li><a href="#avariant">Hull-Biter (A-type)</a></li>
+    <li><a href="#removal">EVA Removal</a></li>
+    <li><a href="#containment">Containment Failure</a></li>
+    <li><a href="#escalation">Sector Escalation Scaling</a></li>
+    <li><a href="#awareness">Crew Awareness</a></li>
+    <li><a href="#safety">Safety Rails</a></li>
+  </ul>
+
+  <div class="section-label">Implementation</div>
+  <ul>
+    <li><a href="#architecture">Architecture</a></li>
+    <li><a href="#filemap">File Map</a></li>
+    <li><a href="#patches">Patch Surfaces</a></li>
+    <li><a href="#networking">Multiplayer Sync</a></li>
+    <li><a href="#preflight">Pre-Flight Verification</a></li>
+    <li><a href="#phases">Phased Plan</a></li>
+  </ul>
+
+  <div class="section-label">Reference</div>
+  <ul>
+    <li><a href="#scaling">Scaling Table</a></li>
+    <li><a href="#open">Open Questions</a></li>
+  </ul>
+</nav>
+
+<main>
+
+<h1>Leech Carrier Encounter — System Design</h1>
+<div class="page-meta">
+  <span class="pill">v1 design</span>
+  <span class="pill">VoidCrewTerminus</span>
+  <span class="pill">BepInEx + Harmony + VoidManager</span>
+  <br /><br />
+  Technical design for the Leech Carrier encounter — a new deep-sector combat archetype that forces EVA mid-combat. Extends the Upgrade Forge's Sector Escalation system. For the higher-level proposal, see <a href="leech-rfc.html" style="color:var(--accent)">leech-rfc.html</a>.
+</div>
+
+<h2 id="context">Context</h2>
+<p>
+  The <a href="upgrade-forge-design.html">Upgrade Forge</a> introduces <code>DifficultyScalar</code> on <code>ForgeMeterController</code> — a per-sector counter that scales enemy stats and loot tier. The scalar is a clean numeric handle, but the Forge's Phase 6 only uses it to dial existing parameters: enemy HP, enemy damage, drop-tier biasing. It doesn't introduce any new encounter <em>archetypes</em>.
+</p>
+<p>
+  The TODO file at the project root names a wish: "<em>lech — launched via missiles, attaches to ship and causes damage to ship until removed by a player like Star Wars buzz droids — small robotic spider</em>." This design realizes that wish as an encounter gated and scaled by <code>DifficultyScalar</code>: a vanilla enemy class becomes a <strong>Leech Carrier</strong> at scalar ≥ 2, firing <strong>Leech Missiles</strong> that deploy <strong>Leech parasites</strong> on the player's hull on impact. Players must EVA to remove them. The Forge already defined the scalar; we plug into it.
+</p>
+
+<div class="callout note">
+  <span class="label">Why a new archetype rather than tuning existing enemies</span>
+  Late-sector Void Crew runs feel numerically harder but mechanically identical to early runs — the player still plays the same cockpit/gunnery/reactor loop, just with bigger numbers on both sides. This encounter <em>changes what crew is doing</em> in deep sectors: someone must leave their station and EVA. It's a deliberate gameplay shape, not a stat bump.
+</div>
+
+<h2 id="summary">System Summary (one paragraph)</h2>
+<p>
+  At <code>DifficultyScalar &ge; 2</code>, a vanilla enemy class (identified pre-flight) is patched to fire a homing-with-finite-turn-rate <strong>Leech Missile</strong>. The missile is interceptable by any weapon fire and engaged by vanilla point-defense (with resistance scaling per scalar). On hull impact, no hull damage — instead, <strong>1–3 Leech</strong> instances spawn at the impact point. Each anchors at the nearest hull patch and is assigned a variant <em>deterministically</em> based on proximity to a module: near a module → <strong>Module-Biter (B-type)</strong>, far → <strong>Hull-Biter (A-type)</strong>. B-type applies a non-stacking effectiveness debuff plus stacking module HP damage; A-type damages hull section HP on a bite cadence. Removal is EVA-only: aim the existing multi-tool at the Leech, hold to remove for 3–5s, complete 1–3 periodic input prompts. Miss a prompt → the Leech escapes, crawls to a new random hull location, re-anchors. Capped at <strong>one escape per Leech</strong>. Total concurrent Leeches on the ship capped at <strong>8</strong>. If a B-type's targeted module is destroyed (by it or by other damage), the Leech self-destructs ("mission complete"). All state is host-arbitrated and synced via VoidManager <code>ModMessage</code>, mirroring the Upgrade Forge's pattern. Player awareness reuses vanilla observation tools (telescope module, cockpit 3rd-person, gunner external view) — no bespoke hull-status UI. Audio cues are diegetic through the hull, plus one ship-wide resonance sting on first impact per encounter.
+</p>
+
+<h2 id="glossary">Glossary</h2>
+<dl class="glossary">
+  <dt>Leech Carrier (Host)</dt>
+  <dd>A vanilla enemy ship class patched to carry the Leech Missile weapon at <code>DifficultyScalar &ge; 2</code>. The specific class is identified pre-flight.</dd>
+
+  <dt>Leech Missile</dt>
+  <dd>The deploying projectile. Homing with finite turn rate, killable by any weapon fire, engaged by vanilla point-defense with per-scalar HP resistance. Does no hull damage on impact — payload is the Leeches.</dd>
+
+  <dt>Leech</dt>
+  <dd>A small robotic parasite that attaches to the player ship's hull. Two variants, deterministically assigned by spawn-location proximity to a module.</dd>
+
+  <dt>Module-Biter (B-type)</dt>
+  <dd>Default Leech variant. Anchors near a module, applies a non-stacking effectiveness debuff to that module while attached, and deals stacking HP damage on a tick. Self-destructs if its targeted module is destroyed.</dd>
+
+  <dt>Hull-Biter (A-type)</dt>
+  <dd>Rarer Leech variant. Anchors on bare hull, deals damage to the hull section it's on via a visible "chomp" bite cadence. Vanilla breach/depressurization mechanics handle consequences.</dd>
+
+  <dt>DifficultyScalar</dt>
+  <dd>Defined in the Upgrade Forge design. Integer counter on <code>ForgeMeterController</code>, increments by +1 per successful sector jump. This encounter gates at scalar ≥ 2 and uses scalar tiers (2–3, 4–5, 6+) for parameter tuning.</dd>
+
+  <dt>Containment Failure</dt>
+  <dd>The event where an EVA-removing player misses a containment input prompt and the Leech escapes to a new hull location. One per Leech max.</dd>
+
+  <dt>Hold-to-Remove</dt>
+  <dd>The 3–5 second EVA interaction in which a crewmember aims the multi-tool at a Leech and holds activation. Periodic prompts test containment.</dd>
+
+  <dt>Containment Prompt</dt>
+  <dd>A brief input cue (Void Crew's existing boot-panel-style mini-prompt) shown during hold-to-remove. Player must respond within a window (1.0–1.5s) or trigger Containment Failure.</dd>
+
+  <dt>Concurrency Safety Rail</dt>
+  <dd>Hard cap of 8 concurrent Leeches on the player ship. When hit, subsequent missile impacts trigger VFX but spawn no Leeches.</dd>
+
+  <dt>Diegetic Awareness</dt>
+  <dd>The design principle that crew learn of Leeches through the game world (visual observation via telescope/cockpit/turret views; diegetic audio through the hull) rather than through mod-side alert popups or UI overlays.</dd>
+</dl>
+
+<h2 id="host">Host Ship</h2>
+<p>
+  A vanilla enemy class is patched at <code>DifficultyScalar &ge; 2</code> to fire the Leech Missile in addition to (or in place of) its standard weapon, on a per-scalar fire interval. The specific class is a pre-flight identification item — chosen so it already appears in deep sectors, has a recognizable silhouette, and has a weapon firing pattern we can hook into.
+</p>
+<p>The patch surface (target class TBD via pre-flight):</p>
+<ul class="bullets">
+  <li>Hook the host enemy's per-tick AI / weapon-firing method (Harmony postfix).</li>
+  <li>If <code>DifficultyScalar &lt; 2</code>: no behavior change.</li>
+  <li>If <code>DifficultyScalar &ge; 2</code> and fire-interval cooldown elapsed: spawn a Leech Missile at the host's weapon mount, aimed at the player ship.</li>
+  <li>Fire-interval cooldown is per-host-instance, scaled by <code>DifficultyScalar</code> (30s → 25s → 20s across scalar tiers).</li>
+</ul>
+
+<h2 id="missile">Leech Missile</h2>
+<p>The projectile is a new <code>MonoBehaviour</code> spawned at host weapon mount. It is mod-side; vanilla netcode does not replicate it. State sync is via <code>LeechMissileFiredMessage</code> (see <a href="#networking">Networking</a>).</p>
+
+<h3>Guidance</h3>
+<ul class="bullets">
+  <li><strong>Homing with finite turn rate</strong>. Each fixed-update, compute the desired-heading vector toward the player ship; rotate the missile's velocity toward it bounded by <code>turnRateRadiansPerSecond × deltaTime</code>.</li>
+  <li><code>turnRateRadiansPerSecond</code> scales 1.0× → 1.3× → 1.6× across scalar tiers.</li>
+  <li>Constant forward speed in body frame; speed scales 1.0× → 1.15× → 1.3×.</li>
+</ul>
+
+<h3>Lifecycle</h3>
+<ol class="flow">
+  <li>Host fires the missile via <code>LeechMissileFiredMessage</code>. All clients spawn the local-state mirror.</li>
+  <li>Each tick: host updates trajectory canonically, broadcasts position deltas as needed (rate-limited; clients dead-reckon between updates).</li>
+  <li>Collision detection runs host-side. Two outcomes:
+    <ul class="bullets">
+      <li><strong>Intercepted</strong> by point-defense or weapon fire — missile takes HP damage; if HP ≤ 0 it explodes, host broadcasts <code>LeechDespawnMessage</code>.</li>
+      <li><strong>Impacts player ship</strong> — host triggers spawn logic (see <a href="#spawn">Spawn on Impact</a>) and broadcasts <code>LeechSpawnMessage</code>.</li>
+    </ul>
+  </li>
+</ol>
+
+<h3>Point-defense integration</h3>
+<p>The Leech Missile registers itself as a valid point-defense target by exposing whatever interface vanilla projectiles expose (pre-flight item). Resistance is implemented as a high <code>missileHp</code> field that scales per scalar — PD shots tick down HP, and only when HP ≤ 0 is the missile destroyed.</p>
+
+<h3>Audio &amp; visual tell</h3>
+<ul class="bullets">
+  <li>Distinct silhouette: elongated capsule (~2× length of vanilla projectiles). v1 placeholder: red-tinted primitive.</li>
+  <li>Audio warble: constant-pitch looping clip on the missile prefab.</li>
+  <li>Vanilla projectile-warning system picks it up automatically (pending pre-flight confirmation); if not, a patch is added to register it.</li>
+</ul>
+
+<h2 id="spawn">Spawn on Impact</h2>
+<p>On player ship collision, the missile triggers the spawn sequence host-side:</p>
+<ol class="flow">
+  <li>Determine the leech count for this missile by rolling on the per-scalar range:
+    <ul class="bullets">
+      <li>Scalar 2–3 → roll 1–2</li>
+      <li>Scalar 4–5 → roll 1–3</li>
+      <li>Scalar 6+ → roll 2–3 (cap 3)</li>
+    </ul>
+  </li>
+  <li>Query the <strong>Concurrency Safety Rail</strong>: if current active leech count on the player ship is &ge; 8, abort spawn (still play impact VFX). Otherwise clamp roll so total active never exceeds 8.</li>
+  <li>For each leech to spawn:
+    <ul class="bullets">
+      <li>Pick an anchor point near the impact (jittered within a radius).</li>
+      <li>Project onto the nearest hull surface point (raycast against the player ship's hull mesh).</li>
+      <li>Run the variant check: <code>FindNearestModule(anchorPoint)</code> — if distance ≤ <code>variantProximityThreshold</code>, classify B-type targeting that module. Else classify A-type targeting the hull section.</li>
+      <li>Create a <code>LeechController</code> instance, attach it as a child of the player ship transform at the anchor point.</li>
+    </ul>
+  </li>
+  <li>Broadcast <code>LeechSpawnMessage</code> with the batch (positions, variants, target module IDs or hull-section IDs).</li>
+</ol>
+
+<h2 id="bvariant">Module-Biter (B-type)</h2>
+<p>State, per attached B-type:</p>
+<pre><code>class LeechControllerBState {
+    Guid     LeechId;
+    int      TargetModuleInstanceId;
+    Vector3  AnchorWorldOffset;     // relative to ship transform
+    float    AttachedDurationSec;
+    bool     HasEscapedOnce;
+    bool     IsBeingRemoved;        // true while a player is holding the multi-tool on it
+    float    RemovalProgressSec;
+}</code></pre>
+<p>Behavior:</p>
+<ul class="bullets">
+  <li><strong>Debuff application.</strong> While any B-type is attached to a module, the module's effectiveness multiplier drops by the per-scalar magnitude (−25% / −40% / −50%). Implemented as a Harmony postfix on the module's effectiveness getter (target methods TBD pre-flight). <strong>Non-stacking</strong>: the debuff applies once regardless of how many B-types are on the module.</li>
+  <li><strong>Module HP damage.</strong> Every <code>moduleDamageTickSec</code> (~1.0s), deal <code>moduleDamagePerTick × scalarMultiplier</code> to the target module's vanilla HP. <strong>Stacking</strong>: each B-type ticks independently.</li>
+  <li><strong>Self-destruct trigger.</strong> Subscribe to the target module's destruction event (or poll its HP). When the module is destroyed, the leech plays self-destruct VFX/SFX and despawns. No AOE damage in v1.</li>
+</ul>
+
+<h2 id="avariant">Hull-Biter (A-type)</h2>
+<p>State, per attached A-type:</p>
+<pre><code>class LeechControllerAState {
+    Guid     LeechId;
+    int      TargetHullSectionId;
+    Vector3  AnchorWorldOffset;
+    float    AttachedDurationSec;
+    float    SecSinceLastChomp;
+    bool     HasEscapedOnce;
+    bool     IsBeingRemoved;
+    float    RemovalProgressSec;
+}</code></pre>
+<p>Behavior:</p>
+<ul class="bullets">
+  <li><strong>Bite cadence.</strong> Every <code>chompIntervalSec</code> (~2.0s), deal <code>chompDamage × scalarMultiplier</code> to the target hull section's HP. Plays chomp VFX + diegetic audio cue (audible from inside the section).</li>
+  <li>Breach is emergent — vanilla section-HP-zero rules apply. Once the section breaches, the leech keeps chewing on whatever's left. (Vanilla breach repair is unaffected — a leech anchored next to a breach can still be removed by EVA.)</li>
+</ul>
+
+<h2 id="removal">EVA Removal</h2>
+<p>Removal is the player-side mini-interaction. It runs entirely client-side on the EVA player's machine, with host arbitration of outcomes.</p>
+
+<h3>Trigger</h3>
+<ul class="bullets">
+  <li>Player must be in EVA mode (not inside a sealed compartment). Pre-flight: confirm the EVA-detection API.</li>
+  <li>Player aims the existing multi-tool at a Leech (raycast from tool transform).</li>
+  <li>Player holds the multi-tool's activation input.</li>
+</ul>
+
+<h3>Hold state machine</h3>
+<ol class="flow">
+  <li>On hold start: client sends <code>LeechRemovalTickMessage(START, leechId)</code> to host. Host validates (leech exists, player is in EVA range, leech isn't mid-flee). On success, host marks the leech as <code>IsBeingRemoved = true</code> and broadcasts the update.</li>
+  <li>Removal progress accumulates on the EVA client. The host receives periodic tick messages and is the canonical authority on remaining duration.</li>
+  <li>Periodically (host schedules), host broadcasts <code>LeechRemovalPromptMessage</code> — a containment input prompt. The EVA player has the per-scalar response window (1.0–1.5s) to send <code>LeechRemovalTickMessage(PROMPT_RESPONSE, &lt;result&gt;)</code>.</li>
+  <li>If response is in time → continue. If timed out or wrong → trigger Containment Failure (see next section).</li>
+  <li>When cumulative removal progress reaches the per-scalar duration (3–5s), host broadcasts <code>LeechDespawnMessage</code> and the leech is removed.</li>
+</ol>
+
+<h3>Interruption</h3>
+<ul class="bullets">
+  <li>Player releases the multi-tool → host clears <code>IsBeingRemoved</code>. Progress resets (does not persist).</li>
+  <li>Player loses line-of-sight or exits EVA range → host clears <code>IsBeingRemoved</code>. Progress resets.</li>
+  <li>Player suit ruptures / dies → progress resets. Leech remains attached.</li>
+</ul>
+
+<h2 id="containment">Containment Failure</h2>
+<p>On a missed or incorrect containment prompt response:</p>
+<ol class="flow">
+  <li>Host marks <code>HasEscapedOnce = true</code> on the leech.</li>
+  <li>Host picks a new random hull anchor point (different from current location, biased away from current EVA player to make the chase meaningful).</li>
+  <li>Host broadcasts <code>LeechFleeMessage(leechId, oldAnchor, newAnchor, newVariant)</code>. The variant is re-rolled at the new anchor by the same proximity check.</li>
+  <li>Clients animate the crawl from old to new anchor as a simple lerp (v1) over <code>fleeAnimationDurationSec</code> (~2.5s). Damage is paused during this window.</li>
+  <li>On arrival, the leech re-anchors and resumes damage in its new variant identity.</li>
+</ol>
+<p>Subsequent containment attempts on this leech ignore prompt-miss escape — <code>HasEscapedOnce</code> short-circuits the escape rule. The next removal completes normally.</p>
+
+<h2 id="escalation">Sector Escalation Scaling</h2>
+<p>
+  All scaling reads from <code>ForgeMeterController.DifficultyScalar</code> (defined in the Upgrade Forge). A new helper, <code>LeechEscalationScaling</code>, exposes a single API: <code>GetParams(int difficultyScalar) → LeechScalingParams</code>.
+</p>
+<p>The struct:</p>
+<pre><code>struct LeechScalingParams {
+    bool   FeatureGateOpen;          // false if scalar &lt; 2
+    int    LeechCountMin;
+    int    LeechCountMax;
+    float  MissileTurnRateMul;
+    float  MissileHpMul;
+    float  MissileSpeedMul;
+    float  HostFireIntervalSec;
+    int    ContainmentPromptCount;
+    float  ContainmentPromptWindowSec;
+    float  HoldToRemoveDurationSec;
+    float  BTypeDebuffMul;           // 0.75, 0.60, 0.50
+    float  BTypeModuleDamageMul;
+    float  ATypeChompDamageMul;
+}</code></pre>
+<p>Lookup is a switch on scalar tier (2–3 / 4–5 / 6+). Values come from <code>TerminusConfig</code>.</p>
+
+<h2 id="awareness">Crew Awareness</h2>
+<p>No bespoke alert UI, no hull-status console. Awareness is composed from vanilla tools + diegetic audio:</p>
+<ul class="bullets">
+  <li><strong>Vanilla projectile warning</strong> picks up the inbound missile (pre-flight to confirm). Plus the missile's distinct silhouette + audio warble.</li>
+  <li><strong>External observation</strong>: the ship's telescope module, the pilot's 3rd-person cockpit view, and gunner turret external views all show attached leeches naturally.</li>
+  <li><strong>Diegetic audio</strong>:
+    <ul class="bullets">
+      <li>Impact thunk on missile hit (3D-positional from impact location).</li>
+      <li>Chomp clicks for A-type bite cadence (3D-positional, audible inside the affected section).</li>
+      <li>Module stutter audio for B-type debuff (3D-positional from the module).</li>
+      <li>Servo snap on containment failure.</li>
+      <li>Detach pop on successful removal.</li>
+      <li>Thunk-pop on self-destruct.</li>
+    </ul>
+  </li>
+  <li><strong>Ship-wide first-impact sting</strong>: when the first Leech of an encounter anchors, play a brief subtle hull-resonance hum audible everywhere on the ship. Subsequent leeches in the same encounter do not retrigger the sting.</li>
+</ul>
+
+<h2 id="safety">Safety Rails</h2>
+<ul class="bullets">
+  <li><strong>Concurrent leech cap (8).</strong> Hard limit on active leeches on the player ship. Subsequent missile impacts play VFX but spawn no leeches.</li>
+  <li><strong>One escape per leech.</strong> A leech with <code>HasEscapedOnce = true</code> cannot escape again. Guarantees finite encounter duration.</li>
+  <li><strong>Removal-progress reset on interrupt.</strong> Partial removal does not persist across hold sessions. Forces a full hold-to-remove per attempt.</li>
+  <li><strong>Variant re-roll on flee.</strong> A fleeing leech's new variant is determined by its new anchor location (same proximity rule). A B-type can flee and become an A-type and vice versa.</li>
+  <li><strong>Module-destroyed → self-destruct.</strong> B-types whose target module is destroyed don't try to retarget; they self-destruct gracefully.</li>
+  <li><strong>Run-end clears all leech state.</strong> On ship death, all leech instances and their state records are dropped (matches per-run reset of the Upgrade Forge).</li>
+</ul>
+
+<h2 id="architecture">Architecture</h2>
+<p>The feature lives under <code>VoidCrewTerminus/Leech/</code> (new directory) and <code>VoidCrewTerminus/Net/</code> (created by Upgrade Forge Phase 8, reused here).</p>
+<ul class="bullets">
+  <li><strong>Mod-side overlay, no game-data modification.</strong> Same pattern as the Upgrade Forge — no ScriptableObjects modified, no asset-bundle changes to the game install.</li>
+  <li><strong>Host-arbitrated state.</strong> All authoritative state lives on the host's <code>LeechEncounterController</code> singleton. Clients hold a mirror that updates on inbound <code>ModMessage</code>s.</li>
+  <li><strong>Per-leech MonoBehaviour.</strong> Each leech is a <code>LeechController</code> component attached as a child of the player ship transform. Position is in ship-local space so it follows during ship maneuvers.</li>
+  <li><strong>Reuses Upgrade Forge primitives.</strong> Reads <code>DifficultyScalar</code> from <code>ForgeMeterController</code>. Hooks into the same per-run reset events. Uses the same <code>ModMessage</code> registration discovery.</li>
+</ul>
+
+<h2 id="filemap">File Map</h2>
+<div class="ref-card">
+  <h4>New files</h4>
+  <table class="data">
+    <tr><th>File</th><th>Responsibility</th></tr>
+    <tr><td class="k">Leech/LeechEncounterController.cs</td><td>Host singleton. Spawn arbitration, concurrency cap enforcement, per-run state reset, late-joiner snapshot composition.</td></tr>
+    <tr><td class="k">Leech/LeechController.cs</td><td>Per-leech MonoBehaviour. Holds variant state, drives bite/debuff ticks, owns anchor transform.</td></tr>
+    <tr><td class="k">Leech/LeechMissileBehavior.cs</td><td>Projectile MonoBehaviour. Homing logic, collision, point-defense interface.</td></tr>
+    <tr><td class="k">Leech/LeechVariantAssigner.cs</td><td>Proximity check on spawn / flee. <code>AssignVariant(anchorPoint, shipContext) → (Variant, TargetId)</code>.</td></tr>
+    <tr><td class="k">Leech/LeechRemovalInteraction.cs</td><td>EVA player-side hold-to-remove state machine. Drives prompt timing, accumulates progress, dispatches tick messages.</td></tr>
+    <tr><td class="k">Leech/LeechEscalationScaling.cs</td><td><code>GetParams(int difficultyScalar) → LeechScalingParams</code>. Reads <code>TerminusConfig</code> values.</td></tr>
+    <tr><td class="k">Leech/LeechConcurrencyRail.cs</td><td>Tracks active leech count; gates spawn on cap; clears on per-run reset.</td></tr>
+    <tr><td class="k">Leech/LeechAudio.cs</td><td>Diegetic SFX management — impact, chomp, debuff stutter, servo snap, pop, self-destruct, first-impact sting.</td></tr>
+    <tr><td class="k">Patches/HostShipWeaponPatch.cs</td><td>Patch the vanilla Host enemy's weapon-firing method. Postfix that adds Leech Missile firing at <code>DifficultyScalar &ge; 2</code>.</td></tr>
+    <tr><td class="k">Patches/LeechMultiToolPatch.cs</td><td>Patch the vanilla multi-tool to detect <code>LeechController</code> raycast hits and route activation to <code>LeechRemovalInteraction</code>.</td></tr>
+    <tr><td class="k">Patches/LeechPointDefensePatch.cs</td><td>Register Leech Missile as a valid PD target so vanilla PD modules engage automatically. (Conditional on pre-flight: may be no-op if vanilla already handles custom projectiles.)</td></tr>
+    <tr><td class="k">Patches/LeechProjectileWarningPatch.cs</td><td>Register Leech Missile with vanilla projectile-warning system. (Conditional on pre-flight.)</td></tr>
+    <tr><td class="k">Patches/ModuleEffectivenessOverlayPatch.cs</td><td>Postfix on module effectiveness getters. Applies B-type debuff multiplier if any B-type is attached.</td></tr>
+    <tr><td class="k">Net/LeechMissileFiredMessage.cs</td><td>Host → all. Missile spawn (origin, heading, type, ID, scaling params snapshot).</td></tr>
+    <tr><td class="k">Net/LeechSpawnMessage.cs</td><td>Host → all. On-impact leech batch (positions, variants, target module IDs / hull section IDs).</td></tr>
+    <tr><td class="k">Net/LeechStateUpdateMessage.cs</td><td>Host → all. Per-leech state delta (HP, damage progress, debuff active).</td></tr>
+    <tr><td class="k">Net/LeechRemovalTickMessage.cs</td><td>EVA client ↔ host ↔ all. Removal-hold events: START, STOP, PROMPT_RESPONSE.</td></tr>
+    <tr><td class="k">Net/LeechRemovalPromptMessage.cs</td><td>Host → EVA client + all (for animation). Schedules a containment prompt event.</td></tr>
+    <tr><td class="k">Net/LeechFleeMessage.cs</td><td>Host → all. Containment failure: leech detaches, crawls to new anchor, re-anchors with new variant.</td></tr>
+    <tr><td class="k">Net/LeechDespawnMessage.cs</td><td>Host → all. Removal or self-destruct termination.</td></tr>
+    <tr><td class="k">Net/LeechStateSyncMessage.cs</td><td>Host → late joiner. Full encounter snapshot.</td></tr>
+  </table>
+
+  <h4>Modified files</h4>
+  <table class="data">
+    <tr><th>File</th><th>Change</th></tr>
+    <tr><td class="k">VoidCrewTerminus/Config.cs</td><td>Extend <code>TerminusConfig</code> with all scaling values, gate threshold, concurrency cap, prompt windows, hold durations.</td></tr>
+    <tr><td class="k">VoidCrewTerminus/Plugins.cs</td><td><em>No changes.</em> <code>MPType = MultiplayerType.All</code> already correct. Harmony auto-picks up new patches; ModMessage discovery is automatic.</td></tr>
+  </table>
+
+  <h4>Reused (existing) files</h4>
+  <table class="data">
+    <tr><th>File</th><th>Use</th></tr>
+    <tr><td class="k">Forge/ForgeMeterController.cs</td><td>Read <code>DifficultyScalar</code>. (Implemented in Upgrade Forge Phase 5.)</td></tr>
+    <tr><td class="k">AssetLoader.cs</td><td>Load placeholder leech / missile assets if/when bundled (Polish phase). v1 uses runtime-generated primitives.</td></tr>
+    <tr><td class="k">Patches/RelicReplicationPatch.cs</td><td>Pattern reference: single-file Harmony patch.</td></tr>
+    <tr><td class="k">Patches/LobbyShipPatch.cs</td><td>Pattern reference: patch + MonoBehaviour.</td></tr>
+    <tr><td class="k">Commands/SpawnItem.cs</td><td>Pattern reference for dev commands (recommended: add <code>!leech</code> debug commands gated on <code>EnableDevMode</code>).</td></tr>
+  </table>
+</div>
+
+<h2 id="patches">Patch Surfaces</h2>
+<p>All patch targets are pending pre-flight verification — signatures are from the reference-only NuGet DLL. Method bodies must be verified against a live install.</p>
+<table class="data">
+  <tr><th>Game class</th><th>Hook</th><th>Purpose</th></tr>
+  <tr><td class="k">&lt;Host enemy class&gt;</td><td>Per-tick AI / weapon fire</td><td>Inject Leech Missile firing at scalar ≥ 2.</td></tr>
+  <tr><td class="k">&lt;Multi-tool interaction class&gt;</td><td>Activation / raycast target resolution</td><td>Route activation against a leech to <code>LeechRemovalInteraction</code>.</td></tr>
+  <tr><td class="k">&lt;Point-defense module class&gt;</td><td>Target acquisition</td><td>Expose Leech Missile as valid PD target (no-op if vanilla already does this).</td></tr>
+  <tr><td class="k">&lt;Projectile-warning system&gt;</td><td>Threat registration</td><td>Include Leech Missile in inbound-threat warnings (no-op if vanilla already does this).</td></tr>
+  <tr><td class="k">&lt;Module effectiveness getter&gt; per subclass</td><td>Postfix on the effectiveness/multiplier method</td><td>Apply non-stacking B-type debuff while attached.</td></tr>
+  <tr><td class="k">&lt;Module HP / vanilla repair&gt;</td><td>Direct method calls</td><td>Apply B-type module HP damage on tick.</td></tr>
+  <tr><td class="k">&lt;Hull section HP&gt;</td><td>Direct method calls</td><td>Apply A-type chomp damage.</td></tr>
+  <tr><td class="k">&lt;EVA detection API&gt;</td><td>Read-only</td><td>Gate removal to EVA-only.</td></tr>
+  <tr><td class="k">VoidManager.Events</td><td><code>MasterClientSwitched</code>, <code>PlayerEnteredRoom</code>, <code>HostStartSession</code></td><td>Host migration; late-joiner sync; per-run state reset.</td></tr>
+</table>
+
+<h2 id="networking">Multiplayer Sync — Authoritative Flow</h2>
+<p>Photon PUN via VoidManager <code>ModMessage</code> (automatic discovery). Same pattern as the Upgrade Forge.</p>
+
+<h3>Encounter lifecycle</h3>
+<ol class="flow">
+  <li>Host's <code>HostShipWeaponPatch</code> postfix fires. Host validates scalar gate and fire-interval cooldown.</li>
+  <li>Host instantiates a local <code>LeechMissileBehavior</code> and broadcasts <code>LeechMissileFiredMessage</code> with origin, heading, scalar snapshot, missile ID.</li>
+  <li>Clients receive the message and spawn their mirror missile. From here, host updates missile position periodically (rate-limited; clients dead-reckon between updates).</li>
+  <li>On host-side collision (interception or player-ship hit), host either despawns the missile (broadcast <code>LeechDespawnMessage</code> for the missile ID) or triggers spawn-on-impact.</li>
+  <li>Spawn-on-impact: host computes leech batch (count, anchor positions, variants, target IDs). Broadcasts <code>LeechSpawnMessage</code>. Clients instantiate mirror leeches.</li>
+  <li>Per-tick: host computes leech damage and broadcasts <code>LeechStateUpdateMessage</code> at a sane rate (e.g. once per 0.5s, not every frame).</li>
+</ol>
+
+<h3>Removal flow</h3>
+<ol class="flow">
+  <li>EVA client detects player aiming multi-tool at a leech; sends <code>LeechRemovalTickMessage(START, leechId)</code> to host.</li>
+  <li>Host validates: leech exists, isn't mid-flee, EVA player is in range. On success, marks <code>IsBeingRemoved=true</code> and broadcasts a state update.</li>
+  <li>Host schedules containment prompts at intervals: <code>LeechRemovalPromptMessage(leechId, promptIndex, deadlineTimestamp)</code>.</li>
+  <li>EVA client receives prompt, displays UI; on response, sends <code>LeechRemovalTickMessage(PROMPT_RESPONSE, result)</code>. Host validates timing against the deadline.</li>
+  <li>If response in time → host continues. If timed out or wrong → host transitions to flee (broadcasts <code>LeechFleeMessage</code>).</li>
+  <li>If hold completes successfully → host broadcasts <code>LeechDespawnMessage</code>.</li>
+</ol>
+
+<h3>Late joiner</h3>
+<p>On <code>VoidManager.Events.PlayerEnteredRoom</code>, the host serializes the current <code>LeechEncounterController</code> state (all active missiles + leeches + their fields) and sends <code>LeechStateSyncMessage</code> directly to the new client. The client reconstructs mirror objects from the snapshot.</p>
+
+<h3>Host migration</h3>
+<p>On <code>VoidManager.Events.MasterClientSwitched</code>, the new host promotes its mirror state to authoritative. Outstanding pending removal-prompt deadlines are extended by a grace window (~1s) to account for the transition. Mirror state is sufficiently complete for promotion because every <code>LeechStateUpdateMessage</code> carries the full per-leech state — no incremental deltas without anchor state.</p>
+
+<h2 id="preflight">Pre-Flight Verification</h2>
+<div class="callout danger">
+  <span class="label">Required before implementation</span>
+  The game is not installed on this system. All findings are from the <strong>reference-only</strong> assembly at
+  <code>%USERPROFILE%\.nuget\packages\voidcrew.gamelibs\1.3.0\lib\Assembly-CSharp.dll</code>. Type signatures are present; method bodies are stubs.
+  Method-body verification on a live install is required before patches finalize.
+</div>
+<p>On a system with a live Void Crew install:</p>
+<pre><code>dotnet tool install -g ilspycmd
+ilspycmd "&lt;steam&gt;/Void Crew/VoidCrew_Data/Managed/Assembly-CSharp.dll" \
+  -p -o ./decompiled --type CG.Ship.Modules.WeaponModule
+ilspycmd "&lt;steam&gt;/Void Crew/VoidCrew_Data/Managed/Assembly-CSharp.dll" \
+  -p -o ./decompiled --type CG.Ship.Tools
+ilspycmd "&lt;steam&gt;/Void Crew/VoidCrew_Data/Managed/Assembly-CSharp.dll" \
+  -p -o ./decompiled --type Gameplay.Enemies
+ilspycmd "&lt;steam&gt;/Void Crew/VoidCrew_Data/Managed/Assembly-CSharp.dll" \
+  -p -o ./decompiled --type CG.Ship.Hull
+ilspycmd "&lt;steam&gt;/Void Crew/VoidCrew_Data/Managed/Assembly-CSharp.dll" \
+  -p -o ./decompiled --type CG.Ship.PointDefense</code></pre>
+<ol class="bullets">
+  <li><strong>Identify the Host enemy class.</strong> Survey the vanilla enemy ship roster. Choose a mid-tier frigate that appears in scalar-2-and-deeper sectors and has a clear weapon-firing method.</li>
+  <li><strong>Identify the multi-tool interaction surface.</strong> Find the method that handles activation + raycast target resolution. Confirm we can postfix or transpile to handle leech targets.</li>
+  <li><strong>Confirm point-defense behavior.</strong> Does vanilla PD already engage arbitrary <code>MonoBehaviour</code> projectiles, or does it require explicit registration? If explicit, identify the registration API.</li>
+  <li><strong>Confirm projectile-warning system.</strong> Same question — automatic or explicit? Identify the registration API if needed.</li>
+  <li><strong>Identify module effectiveness getters per subclass.</strong> <code>WeaponModule</code>, <code>ReactorModule</code>, <code>EngineModule</code>, <code>ShieldModule</code>, etc. — find the method we patch to apply the B-type debuff multiplier. (Overlaps with Upgrade Forge Phase 2's same pre-flight.)</li>
+  <li><strong>Identify hull section identification API.</strong> How do we resolve "the hull section at world position X" for A-type targeting?</li>
+  <li><strong>Identify module identification at proximity.</strong> For B-type variant assignment, we need "the nearest module to world position X within radius R."</li>
+  <li><strong>Confirm EVA detection.</strong> The state/event that tells us a player is in EVA. Used to gate removal.</li>
+  <li><strong>Confirm boot-panel UI reusability.</strong> Can we instantiate the existing boot-panel-prompt UI element programmatically with arbitrary content, or is it deeply tied to its current context? If the latter, fall back to a bespoke prompt UI.</li>
+  <li><strong>Confirm hull mesh access for raycasting.</strong> We need to project anchor points onto the player ship's hull surface — confirm the hull mesh is accessible to a Harmony-side raycast.</li>
+</ol>
+
+<h2 id="phases">Phased Implementation Plan</h2>
+<p>
+  The work is split into <strong>9 independent phases (0–8)</strong>. Each phase is shippable and testable on its own. Don't proceed to phase N+1 until phase N's test plan passes.
+</p>
+
+<div class="callout warn">
+  <span class="label">Dependency on the Upgrade Forge</span>
+  This feature reads <code>DifficultyScalar</code> from <code>ForgeMeterController</code>. Upgrade Forge <strong>Phase 5 (Forge Progression: Meter + Sector Hook)</strong> must be complete before <em>this feature's Phase 6 (Sector Escalation Scaling)</em> can be wired in. Phases 0–5 of this feature can proceed in parallel with the Upgrade Forge as long as <code>DifficultyScalar</code> is stubbed to a config-driven constant for early testing.
+</div>
+
+<h3>Dependency chain</h3>
+<pre><code>Phase 0 (Foundation)
+    ↓
+Phase 1 (Leech Missile projectile, no spawn yet)
+    ↓
+Phase 2 (Spawn on impact + Module-Biter B-type)
+    ↓
+Phase 3 (Hull-Biter A-type + variant assignment)
+    ↓
+Phase 4 (EVA Removal — hold-to-remove)
+    ↓
+Phase 5 (Containment Failure + Flee)
+    ↓
+Phase 6 (Sector Escalation Scaling) ────── requires Upgrade Forge Phase 5
+    ↓
+Phase 7 (Multiplayer Sync + Edge Cases)
+    ↓
+Phase 8 (Diegetic Audio + First-impact sting + Polish hooks)
+    ↓
+[Phase: Polish — deferred. Custom models, IK rig, custom VFX/SFX.]</code></pre>
+
+<table class="data">
+  <tr><th>Phase</th><th>Title</th><th>Depends on</th><th>What's testable at the end</th></tr>
+  <tr><td class="k">0</td><td>Foundation</td><td class="muted">—</td><td class="muted">Build green, config keys exist, mod loads with no behavior change</td></tr>
+  <tr><td class="k">1</td><td>Leech Missile projectile</td><td class="muted">0</td><td class="muted">Dev-command spawns missile; homes; interceptable by weapon fire and PD</td></tr>
+  <tr><td class="k">2</td><td>Spawn on impact + B-type</td><td class="muted">1</td><td class="muted">Missile impact spawns leeches; B-types attach to nearest module; debuff + module HP damage observable</td></tr>
+  <tr><td class="k">3</td><td>A-type + variant assignment</td><td class="muted">2</td><td class="muted">Missile on bare hull → A-type chomps hull HP; missile near module → B-type</td></tr>
+  <tr><td class="k">4</td><td>EVA Removal</td><td class="muted">3</td><td class="muted">EVA player holds multi-tool on leech; removes after duration</td></tr>
+  <tr><td class="k">5</td><td>Containment Failure + Flee</td><td class="muted">4</td><td class="muted">Missed prompt → leech detaches, crawls to new anchor, re-anchors with new variant; one escape per leech enforced</td></tr>
+  <tr><td class="k">6</td><td>Sector Escalation Scaling</td><td class="muted">5, Forge Phase 5</td><td class="muted">All params scale per <code>DifficultyScalar</code>; gate at scalar ≥ 2 enforced</td></tr>
+  <tr><td class="k">7</td><td>Multiplayer Sync + Edge Cases</td><td class="muted">all</td><td class="muted">Host arbitration, late-joiner sync, host migration preserved</td></tr>
+  <tr><td class="k">8</td><td>Diegetic Audio + First-impact sting</td><td class="muted">7</td><td class="muted">Impact / chomp / debuff / pop / self-destruct audio play correctly; first-impact ship-wide hum on encounter open</td></tr>
+</table>
+
+<h3>Phase 0 — Foundation</h3>
+<p><strong>Goal:</strong> Project scaffolding. Config keys defined (with sensible defaults). No runtime behavior change.</p>
+<ul class="bullets">
+  <li>Create <code>VoidCrewTerminus/Leech/</code> directory.</li>
+  <li>Add <code>TerminusConfig</code> entries for the full scaling table, gate threshold, concurrency cap, prompt window, hold duration, all using <code>[BindConfig]</code>.</li>
+  <li>(If <code>VoidCrewTerminus/Net/</code> doesn't exist yet from Upgrade Forge Phase 8, create it.)</li>
+  <li>Add a CONTEXT.md entry for the new glossary terms (Leech, Module-Biter, Hull-Biter, etc.). The session that produced this design already wrote those entries — confirm they're present.</li>
+</ul>
+<p><strong>Test:</strong> <code>dotnet build -c Release</code> succeeds; mod loads with no exceptions; new config keys appear in BepInEx config file.</p>
+
+<h3>Phase 1 — Leech Missile projectile</h3>
+<p><strong>Goal:</strong> The missile exists as a working projectile. It homes, it can be intercepted. No leeches yet.</p>
+<ul class="bullets">
+  <li><code>Leech/LeechMissileBehavior.cs</code> — MonoBehaviour. Homing-with-finite-turn-rate logic. HP-based collision (intercept-able).</li>
+  <li><code>Patches/LeechPointDefensePatch.cs</code> — register missile with PD if needed (no-op if vanilla auto-engages).</li>
+  <li><code>Patches/LeechProjectileWarningPatch.cs</code> — register missile with projectile warning if needed.</li>
+  <li>Dev command <code>!leechmissile</code> spawns a missile from a designated spawn point aimed at the player ship.</li>
+</ul>
+<div class="callout warn">
+  <span class="label">Pre-flight required</span>
+  Confirm PD target acquisition mechanism; confirm projectile-warning registration.
+</div>
+<p><strong>Test:</strong> Spawn missile via dev command. Observe homing (turns toward player). Shoot it with main guns → destroyed. Spawn another → PD engages → missile takes hits over multiple PD shots before dying. Confirm distinct silhouette (placeholder primitive) and constant warble audio.</p>
+
+<h3>Phase 2 — Spawn on impact + Module-Biter (B-type only)</h3>
+<p><strong>Goal:</strong> Missile impact spawns leeches. All spawned leeches treated as B-type for this phase (no variant logic yet). Debuff and module damage observable.</p>
+<ul class="bullets">
+  <li><code>Leech/LeechController.cs</code> — leech MonoBehaviour. B-type state and tick logic.</li>
+  <li><code>Leech/LeechEncounterController.cs</code> — host singleton; spawn arbitration.</li>
+  <li><code>Patches/ModuleEffectivenessOverlayPatch.cs</code> — debuff postfix.</li>
+  <li>On impact: spawn config-driven 1–3 leeches near the nearest module (manual / dev-command override of the variant assignment for this phase).</li>
+</ul>
+<div class="callout warn">
+  <span class="label">Pre-flight required</span>
+  Confirm module effectiveness getter targets per subclass (overlaps with Upgrade Forge Phase 2).
+</div>
+<p><strong>Test:</strong> Spawn missile via dev command → impact → leeches spawn → engine debuff observable (e.g. thrust drops to 75%). Wait — module HP ticks down. Destroy module → leech self-destructs. Concurrency cap honored (spawn 4 missiles → only 8 leeches on ship; 9th missile spawns no leeches).</p>
+
+<h3>Phase 3 — Hull-Biter (A-type) + variant assignment</h3>
+<p><strong>Goal:</strong> Spawning now resolves variant by proximity. A-types chew hull HP on a bite cadence.</p>
+<ul class="bullets">
+  <li><code>Leech/LeechVariantAssigner.cs</code> — proximity check; deterministic A/B classification.</li>
+  <li>Extend <code>LeechController</code> with A-type state and chomp-tick logic.</li>
+  <li>Hull-section identification (pre-flight item — find the API).</li>
+</ul>
+<div class="callout warn">
+  <span class="label">Pre-flight required</span>
+  Confirm hull-section identification API. Confirm hull mesh raycasting for anchor projection.
+</div>
+<p><strong>Test:</strong> Aim missile at bare hull region (e.g. dorsal between modules) → leeches spawn as A-type → audible chomp cadence → hull section HP ticks down → at zero, section breaches by vanilla rules. Aim missile near a module → B-type still spawns. Mixed missile near edge of proximity threshold → variant assignment is sane.</p>
+
+<h3>Phase 4 — EVA Removal</h3>
+<p><strong>Goal:</strong> A player on EVA can remove a leech with the multi-tool. Hold-to-remove only; no containment prompts yet.</p>
+<ul class="bullets">
+  <li><code>Patches/LeechMultiToolPatch.cs</code> — multi-tool detects leech target.</li>
+  <li><code>Leech/LeechRemovalInteraction.cs</code> — hold-progress state machine.</li>
+  <li>Removal duration controlled by config (constant for this phase; per-scalar scaling added in Phase 6).</li>
+</ul>
+<div class="callout warn">
+  <span class="label">Pre-flight required</span>
+  Confirm multi-tool activation method. Confirm EVA-detection API.
+</div>
+<p><strong>Test:</strong> Spawn leech, EVA out, aim multi-tool, hold → progress accumulates → after duration, leech detaches with pop. Release mid-hold → progress resets. Lose line-of-sight → progress resets. Multiple players on EVA can remove different leeches simultaneously.</p>
+
+<h3>Phase 5 — Containment Failure + Flee</h3>
+<p><strong>Goal:</strong> Periodic prompts during removal. Missed prompt → leech escapes, crawls (lerp), re-anchors with new variant. One escape per leech.</p>
+<ul class="bullets">
+  <li>Extend <code>LeechRemovalInteraction</code> with prompt scheduling.</li>
+  <li>Containment prompt UI — try to reuse the boot-panel UI element first (pre-flight); fall back to bespoke if necessary.</li>
+  <li>Flee logic: pick new random anchor, lerp to it, re-anchor, re-roll variant via <code>LeechVariantAssigner</code>.</li>
+  <li>Set <code>HasEscapedOnce</code> flag; gate subsequent flee attempts.</li>
+</ul>
+<div class="callout warn">
+  <span class="label">Pre-flight required</span>
+  Confirm boot-panel UI reusability for arbitrary prompts.
+</div>
+<p><strong>Test:</strong> Start removal → prompt appears within window → respond in time → prompt clears, hold continues → second prompt → miss it → leech detaches, crawls across hull, re-anchors at new position with potentially new variant. Attempt second removal → miss prompt → escape is suppressed (<code>HasEscapedOnce</code>), removal completes anyway.</p>
+
+<h3>Phase 6 — Sector Escalation Scaling</h3>
+<p><strong>Goal:</strong> All scaling parameters now driven by <code>DifficultyScalar</code> from <code>ForgeMeterController</code>. Encounter gate enforced.</p>
+<ul class="bullets">
+  <li><code>Leech/LeechEscalationScaling.cs</code> — central lookup based on scalar tier.</li>
+  <li>Update <code>HostShipWeaponPatch</code> to gate at scalar ≥ 2.</li>
+  <li>Wire scaling output into missile params, spawn count rule, prompt count/window, hold duration, debuff magnitude, damage multipliers, fire interval.</li>
+</ul>
+<div class="callout warn">
+  <span class="label">Dependency</span>
+  Upgrade Forge Phase 5 must be merged. <code>ForgeMeterController.DifficultyScalar</code> must read accurate values.
+</div>
+<p><strong>Test:</strong> Start run at scalar 0 → no Leech Missiles fire (gate). Jump twice → scalar 2 → Leech Missiles begin. Run to scalar 6 → measurable changes: more leeches per missile, faster missile turn rate, harder PD interception, more prompts per removal, longer hold, harsher debuff, faster damage. All values match the scaling table.</p>
+
+<h3>Phase 7 — Multiplayer Sync + Edge Cases</h3>
+<p><strong>Goal:</strong> Feature works correctly in a hosted multiplayer session. Host migration and late-joiner sync preserved.</p>
+<ul class="bullets">
+  <li>Implement all <code>Net/Leech*Message.cs</code> shapes.</li>
+  <li>Host-arbitrate all state transitions: spawn, debuff application, damage, removal-progress validation, prompt scheduling, flee, despawn, self-destruct.</li>
+  <li>Late-joiner: subscribe to <code>VoidManager.Events.PlayerEnteredRoom</code>; send <code>LeechStateSyncMessage</code> directly to the new client.</li>
+  <li>Host migration: subscribe to <code>VoidManager.Events.MasterClientSwitched</code>; promote mirror state; extend pending prompt deadlines by 1s grace.</li>
+  <li>Per-run reset on ship death.</li>
+</ul>
+<p><strong>Test:</strong> 2+ player session. Host-spawned missile visible to all. Leech damage matches between clients. Two players EVA simultaneously and remove different leeches. Late joiner sees existing leeches in correct state. Mid-encounter host migration → new host takes over; leeches continue with correct state; pending prompts honored. Ship death clears all leech state on all clients.</p>
+
+<h3>Phase 8 — Diegetic Audio + First-impact sting</h3>
+<p><strong>Goal:</strong> Audio polish. All cues from the awareness section are in place.</p>
+<ul class="bullets">
+  <li><code>Leech/LeechAudio.cs</code> — manage all SFX clips and 3D-positional playback.</li>
+  <li>Bundle royalty-free placeholders.</li>
+  <li>First-impact sting: encounter controller tracks "have we played the sting this encounter" and triggers the ship-wide hum on the first leech anchor of each new encounter.</li>
+</ul>
+<p><strong>Test:</strong> Encounter starts → ship-wide hum plays once. Subsequent leeches in same encounter do not re-sting. From inside a compartment, audible chomp from A-type on its outer hull. Module debuff stutter audible from the module. Removal pop, escape snap, self-destruct thunk all play correctly.</p>
+
+<h3>Phase: Polish (deferred, no fixed schedule)</h3>
+<ul class="bullets">
+  <li>Custom Leech model (small robotic spider). Replace primitives.</li>
+  <li>IK rig with Unity Animation Rigging package — procedural spider-walk for fleeing leeches (replaces the v1 lerp).</li>
+  <li>Custom missile model and VFX (thruster trail, impact burst).</li>
+  <li>Bespoke audio: warble, chomp, attach welds, escape sparks, removal pop, self-destruct thunk.</li>
+  <li>Custom containment prompt UI styled for the EVA HUD if the boot-panel reuse doesn't read well.</li>
+</ul>
+
+<h2 id="scaling">Scaling Table</h2>
+<table class="data">
+  <tr><th>Parameter</th><th>Scalar 0–1</th><th>Scalar 2–3</th><th>Scalar 4–5</th><th>Scalar 6+</th></tr>
+  <tr><td class="k">Leeches per missile</td><td class="muted">— (gated)</td><td>1–2</td><td>1–3</td><td>2–3 (cap 3)</td></tr>
+  <tr><td class="k">Missile turn rate</td><td class="muted">—</td><td>1.0×</td><td>1.3×</td><td>1.6×</td></tr>
+  <tr><td class="k">Missile HP (PD resistance)</td><td class="muted">—</td><td>1.0×</td><td>1.5×</td><td>2.0×</td></tr>
+  <tr><td class="k">Missile speed</td><td class="muted">—</td><td>1.0×</td><td>1.15×</td><td>1.3×</td></tr>
+  <tr><td class="k">Host fire interval</td><td class="muted">—</td><td>30 s</td><td>25 s</td><td>20 s</td></tr>
+  <tr><td class="k">Containment prompts per removal</td><td class="muted">—</td><td>1</td><td>2</td><td>3</td></tr>
+  <tr><td class="k">Prompt response window</td><td class="muted">—</td><td>1.5 s</td><td>1.2 s</td><td>1.0 s</td></tr>
+  <tr><td class="k">Hold-to-remove duration</td><td class="muted">—</td><td>3 s</td><td>4 s</td><td>5 s</td></tr>
+  <tr><td class="k">B-type debuff magnitude</td><td class="muted">—</td><td>−25%</td><td>−40%</td><td>−50%</td></tr>
+  <tr><td class="k">B-type module HP damage rate</td><td class="muted">—</td><td>1.0×</td><td>1.5×</td><td>2.0×</td></tr>
+  <tr><td class="k">A-type chomp damage</td><td class="muted">—</td><td>1.0×</td><td>1.5×</td><td>2.0×</td></tr>
+</table>
+
+<h2 id="open">Open Questions</h2>
+<ul class="bullets">
+  <li><strong>Host enemy class.</strong> Decided pre-flight. Documented choice must be added to this doc once made.</li>
+  <li><strong>Variant proximity threshold value.</strong> The radius defining "near a module" for A/B classification. Starts at config default, refined in playtest.</li>
+  <li><strong>Concurrency cap (currently 8).</strong> Playtest may push up or down.</li>
+  <li><strong>Reuse boot-panel UI or author bespoke prompts?</strong> Decided in Phase 5 pre-flight; depends on UI element's contextual coupling.</li>
+  <li><strong>v1 flee animation timing.</strong> 2.5s lerp is the placeholder; playtest may want faster ("snappy chase") or slower ("crew has time to chase").</li>
+  <li><strong>Containment prompt input type.</strong> Single-button tap by default; could become a directional input or short sequence at deep scalar.</li>
+  <li><strong>First-impact sting per encounter, or per missile?</strong> Currently per encounter. Per missile could feel repetitive but might be clearer.</li>
+  <li><strong>Host migration grace window (1s).</strong> May need tuning if pending prompts feel like they get dropped during migration.</li>
+</ul>
+
+<hr />
+
+<div class="footer">
+  VoidCrewTerminus — Leech Carrier Encounter Design · For the proposal-level overview, see <a href="leech-rfc.html">leech-rfc.html</a>.
+</div>
+
+</main>
+</body>
+</html>
