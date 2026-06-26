@@ -1,18 +1,16 @@
 ﻿using HarmonyLib;
 using UnityEngine.UIElements;
-using Client.Player.Interactions;
-using Gameplay.Terminals;
 
 namespace VoidCrewTerminus.Patches;
 
-[HarmonyPatch(typeof(FabricationTab), MethodType.Constructor, typeof(VisualElement), typeof(FabricatorData), typeof(ContextInfo), typeof(VisualTreeAsset), typeof(TerminalScreen))]
+[HarmonyPatch(typeof(FabricationTab), "OnShopUpdated")]
 internal class RelicReplicationPatch
 {
-    static void Postfix(VisualElement root)
+    static void Postfix(VisualElement ___root)
     {
         if (TerminusConfig.AllowRelicReplication.Value) return;
 
-        if (root.Q("RelicsTab") is { } tab)
+        if (___root?.Q("RelicsTab") is { } tab)
             tab.style.display = DisplayStyle.None;
     }
 }

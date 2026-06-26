@@ -1,0 +1,34 @@
+#!/bin/bash
+# Bash shim replacing pwsh for VCMT.Thunderstore.DocBuilder on Linux/macOS.
+# MSBuild calls: pwsh -NonInteractive ... -Command "& { & 'SCRIPT' 'ARG1' 'ARG2' 'ARG3' }"
+# This shim parses that command and routes to Python equivalents.
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+CMD_VALUE=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -Command) CMD_VALUE="$2"; shift 2 ;;
+        *) shift ;;
+    esac
+done
+
+[[ -z "$CMD_VALUE" ]] && exit 0
+
+# Extract single-quoted tokens from: & { & 'SCRIPT' 'ARG1' 'ARG2' 'ARG3' }
+mapfile -t _PARTS < <(python3 -c "
+import re, sys
+parts = re.findall(r\"'([^']*)'\", sys.argv[1])
+for p in parts[:4]: print(p)
+" "$CMD_VALUE")
+
+_SCRIPT="${_PARTS[0]}"
+_ARG1="${_PARTS[1]}"
+_ARG2="${_PARTS[2]}"
+_ARG3="${_PARTS[3]}"
+
+case "$(basename "$_SCRIPT")" in
+    *DocBuilder*)  python3 "$SCRIPT_DIR/prebuild.py"  "$_ARG1" "$_ARG2" "$_ARG3" ;;
+    *ZipBuilder*)  python3 "$SCRIPT_DIR/postbuild.py" "$_ARG1" "$_ARG2" "$_ARG3" ;;
+    *) echo "pwsh shim: unrecognized script: $_SCRIPT"; exit 1 ;;
+esac

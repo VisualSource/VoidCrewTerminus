@@ -5,12 +5,12 @@ namespace VoidCrewTerminus
     public class MyPluginInfo
     {
         public const string PLUGIN_GUID = $"{PLUGIN_ORIGINAL_AUTHOR}.{PLUGIN_NAME}";
-        public const string PLUGIN_NAME = "";
-        public const string USERS_PLUGIN_NAME = "";
-        public const string PLUGIN_VERSION = "";
-        public const string PLUGIN_DESCRIPTION = "";
-        public const string PLUGIN_ORIGINAL_AUTHOR = "";
-        public const string PLUGIN_AUTHORS = "";
+        public const string PLUGIN_NAME = "VoidCrewTerminus";
+        public const string USERS_PLUGIN_NAME = "VoidCrewTerminus";
+        public const string PLUGIN_VERSION = "0.0.6";
+        public const string PLUGIN_DESCRIPTION = "VoidCrewTerminus";
+        public const string PLUGIN_ORIGINAL_AUTHOR = "VisualSource";
+        public const string PLUGIN_AUTHORS = "VisualSource";
         public const string PLUGIN_THUNDERSTORE_ID = "";
     }
 }

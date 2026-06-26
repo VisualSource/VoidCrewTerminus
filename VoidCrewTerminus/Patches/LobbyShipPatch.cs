@@ -23,7 +23,12 @@ internal class HangarShipController : MonoBehaviour
 {
     // Offset in world space from HubShipManager's position into the hangar bay.
     // Tune these until the ship appears in the correct spot visible through the window.
-    private static readonly Vector3 HangarOffset = Vector3.zero;
+    private static readonly Vector3 DestroyerHangarOffset = new Vector3(0, 0, -100);
+    private static readonly Quaternion DestroyerHangerRot = Quaternion.identity;
+    private static readonly Vector3 StrikerHangarOffset = new Vector3(0, -20, -75);
+    private static readonly Quaternion StrikerHangerRot = Quaternion.identity;
+    private static readonly Vector3 FrigateHangarOffset = new Vector3(0, -20, -75);
+    private static readonly Quaternion FrigateHangerRot = Quaternion.Euler(new Vector3(0, 20, 0));
 
     // Uniform scale applied to the spawned hologram. Adjust if the prefab appears too small or large.
     private static readonly float HangarScale = 1f;
@@ -39,7 +44,10 @@ internal class HangarShipController : MonoBehaviour
 
         var initial = HubShipManager.Instance.CurrentShipSelected;
         if (initial is not null)
+        {
+            BepinPlugin.Log.LogInfo($"[HangarShip] Initial ship: '{initial.LoadoutContextInfo?.name}'");
             _swapRoutine = StartCoroutine(SwapRoutine(null, initial));
+        }
     }
 
     void OnDestroy()
@@ -53,6 +61,7 @@ internal class HangarShipController : MonoBehaviour
 
     private void OnSelectionChanged(ShipLoadoutDataDef def)
     {
+        BepinPlugin.Log.LogInfo($"[HangarShip] Ship selected: '{def?.LoadoutContextInfo?.name}'");
         if (_swapRoutine != null)
             StopCoroutine(_swapRoutine);
 
@@ -72,7 +81,29 @@ internal class HangarShipController : MonoBehaviour
             Destroy(old);
         }
 
-        var go = Instantiate(prefab, transform.position + HangarOffset, Quaternion.identity);
+
+        var name = def.LoadoutContextInfo.name;
+
+        Vector3 offset;
+        Quaternion rot;
+
+        if (name.Contains("Frigate"))
+        {
+            offset = FrigateHangarOffset;
+            rot = FrigateHangerRot;
+        }
+        else if (name.Contains("Striker"))
+        {
+            offset = StrikerHangarOffset;
+            rot = StrikerHangerRot;
+        }
+        else //  name.Contains("Destroyer")
+        {
+            offset = DestroyerHangarOffset;
+            rot = DestroyerHangerRot;
+        }
+
+        var go = Instantiate(prefab, transform.position + offset, rot);
         go.transform.localScale = Vector3.one * HangarScale;
         SetAlpha(go, 0f);
         _hologram = go;

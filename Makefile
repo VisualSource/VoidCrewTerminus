@@ -1,20 +1,15 @@
-PROJECT := VoidCrewTerminus/VoidCrewTerminus.csproj
-NOOP_DIR := /tmp/vct-noop-pwsh
+PROJECT    := VoidCrewTerminus/VoidCrewTerminus.csproj
+SCRIPTS    := $(abspath scripts)
 
-.PHONY: build dev _noop-pwsh clean
+.PHONY: build dev clean
 
-# Release build — runs Thunderstore prebuild (generates MyPluginInfo.cs) and zips output
+# Release build — prebuild generates MyPluginInfo.cs / manifest / README, postbuild zips output
 build:
-	dotnet build $(PROJECT) -c Release
+	PATH=$(SCRIPTS):$$PATH dotnet build $(PROJECT) -c Release
 
-# Debug build — skips Thunderstore pre/postbuild by shimming pwsh with a no-op
-dev: _noop-pwsh
-	PATH=$(NOOP_DIR):$$PATH dotnet build $(PROJECT) -c Debug
-
-_noop-pwsh:
-	@mkdir -p $(NOOP_DIR)
-	@printf '#!/bin/sh\n' > $(NOOP_DIR)/pwsh
-	@chmod +x $(NOOP_DIR)/pwsh
+# Debug build — same prebuild (MyPluginInfo.cs updated), no zip since ZipOutput is checked at runtime
+dev:
+	PATH=$(SCRIPTS):$$PATH dotnet build $(PROJECT) -c Debug
 
 clean:
 	dotnet clean $(PROJECT)
