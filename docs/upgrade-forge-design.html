@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Upgrade Forge — System Design</title>
+  <style>
+    :root {
+      --bg:      #0f1117;
+      --surface: #181c27;
+      --border:  #2a2f42;
+      --accent:  #5c8aff;
+      --accent2: #9b59f5;
+      --text:    #d4d8e8;
+      --muted:   #7a80a0;
+      --code-bg: #12151f;
+      --tag-bg:  #1e2436;
+      --danger:  #e05c5c;
+      --warn:    #e0a35c;
+      --ok:      #5ce08a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    nav {
+      width: 280px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 28px 20px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+    nav .logo {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+    nav .subtitle {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 28px;
+    }
+    nav ul { list-style: none; }
+    nav ul li { margin-bottom: 2px; }
+    nav ul li a {
+      display: block;
+      padding: 5px 10px;
+      border-radius: 6px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 13px;
+      transition: color .15s, background .15s;
+    }
+    nav ul li a:hover,
+    nav ul li a.active { color: var(--text); background: var(--border); }
+    nav .section-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--accent2);
+      margin: 18px 0 6px 10px;
+    }
+
+    main {
+      flex: 1;
+      padding: 48px 64px;
+      max-width: 960px;
+    }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    .page-meta {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 40px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .page-meta .pill {
+      display: inline-block;
+      background: var(--tag-bg);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 2px 10px;
+      font-size: 11px;
+      margin-right: 6px;
+      color: var(--accent);
+    }
+    h2 {
+      font-size: 20px;
+      font-weight: 700;
+      color: #fff;
+      margin: 48px 0 16px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    h3 {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--accent);
+      margin: 28px 0 10px;
+    }
+    h4 {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: var(--accent2);
+      margin: 18px 0 6px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+    p { margin-bottom: 14px; color: var(--text); }
+    ul.bullets, ol.bullets { margin: 0 0 14px 24px; color: var(--text); }
+    ul.bullets li, ol.bullets li { margin-bottom: 6px; }
+
+    code {
+      font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+      font-size: 13px;
+      background: var(--tag-bg);
+      padding: 1px 6px;
+      border-radius: 4px;
+      color: #a8c0ff;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px 20px;
+      overflow-x: auto;
+      margin: 14px 0 20px;
+      line-height: 1.6;
+      font-family: 'Cascadia Code', monospace;
+      font-size: 13px;
+    }
+    pre code { background: none; padding: 0; color: var(--text); }
+
+    .callout {
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin: 18px 0;
+      font-size: 13.5px;
+      border-left: 4px solid;
+    }
+    .callout.note   { background: #1a2035; border-color: var(--accent);  color: #b8c8f0; }
+    .callout.warn   { background: #241e12; border-color: var(--warn);    color: #e8d3b0; }
+    .callout.danger { background: #241212; border-color: var(--danger);  color: #e8c0c0; }
+    .callout.ok     { background: #122414; border-color: var(--ok);      color: #b8e8c8; }
+    .callout strong { color: inherit; font-weight: 700; }
+    .callout .label {
+      display: inline-block;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      font-size: 11px;
+      margin-right: 8px;
+    }
+
+    .ref-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px 24px;
+      margin: 14px 0 22px;
+    }
+    .ref-card h4:first-child { margin-top: 0; }
+
+    table.data {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin: 12px 0 20px;
+    }
+    table.data th {
+      text-align: left;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      padding: 0 12px 8px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    table.data td {
+      padding: 8px 12px 8px 0;
+      border-bottom: 1px solid #1a1f2e;
+      vertical-align: top;
+      color: var(--text);
+    }
+    table.data tr:last-child td { border-bottom: none; }
+    table.data td.k {
+      font-family: 'Cascadia Code', monospace;
+      color: #dcdcaa;
+      white-space: nowrap;
+    }
+    table.data td.muted { color: var(--muted); }
+
+    .glossary dt {
+      font-family: 'Cascadia Code', monospace;
+      color: #9cdcfe;
+      font-weight: 700;
+      margin-top: 14px;
+    }
+    .glossary dd {
+      color: var(--text);
+      margin: 4px 0 0 18px;
+    }
+
+    .pillrow { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 18px; }
+    .pillrow .pill {
+      background: var(--tag-bg);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 3px 12px;
+      font-size: 12px;
+      color: var(--accent);
+    }
+
+    hr { border: none; border-top: 1px solid var(--border); margin: 40px 0; }
+
+    .flow {
+      counter-reset: step;
+      list-style: none;
+      margin: 14px 0 22px;
+    }
+    .flow li {
+      counter-increment: step;
+      position: relative;
+      padding: 10px 14px 10px 48px;
+      margin-bottom: 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 13.5px;
+    }
+    .flow li::before {
+      content: counter(step);
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 26px;
+      height: 26px;
+      background: var(--accent);
+      color: #fff;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">VoidCrewTerminus</div>
+  <div class="subtitle">Upgrade Forge — System Design</div>
+
+  <div class="section-label">Overview</div>
+  <ul>
+    <li><a href="#context">Context</a></li>
+    <li><a href="#summary">System Summary</a></li>
+    <li><a href="#glossary">Glossary</a></li>
+  </ul>
+
+  <div class="section-label">Mechanics</div>
+  <ul>
+    <li><a href="#levels">Module Levels (L4–L10)</a></li>
+    <li><a href="#relics">Relics &amp; Tiers</a></li>
+    <li><a href="#perks">Perks &amp; Slots</a></li>
+    <li><a href="#forge">The Forge Itself</a></li>
+    <li><a href="#meter">Forge Meter</a></li>
+    <li><a href="#escalation">Sector Escalation</a></li>
+    <li><a href="#cursed">Cursed Relics &amp; Burden</a></li>
+  </ul>
+
+  <div class="section-label">Implementation</div>
+  <ul>
+    <li><a href="#architecture">Architecture</a></li>
+    <li><a href="#patches">Patch Surfaces</a></li>
+    <li><a href="#networking">Multiplayer Sync</a></li>
+    <li><a href="#preflight">Pre-Flight Verification</a></li>
+    <li><a href="#phases">Phased Plan</a></li>
+  </ul>
+
+  <div class="section-label">Reference</div>
+  <ul>
+    <li><a href="#costs">Cost Curve</a></li>
+    <li><a href="#open">Open Questions</a></li>
+  </ul>
+</nav>
+
+<main>
+
+<h1>Upgrade Forge — System Design</h1>
+<div class="page-meta">
+  <span class="pill">v1 design</span>
+  <span class="pill">VoidCrewTerminus</span>
+  <span class="pill">BepInEx + Harmony + VoidManager</span>
+  <br /><br />
+  A mod-side overlay that extends every ship module's effective level from 3 to 10, gated by a new in-world Forge module that consumes relics, scales with sector progression, and rolls perks at upgrade time. All progression is per-run.
+</div>
+
+<h2 id="context">Context</h2>
+<p>
+  Void Crew currently caps ship module "upgrades" at what players perceive as level 3. The vanilla mechanic is actually a
+  <strong>BuildBox prefab swap</strong> — a handheld <code>InteractiveCarryableModuleUpgrader</code> replaces a placed module with a different prefab.
+  There is no numeric <code>level</code> field on <code>CellModule</code> or any subclass; the only piece of the game with a real
+  numeric tier is the <strong>Fabricator</strong> (<code>FabricatorModule.currentTier</code>, capped by the
+  <code>FabricatorUpgradeData.FabricatorTiers</code> count = 3 in the shipped ScriptableObject).
+</p>
+<p>
+  This mod extends module progression to <strong>levels 4–10</strong> by adding a new in-world ship module — the <strong>Upgrade Forge</strong> —
+  and tracking per-module level + perk state entirely in <strong>mod-side overlay state</strong>, leaving vanilla L1–3 BuildBox-swap untouched.
+  The mod also introduces three connected roguelike mechanics: <strong>Tiered Relics</strong>, <strong>Cursed Relics with Maintenance Burden</strong>,
+  and <strong>Sector Escalation</strong>. All progression is <strong>per-run only</strong> (resets on ship death), matching Void Crew's existing roguelike loop.
+</p>
+
+<div class="callout note">
+  <span class="label">Why an overlay, not a data extension</span>
+  Investigation of the reference-only <code>Assembly-CSharp.dll</code> (NuGet cache, no live install) confirmed: weapons, shields, reactors, and other modules
+  have <em>no level field</em>. The vanilla L1/L2/L3 weapon "progression" is three different prefabs that the BuildBox swap system transitions between.
+  Extending that would require authoring 7 new prefabs <em>per weapon</em>. The overlay approach instead applies stat modifiers to existing prefabs via
+  Harmony patches, with per-instance state in a <code>ConditionalWeakTable&lt;CellModule, ForgeModuleState&gt;</code>.
+</div>
+
+<h2 id="summary">System Summary (one paragraph)</h2>
+<p>
+  Every ship module's effective upgrade cap extends from L3 to L10 via a mod-side overlay. Levels 4–10 are performed at a new in-world ship module,
+  the <strong>Upgrade Forge</strong>. To upgrade a module, the crew (a) ensures the Forge's capacity ≥ the upgrade's relic cost,
+  (b) physically inserts the required number of relics into the Forge while it's targeted at the module, and (c) commits — the host rolls a perk if the
+  inserted relic tier matches an empty perk slot on the target. Three slots per module, tier-gated (any / Rare+ / Legendary). Perks come from a sparse matrix:
+  a category-wide default pool, plus signature perks tied to specific flagship relics. Some relics are <strong>Cursed</strong> and roll downside perks that
+  manifest as <strong>Maintenance Burden</strong>. The Forge's own level is driven by a <strong>Forge Meter</strong> that fills from sector progression
+  (passive) and alloy spending at a Fabricator-style terminal (active) — making the Forge a genuine investment commitment, not a guaranteed milestone.
+  <strong>Sector Escalation</strong> scales enemy threat and loot quality together per jump. All progression resets on ship death. Host arbitrates all rolls;
+  clients sync via VoidManager <code>ModMessage</code>.
+</p>
+
+<h2 id="glossary">Glossary</h2>
+<dl class="glossary">
+  <dt>Upgrade Forge</dt>
+  <dd>A new installable ship module added by this mod. Holds relics in-world, performs upgrades on other modules, has its own level.</dd>
+
+  <dt>Forge Meter</dt>
+  <dd>A progression bar on the Forge. Fills from sector progression (passive) AND alloy spending at the Forge terminal (active). When full, the Forge gains a level. Each level requires more meter than the previous.</dd>
+
+  <dt>Forge Capacity</dt>
+  <dd>Number of relics the Forge can hold simultaneously, equal to its current level. Gates the max module-upgrade level (L10 requires capacity ≥ 4).</dd>
+
+  <dt>Module Level</dt>
+  <dd>A mod-side integer per <code>CellModule</code> instance, range L3 (vanilla baseline) → L10. Stored in <code>ConditionalWeakTable&lt;CellModule, ForgeModuleState&gt;</code>. Resets on run end.</dd>
+
+  <dt>Relic Tier</dt>
+  <dd>A new property added to existing game relics (~25 in vanilla, currently untiered). Tiers: Common / Rare / Legendary. Tier is a <em>quality modifier</em>, not a gate — any tier can upgrade any level.</dd>
+
+  <dt>Upgrade Quality</dt>
+  <dd>The per-level outcome modified by the relic tier used. Higher tier → bigger stat bump AND higher perk-roll chance.</dd>
+
+  <dt>Perk</dt>
+  <dd>A special modifier rolled at upgrade time (e.g. "Vampiric", "Overcharged"). Authored content, drawn from pools.</dd>
+
+  <dt>Perk Slot</dt>
+  <dd>A module has 3 perk slots, each tier-gated. Slot 1 = any tier, Slot 2 = Rare+, Slot 3 = Legendary only. Perks only roll when the upgrade's relic tier matches an empty slot.</dd>
+
+  <dt>Category Pool</dt>
+  <dd>Default perk list per module category (weapons / reactors / shields / engines / scanners). Any relic can roll perks from this pool.</dd>
+
+  <dt>Signature Perk</dt>
+  <dd>A perk tied to a specific relic identity. Only rolls when that exact relic is the one being inserted. ~5–10 flagship relics get signatures in v1.</dd>
+
+  <dt>Cursed Relic</dt>
+  <dd>A relic whose perk pool includes downside-bearing perks.</dd>
+
+  <dt>Maintenance Burden</dt>
+  <dd>The operational quirk attached to a module by a cursed perk — random shutoffs, increased maintenance interactions, etc. <em>Not</em> a stat penalty (clean modules at L10 remain clean).</dd>
+
+  <dt>Sector Escalation</dt>
+  <dd>Per-jump scaling. Each completed sector jump bumps enemy threat AND shifts relic drop tiers toward higher rarities.</dd>
+</dl>
+
+<h2 id="levels">Module Levels (L4–L10)</h2>
+<p>
+  Levels 4–10 are mod-side state, applied on top of whatever vanilla state the module is in. The mod does <strong>not</strong> modify game data files.
+  When a module is upgraded by the Forge, an entry is added to a static
+  <code>ConditionalWeakTable&lt;CellModule, ForgeModuleState&gt;</code> keyed by the module instance. Stat modifications are applied via Harmony postfixes
+  on the module's stat-calculation methods (specific methods are TBD pending live-game decompile — see <a href="#preflight">Pre-Flight</a>).
+</p>
+<p>The state record:</p>
+<pre><code>class ForgeModuleState {
+    int    Level;             // 3 (vanilla) → 10
+    Perk[] Slots;             // up to 3, indexed [0]=any, [1]=Rare+, [2]=Legendary
+    MaintenanceBurdenFlags Burden;
+    StatModSet Accumulated;   // summed contribution of all upgrades + perks
+}</code></pre>
+<p>
+  Because state is per-run only, the table is cleared on <code>VoidManager.Events.HostStartSession</code> (host-side) and on
+  ship-death events received from the game. No persistence — no save format.
+</p>
+
+<h2 id="relics">Relics &amp; Tiers</h2>
+<p>
+  The game ships ~25 relics, currently untiered. The mod introduces a <strong>Tier</strong> property assigned in <code>RelicTierData.cs</code>:
+</p>
+<div class="pillrow">
+  <span class="pill">Common</span>
+  <span class="pill">Rare</span>
+  <span class="pill">Legendary</span>
+</div>
+<p>
+  Tier is a <em>quality modifier</em>, not a gate. Any tier can be inserted for any module level. Lower-tier insertions still produce the level-up,
+  they just deliver smaller stat bumps and cannot fill higher-tier perk slots.
+</p>
+
+<h3>Drop-rate shaping</h3>
+<p>
+  Drop rates are not fixed — they are biased per sector by <a href="#escalation">Sector Escalation</a>. Early sectors yield mostly Common;
+  deep sectors yield a Rare/Legendary mix.
+</p>
+
+<h2 id="perks">Perks &amp; Slots</h2>
+<p>
+  Each module has <strong>3 perk slots</strong>, each tier-gated:
+</p>
+<table class="data">
+  <tr><th>Slot</th><th>Required tier to fill</th><th>Notes</th></tr>
+  <tr><td class="k">Slot 1</td><td>Any (Common+)</td><td class="muted">First perk the module ever rolls.</td></tr>
+  <tr><td class="k">Slot 2</td><td>Rare or Legendary</td><td class="muted">A Common upgrade after slot 1 is full does not fill this slot — perk roll skips.</td></tr>
+  <tr><td class="k">Slot 3</td><td>Legendary only</td><td class="muted">A fully-perked module requires at least one Legendary across its upgrade path.</td></tr>
+</table>
+
+<h3>The perk pool — sparse matrix</h3>
+<p>Perks are authored, drawn from a sparse two-axis matrix of <em>(relic identity × module category)</em>:</p>
+<ul class="bullets">
+  <li>Each <strong>module category</strong> (weapons / reactors / shields / engines / scanners) has a shared <strong>Category Pool</strong> of ~3 perks. Any relic can roll from it.</li>
+  <li>~5–10 <strong>flagship relics</strong> additionally carry <strong>Signature Perks</strong> that only roll when that specific relic is the one inserted.</li>
+</ul>
+
+<h3>Gamble reveal</h3>
+<p>
+  The roll is committed — there is no preview, no take-back. Player inserts the relic, the perk is rolled host-side, and the result is broadcast.
+  This preserves classic roguelike tension and keeps the UI simple (no draft picker).
+</p>
+
+<div class="callout note">
+  <span class="label">Roll math</span>
+  Roll-chance shape (v1 placeholders, all config-driven):
+  Common → 15% chance to roll a slot-1-eligible perk · Rare → 40% chance to roll a slot-1 or slot-2-eligible perk · Legendary → 75% chance to roll any slot.
+  Roll outcomes are computed only on the host; clients animate using a broadcast seed.
+</div>
+
+<h2 id="forge">The Forge Itself</h2>
+<p>
+  The Forge is a new installable ship module shipped as a custom prefab in <code>Assets/upgrade_forge.metem</code> (loaded via the existing
+  <code>AssetLoader.cs</code> pipeline). It has two interaction surfaces:
+</p>
+<ol class="bullets">
+  <li><strong>Relic insertion</strong> — crew physically carries a relic and inserts it into the Forge. The Forge holds up to <em>Forge Capacity</em> relics simultaneously.</li>
+  <li><strong>Alloy terminal</strong> — crew spends alloys at a Fabricator-style terminal to push the Forge Meter (see below). Mirrors the existing Fabricator self-upgrade pattern.</li>
+</ol>
+<p>
+  Upgrade flow: target a module → insert the required number of relics (matching the cost curve for the desired level) → commit. The Forge consumes
+  the inserted relics, the host computes stat-mod + perk roll, the result broadcasts to all clients.
+</p>
+
+<h2 id="meter">Forge Meter — Investment Commitment</h2>
+<p>
+  The Forge's own level is driven by a meter that fills from <strong>two parallel sources</strong>:
+</p>
+<table class="data">
+  <tr><th>Source</th><th>Contribution (v1 defaults)</th><th>Type</th></tr>
+  <tr><td class="k">Successful sector jump</td><td>+20 per jump</td><td class="muted">Passive</td></tr>
+  <tr><td class="k">Alloys at Forge terminal</td><td>+1 per alloy</td><td class="muted">Active</td></tr>
+</table>
+<p>
+  Each level requires more meter than the previous. Default curve: L1→L2 = 100, L2→L3 = 150, L3→L4 = 225, multiplying by 1.5× per level.
+  This means a typical 5–6 sector run gets the Forge to L2–L3 passively; <strong>L10 module upgrades require alloy investment</strong>. That makes the Forge
+  a real strategic decision: spend alloys on hull repairs / Fabricator upgrades / Forge level.
+</p>
+
+<h2 id="escalation">Sector Escalation</h2>
+<p>Each successful sector jump increments a <code>DifficultyScalar</code> on the <code>ForgeMeterController</code>:</p>
+<ul class="bullets">
+  <li><strong>Enemy stats</strong> scale (HP, damage, optionally density) via Harmony postfixes on enemy spawn/init paths.</li>
+  <li><strong>Relic drop table</strong> shifts: at scalar 0, only Common; at scalar 3+, Common/Rare mix; at scalar 6+, Rare/Legendary mix.</li>
+  <li><strong>Forge Meter</strong> gets its +20 contribution per jump (as above).</li>
+</ul>
+<p>Effectively, pushing deeper makes the run harder <em>and</em> shifts loot toward higher tiers — tightening the risk-reward loop.</p>
+
+<h2 id="cursed">Cursed Relics &amp; Maintenance Burden</h2>
+<p>
+  ~30% of vanilla relics are flagged <code>IsCursed = true</code> in <code>RelicTierData.cs</code> (config-driven default).
+  When a cursed relic is used for an upgrade:
+</p>
+<ul class="bullets">
+  <li>The stat bump still applies in full — there is no <em>stat</em> penalty.</li>
+  <li>The perk roll, if it occurs, draws from a <em>cursed-augmented pool</em> that pairs a beneficial perk with a Maintenance Burden flag.</li>
+</ul>
+
+<div class="callout warn">
+  <span class="label">Design intent</span>
+  <strong>Maintenance Burden is operational, not statistical.</strong> A burdened module still hits its damage targets, but it makes the
+  <em>crew</em> work — random shutoffs, manual reset interactions, increased heat ticks, etc. The intent is for cursed perks to create
+  emergent gameplay (crew scrambles to keep the Overcharged turret online during a fight), not flat power loss.
+</div>
+
+<p>Example cursed perks (illustrative, v1 authoring lives in <code>PerkPool.cs</code>):</p>
+<table class="data">
+  <tr><th>Perk</th><th>Benefit</th><th>Burden</th></tr>
+  <tr><td class="k">Overcharged</td><td>+30% damage</td><td class="muted">Powers off for 2–4s every 30–90s</td></tr>
+  <tr><td class="k">Vampiric</td><td>5% damage healed to ship hull</td><td class="muted">Module radiates heat; nearby modules tick warmer</td></tr>
+  <tr><td class="k">Erratic</td><td>+50% fire rate</td><td class="muted">~5% chance per shot to require manual reset</td></tr>
+</table>
+
+<h2 id="architecture">Architecture</h2>
+<p>The implementation lives entirely in mod-side state. No game data files are modified. All vanilla L1–3 behavior is preserved.</p>
+
+<div class="ref-card">
+  <h4>New files</h4>
+  <table class="data">
+    <tr><th>File</th><th>Responsibility</th></tr>
+    <tr><td class="k">Patches/SectorJumpHook.cs</td><td>Subscribe to <code>GameSessionSectorManager.OnSectorEntered</code>; drive meter + escalation.</td></tr>
+    <tr><td class="k">Patches/ModuleStatOverlayPatch.cs</td><td>Postfix patches on per-module stat getters; apply stacked stat mods from overlay state.</td></tr>
+    <tr><td class="k">Patches/ForgeInteractionPatch.cs</td><td>Patches binding in-world Forge interactions (relic insert, alloy terminal) to controller logic.</td></tr>
+    <tr><td class="k">Forge/ForgeModuleState.cs</td><td>Per-<code>CellModule</code> overlay record (level, slots, burden, accumulated mods).</td></tr>
+    <tr><td class="k">Forge/ForgeMeterController.cs</td><td>Authoritative singleton: Forge level, meter, difficulty. Host-side rolls.</td></tr>
+    <tr><td class="k">Forge/RelicTierData.cs</td><td>Maps each of ~25 vanilla relics to its Tier + IsCursed flag.</td></tr>
+    <tr><td class="k">Forge/PerkPool.cs</td><td>Category pools + signature perk overrides; <code>RollPerk(...)</code> entry point.</td></tr>
+    <tr><td class="k">Forge/MaintenanceBurden.cs</td><td>Operational quirks (random shutoffs, etc.) attached to burdened modules.</td></tr>
+    <tr><td class="k">Forge/SectorEscalation.cs</td><td>Enemy stat + loot tier scaling per <code>DifficultyScalar</code>.</td></tr>
+    <tr><td class="k">Net/PerkRollRequestMessage.cs</td><td>Client → host: "I'm committing this upgrade."</td></tr>
+    <tr><td class="k">Net/PerkRollMessage.cs</td><td>Host → all (incl. self): authoritative roll result + animation seed.</td></tr>
+    <tr><td class="k">Net/ForgeStateSyncMessage.cs</td><td>Host → late joiner: full current overlay state.</td></tr>
+    <tr><td class="k">Assets/upgrade_forge.metem</td><td>Asset bundle containing the Forge prefab (placeholder OK for alpha).</td></tr>
+  </table>
+
+  <h4>Modified files</h4>
+  <table class="data">
+    <tr><th>File</th><th>Change</th></tr>
+    <tr><td class="k">VoidCrewTerminus/Config.cs</td><td>Extend <code>TerminusConfig</code> with cost curve, ratios, scalars, meter contribution rates.</td></tr>
+    <tr><td class="k">VoidCrewTerminus/Plugins.cs</td><td><em>No changes.</em> <code>MPType = MultiplayerType.All</code> is already correct; Harmony auto-picks-up new patches; <code>ModMessage</code> discovery is automatic.</td></tr>
+  </table>
+
+  <h4>Reused (existing) files</h4>
+  <table class="data">
+    <tr><th>File</th><th>Use</th></tr>
+    <tr><td class="k">AssetLoader.cs</td><td>Load the Forge prefab bundle.</td></tr>
+    <tr><td class="k">Patches/RelicReplicationPatch.cs</td><td>Pattern reference: single-file Harmony patch on a UI tab.</td></tr>
+    <tr><td class="k">Patches/LobbyShipPatch.cs</td><td>Pattern reference: patch + MonoBehaviour controller.</td></tr>
+    <tr><td class="k">Commands/SpawnItem.cs</td><td>Pattern reference for dev commands (recommended: add <code>!forge</code> debug commands gated on <code>EnableDevMode</code>).</td></tr>
+  </table>
+</div>
+
+<h2 id="patches">Patch Surfaces</h2>
+<p>Identified from the reference-only NuGet DLL (signatures verified; method bodies not available — see <a href="#preflight">Pre-Flight</a>):</p>
+<table class="data">
+  <tr><th>Game class</th><th>Hook</th><th>Purpose</th></tr>
+  <tr><td class="k">CG.Ship.Modules.CellModule</td><td>(per-subclass stat getters)</td><td>Apply mod-side stat overlay.</td></tr>
+  <tr><td class="k">GameSessionSectorManager</td><td><code>OnSectorEntered</code> event</td><td>Detect successful sector jumps.</td></tr>
+  <tr><td class="k">Gameplay.Ship.VoidJump.VoidJumpSystem</td><td>(fallback hook)</td><td><code>EnterSectorInternal</code> if event proves unreliable.</td></tr>
+  <tr><td class="k">VoidManager.Events</td><td><code>MasterClientSwitched</code>, <code>PlayerEnteredRoom</code>, <code>HostStartSession</code></td><td>Host migration; late-joiner sync; per-run state reset.</td></tr>
+</table>
+
+<h2 id="networking">Multiplayer Sync — Authoritative Flow</h2>
+<p>Photon PUN (confirmed). Host arbitrates; clients sync via VoidManager <code>ModMessage</code> (automatic discovery).</p>
+<ol class="flow">
+  <li>Player initiates upgrade at the Forge in-world.</li>
+  <li>If non-host: client sends <code>PerkRollRequestMessage</code> to host. If host: skip ahead.</li>
+  <li>Host validates capacity, confirms relics, computes stat mod, rolls perk if slot match. Commits to <code>ForgeMeterController</code>.</li>
+  <li>Host broadcasts <code>PerkRollMessage</code> to <code>ReceiverGroup.All</code> with target ref, new level, stat-mod summary, perk (or null), slot index, animation seed.</li>
+  <li>All clients apply the authoritative result to their local overlay; UI plays the animation using the seed.</li>
+  <li>Late joiner? Host listens on <code>Events.PlayerEnteredRoom</code> and sends <code>ForgeStateSyncMessage</code> with full overlay state.</li>
+  <li>Host migration: on <code>Events.MasterClientSwitched</code>, the new host becomes authoritative immediately; outstanding requests time out.</li>
+</ol>
+
+<h2 id="preflight">Pre-Flight Verification</h2>
+<div class="callout danger">
+  <span class="label">Required before implementation</span>
+  The game is not installed on this system. All findings are from the <strong>reference-only</strong> assembly in
+  <code>%USERPROFILE%\.nuget\packages\voidcrew.gamelibs\1.3.0\lib\Assembly-CSharp.dll</code>, which carries full type/method signatures but
+  <em>empty method bodies</em>. Method-body verification is required before patches can be finalized.
+</div>
+<p>On a system with a live Void Crew install:</p>
+<pre><code>dotnet tool install -g ilspycmd
+ilspycmd "&lt;steam&gt;/Void Crew/VoidCrew_Data/Managed/Assembly-CSharp.dll" \
+  -p -o ./decompiled --type CG.Ship.Modules.CellModule
+ilspycmd "&lt;steam&gt;/Void Crew/VoidCrew_Data/Managed/Assembly-CSharp.dll" \
+  -p -o ./decompiled --type Gameplay.Ship.VoidJump.VoidJumpSystem
+ilspycmd "&lt;steam&gt;/Void Crew/VoidCrew_Data/Managed/Assembly-CSharp.dll" \
+  -p -o ./decompiled --type GameSessionSectorManager</code></pre>
+<ol class="bullets">
+  <li>Confirm <code>GameSessionSectorManager.OnSectorEntered</code> delegate signature.</li>
+  <li>Confirm per-subclass stat-calculation methods on <code>WeaponModule</code>, <code>ReactorModule</code>, <code>ShieldModule</code>, etc.</li>
+  <li>Confirm <code>VoidJumpSystem.EnterSectorInternal</code> accessibility (fallback hook).</li>
+  <li>Confirm interdiction-sector identification so the hook can de-dupe interdictions from real jumps.</li>
+  <li>Confirm Fabricator alloy-spend pattern (<code>FabricatorModule.Upgrade</code> / <code>UpgradeInternal</code>) so the Forge terminal can mirror it.</li>
+  <li>Confirm <code>VoidManager.ModMessages.ModMessage.Send</code> transport semantics under <code>MultiplayerType.All</code>.</li>
+</ol>
+
+<h2 id="phases">Phased Implementation Plan</h2>
+<p>
+  The work is split into <strong>9 independent phases (0–8)</strong>. Each phase is shippable and testable on its own, and each builds on the verified foundations laid by earlier phases.
+  Don't proceed to phase N+1 until phase N's test plan passes.
+</p>
+
+<h3>Dependency chain</h3>
+<pre><code>Phase 0 (Foundation)
+    ↓
+Phase 1 (Relic Tiering) ─────┐
+    ↓                        │
+Phase 2 (Module Overlay)     │
+    ↓                        │
+Phase 3 (Forge MVP) ←────────┘
+    ↓
+Phase 4 (Perks)
+    ↓
+Phase 5 (Forge Progression: Meter + Sector Hook)
+    ↓
+Phase 6 (Sector Escalation)
+    ↓
+Phase 7 (Content Pass: Signatures + Cursed + Burden)
+    ↓
+Phase 8 (Multiplayer Sync + Edge Cases)</code></pre>
+<p>
+  Phases 1 and 2 are independent and can be done in either order (or in parallel). Phase 3 needs both. Everything else is strictly sequential.
+</p>
+
+<table class="data">
+  <tr><th>Phase</th><th>Title</th><th>Depends on</th><th>What's testable at the end</th></tr>
+  <tr><td class="k">0</td><td>Foundation</td><td class="muted">—</td><td class="muted">Build green, mod loads, config keys exist</td></tr>
+  <tr><td class="k">1</td><td>Relic Tiering</td><td class="muted">0</td><td class="muted">All 25 relics carry tier metadata, inspectable via <code>!relictier</code></td></tr>
+  <tr><td class="k">2</td><td>Module Overlay + Stat Application</td><td class="muted">0</td><td class="muted">Modules upgradable via <code>!setlevel</code>; stats actually change in-game</td></tr>
+  <tr><td class="k">3</td><td>Upgrade Forge MVP</td><td class="muted">1, 2</td><td class="muted">Players install Forge, insert relics, commit upgrades; cost curve enforced</td></tr>
+  <tr><td class="k">4</td><td>Perks (Roll + Slots)</td><td class="muted">3</td><td class="muted">Upgrades roll perks; slot tier-gating enforced (any / Rare+ / Legendary)</td></tr>
+  <tr><td class="k">5</td><td>Forge Progression (Meter + Sector Hook + Alloy Terminal)</td><td class="muted">3</td><td class="muted">Forge levels passively + via alloys; capacity gating works</td></tr>
+  <tr><td class="k">6</td><td>Sector Escalation</td><td class="muted">5</td><td class="muted">Enemies scale per sector; loot tiers shift toward Rare/Legendary</td></tr>
+  <tr><td class="k">7</td><td>Content Pass (Signatures + Cursed + Burden)</td><td class="muted">1, 4</td><td class="muted">Flagship relics roll signatures; cursed relics trigger Maintenance Burden</td></tr>
+  <tr><td class="k">8</td><td>Multiplayer Sync + Edge Cases</td><td class="muted">all</td><td class="muted">Host arbitration, late-joiner sync, host migration preserved</td></tr>
+</table>
+
+<h3>Phase 0 — Foundation</h3>
+<p><strong>Goal:</strong> Project conventions captured. Config keys exist (empty defaults). No runtime behavior change.</p>
+<ul class="bullets">
+  <li>Create <code>CONTEXT.md</code> with glossary, <code>docs/adr/0001-mod-side-overlay-not-prefab-replacement.md</code>.</li>
+  <li>Extend <code>TerminusConfig</code> in <code>VoidCrewTerminus/Config.cs</code> with stub entries (cost curve, ratios, scalars, meter rates).</li>
+  <li>Add empty <code>VoidCrewTerminus/Forge/</code> and <code>VoidCrewTerminus/Net/</code> directories.</li>
+</ul>
+<p><strong>Test:</strong> <code>dotnet build -c Release</code> succeeds; mod loads in-game with no exceptions; new config keys appear in BepInEx config file.</p>
+
+<h3>Phase 1 — Relic Tiering</h3>
+<p><strong>Goal:</strong> Each of the ~25 vanilla relics carries mod-side metadata (Tier + IsCursed flag). Inspectable via dev command. No gameplay effect yet.</p>
+<ul class="bullets">
+  <li><code>VoidCrewTerminus/Forge/RelicTierData.cs</code> — static map of relic identifier → <code>(Tier, IsCursed)</code>. All <code>IsCursed = false</code> in this phase (wired in Phase 7).</li>
+  <li>New chat command <code>!relictier &lt;relic-id&gt;</code> (gated on <code>EnableDevMode</code>) following the pattern in <code>Commands/SpawnItem.cs</code>.</li>
+</ul>
+<p><strong>Test:</strong> Spawn each of the 25 relics; query each via <code>!relictier</code>; verify mapping. Unknown IDs return a sensible default.</p>
+
+<h3>Phase 2 — Module Overlay + Stat Application</h3>
+<p><strong>Goal:</strong> Modules can be upgraded via dev command; stat changes observable in-game. No Forge, no relic consumption, no perks yet.</p>
+<ul class="bullets">
+  <li><code>Forge/ForgeModuleState.cs</code> — overlay record type (level, slots, burden flags, accumulated stat mods).</li>
+  <li><code>Forge/ForgeOverlayTable.cs</code> — static <code>ConditionalWeakTable&lt;CellModule, ForgeModuleState&gt;</code> accessor.</li>
+  <li><code>Patches/ModuleStatOverlayPatch.cs</code> — Harmony postfixes on per-module stat getters.</li>
+  <li>Dev commands <code>!setlevel</code>, <code>!getlevel</code>, <code>!resetoverlay</code>.</li>
+</ul>
+<div class="callout warn">
+  <span class="label">Pre-flight required</span>
+  Decompile live <code>Assembly-CSharp.dll</code> to identify the actual stat-calc methods on <code>WeaponModule</code>, <code>ReactorModule</code>, <code>ShieldModule</code>, etc.
+</div>
+<p><strong>Test:</strong> Force a weapon to L7 via <code>!setlevel</code>; fire weapon; observe damage exceeds vanilla. <code>!resetoverlay</code> reverts. Vanilla L1–3 BuildBox swap still works. Run-end clears state.</p>
+
+<h3>Phase 3 — Upgrade Forge MVP</h3>
+<p><strong>Goal:</strong> Players can install the Forge, insert a relic, target a module, and commit an upgrade. Cost curve enforced.</p>
+<ul class="bullets">
+  <li><code>Assets/upgrade_forge.metem</code> — placeholder asset bundle (simple visible mesh; final art is later polish).</li>
+  <li><code>Forge/UpgradeForgeBehavior.cs</code> — MonoBehaviour on the Forge prefab.</li>
+  <li><code>Forge/ForgeCostCurve.cs</code> — the 1/1/2/2/3/3/4 ramp (config-driven).</li>
+  <li><code>Patches/ForgeInteractionPatch.cs</code> — binds in-world interactions to controller logic.</li>
+  <li><strong>Hardcoded:</strong> Forge capacity is fixed at 4 in this phase. Meter and alloy terminal come in Phase 5.</li>
+</ul>
+<p><strong>Test:</strong> Install Forge, insert Common relic, commit L3→L4 — overlay level increments and stat change observable. Attempt L10 with 3 relics → rejected; with 4 → accepted. Vanilla L1–3 still works. Per-run reset.</p>
+
+<h3>Phase 4 — Perks (Roll + Slots + Category Pools)</h3>
+<p><strong>Goal:</strong> Upgrade commits roll a perk against target slots. Slot tier-gating respected. Gamble reveal.</p>
+<ul class="bullets">
+  <li><code>Forge/PerkDefinition.cs</code> — record type (id, name, category, stat-mod payload).</li>
+  <li><code>Forge/PerkPool.cs</code> — category-wide pools (~3 perks per category to start). <code>RollPerk(category, relicTier, emptySlotIndex)</code> entry point.</li>
+  <li>Update <code>UpgradeForgeBehavior</code> to call <code>RollPerk</code> after a successful upgrade and apply the perk's stat-mod payload via the Phase 2 overlay.</li>
+</ul>
+<p><strong>Test:</strong> Common→empty Slot 1 rolls; Common→full Slot 1 doesn't roll Slot 2; Rare→empty Slot 2 rolls; Legendary→empty Slot 3 rolls. Statistical: ~15% / ~40% / ~75% roll chances. No preview UI; result shown post-commit only.</p>
+
+<h3>Phase 5 — Forge Progression (Meter + Sector Hook + Alloy Terminal)</h3>
+<p><strong>Goal:</strong> Forge level rises through both passive (sector jumps) and active (alloy spend) investment. Capacity gates target upgrade level.</p>
+<ul class="bullets">
+  <li><code>Forge/ForgeMeterController.cs</code> — singleton tracking Forge Level, Meter, DifficultyScalar (latter unused until Phase 6).</li>
+  <li><code>Forge/AlloyTerminal.cs</code> — Fabricator-style alloy-spend terminal interaction.</li>
+  <li><code>Patches/SectorJumpHook.cs</code> — subscribe to <code>GameSessionSectorManager.OnSectorEntered</code>. De-dupe initial-sector and interdiction-resumption events.</li>
+  <li>Update <code>UpgradeForgeBehavior</code> to enforce capacity gating.</li>
+</ul>
+<div class="callout warn">
+  <span class="label">Pre-flight required</span>
+  Confirm <code>OnSectorEntered</code> delegate signature; interdiction-sector identification; Fabricator alloy-spend method.
+</div>
+<p><strong>Test:</strong> New run starts at Forge L1 (capacity 1) → only L4–L5 upgrades possible. Spend alloys → Meter fills → Forge levels → larger upgrades unlock. Jumps contribute +20 each. L1→L2 takes 100, L2→L3 takes 150 (1.5× curve). Interdiction gets ONE +20, not two.</p>
+
+<h3>Phase 6 — Sector Escalation</h3>
+<p><strong>Goal:</strong> Per-jump enemy threat scaling + loot tier biasing.</p>
+<ul class="bullets">
+  <li><code>Forge/SectorEscalation.cs</code> — reads <code>DifficultyScalar</code>.</li>
+  <li>Harmony patches on enemy spawn/init paths (HP, damage, density × scalar function).</li>
+  <li>Harmony patches on relic loot table draws (tier bias by scalar).</li>
+</ul>
+<div class="callout warn">
+  <span class="label">Pre-flight required</span>
+  Identify enemy spawn paths and loot table draw points via live decompile.
+</div>
+<p><strong>Test:</strong> Sector 1: enemy stats baseline, drops Common only. Sector 5+: enemies measurably tougher, drops include Rare/Legendary. Tune scalars to feel right.</p>
+
+<h3>Phase 7 — Content Pass (Signatures + Cursed + Maintenance Burden)</h3>
+<p><strong>Goal:</strong> Roguelike content depth. Flagship relics carry signature perks. ~30% of relics cursed; cursed perks trigger Maintenance Burden.</p>
+<ul class="bullets">
+  <li>Update <code>RelicTierData.cs</code> — flag ~30% of relics with <code>IsCursed = true</code>.</li>
+  <li>Update <code>PerkPool.cs</code> — add ~5–10 signature perks tied to specific flagship relic IDs.</li>
+  <li>Update <code>PerkPool.RollPerk</code> to draw from cursed-augmented pool when relic is cursed.</li>
+  <li><code>Forge/MaintenanceBurden.cs</code> — operational quirks (random shutoffs, increased heat ticks, etc.) on burdened modules.</li>
+</ul>
+<p><strong>Test:</strong> Flagship relic on empty Slot 1 has chance to roll its signature. Cursed relic → upgrade succeeds, perk rolls from cursed pool, Maintenance Burden activates. Clean L10 module (no cursed relics ever used) operates perfectly. Per-run reset clears all flags.</p>
+
+<h3>Phase 8 — Multiplayer Sync + Edge Cases</h3>
+<p><strong>Goal:</strong> All Phase 0–7 mechanics work correctly in a hosted multiplayer session.</p>
+<ul class="bullets">
+  <li><code>Net/PerkRollRequestMessage.cs</code> — client → host.</li>
+  <li><code>Net/PerkRollMessage.cs</code> — host → all.</li>
+  <li><code>Net/ForgeStateSyncMessage.cs</code> — host → late joiner.</li>
+  <li>Refactor <code>ForgeMeterController</code> and <code>UpgradeForgeBehavior</code> to be host-authoritative.</li>
+  <li>Wire <code>VoidManager.Events.PlayerEnteredRoom</code> and <code>Events.MasterClientSwitched</code>.</li>
+</ul>
+<div class="callout warn">
+  <span class="label">Pre-flight required</span>
+  Confirm <code>VoidManager.ModMessages.ModMessage.Send</code> transport semantics under <code>MultiplayerType.All</code>.
+</div>
+<p><strong>Test:</strong> Host + client; client initiates upgrade; both see same outcome. Cursed relic in MP: both clients see same burden manifest. Late joiner receives full state. Host migration: new host takes over cleanly; in-flight requests time out gracefully. Sector jump in MP: exactly ONE meter increment per jump.</p>
+
+<div class="callout note">
+  <span class="label">Cross-phase notes</span>
+  <strong>Pre-flight verification</strong> is needed before Phases 2, 5, 6, and 8. All decompile targets are listed in the <a href="#preflight">Pre-Flight Verification</a> section above and can be done in a single up-front pass.
+  <strong>Dev commands</strong> accumulate across phases; by Phase 7 the <code>!forge</code> command tree includes <code>!relictier</code>, <code>!setlevel</code>, <code>!getlevel</code>, <code>!resetoverlay</code>, <code>!setmeter</code>, <code>!setdifficulty</code>, <code>!forceperk</code>, <code>!triggerburden</code> — all gated on <code>EnableDevMode</code>.
+  <strong>Per-run reset</strong> is tested in every phase; the hook is <code>VoidManager.Events.HostStartSession</code>.
+</div>
+
+<h2 id="costs">Cost Curve (Reference)</h2>
+<table class="data">
+  <tr><th>Module level</th><th>Relics required</th><th>Suggested tier (advisory)</th></tr>
+  <tr><td class="k">L4</td><td>1</td><td class="muted">Common</td></tr>
+  <tr><td class="k">L5</td><td>1</td><td class="muted">Common</td></tr>
+  <tr><td class="k">L6</td><td>2</td><td class="muted">Common</td></tr>
+  <tr><td class="k">L7</td><td>2</td><td class="muted">Rare</td></tr>
+  <tr><td class="k">L8</td><td>3</td><td class="muted">Rare</td></tr>
+  <tr><td class="k">L9</td><td>3</td><td class="muted">Rare</td></tr>
+  <tr><td class="k">L10</td><td>4</td><td class="muted">Legendary</td></tr>
+</table>
+<p><strong>Total: 16 relics</strong> to fully push one module to L10. Tier "suggested" is advisory only — any tier works, lower tier just yields lower quality and cannot fill higher-tier perk slots.</p>
+
+<h2 id="open">Open Questions (Deferred to Implementation)</h2>
+<ul class="bullets">
+  <li><strong>Exact perk roster.</strong> ~15 category-pool perks + ~5–10 signatures is the v1 target; names/effects authored during content pass.</li>
+  <li><strong>Forge prefab visual design.</strong> Working name "Upgrade Forge"; final footprint and visuals decided when the asset is built. Suggest mirroring Fabricator's visual language for player legibility.</li>
+  <li><strong>Specific stat-mod targets per module category.</strong> Requires live-decompile to identify the actual getter/calculation methods.</li>
+  <li><strong>Maintenance Burden specifics.</strong> "Random shutoffs" is the seed concept; specific event types authored alongside cursed perks.</li>
+  <li><strong>UI for relic insertion.</strong> Whether the Forge surfaces a UI panel or a purely diegetic in-world interaction (drop relic into slot, button press). Diegetic is preferred for thematic fit but harder to communicate failure states.</li>
+</ul>
+
+<hr />
+<p style="font-size:12px;color:var(--muted);text-align:center;">
+  VoidCrewTerminus · Upgrade Forge design · this file is generated from <code>plans/currently-in-the-game-unified-ocean.md</code>
+</p>
+
+</main>
+</body>
+</html>
