@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Upgrade Forge — RFC</title>
+  <style>
+    :root {
+      --bg:      #0f1117;
+      --surface: #181c27;
+      --border:  #2a2f42;
+      --accent:  #5c8aff;
+      --accent2: #9b59f5;
+      --text:    #d4d8e8;
+      --muted:   #7a80a0;
+      --code-bg: #12151f;
+      --tag-bg:  #1e2436;
+      --danger:  #e05c5c;
+      --warn:    #e0a35c;
+      --ok:      #5ce08a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 15.5px;
+      line-height: 1.75;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    nav {
+      width: 260px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 28px 20px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+    nav .logo {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+    nav .subtitle {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 28px;
+    }
+    nav ul { list-style: none; }
+    nav ul li { margin-bottom: 2px; }
+    nav ul li a {
+      display: block;
+      padding: 5px 10px;
+      border-radius: 6px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 13px;
+    }
+    nav ul li a:hover { color: var(--text); background: var(--border); }
+    nav .section-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--accent2);
+      margin: 18px 0 6px 10px;
+    }
+
+    main {
+      flex: 1;
+      padding: 56px 72px;
+      max-width: 880px;
+    }
+
+    h1 {
+      font-size: 30px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    .page-meta {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 40px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .page-meta .pill {
+      display: inline-block;
+      background: var(--tag-bg);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 2px 10px;
+      font-size: 11px;
+      margin-right: 6px;
+      color: var(--accent);
+    }
+
+    h2 {
+      font-size: 22px;
+      font-weight: 700;
+      color: #fff;
+      margin: 56px 0 16px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    h3 {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--accent);
+      margin: 32px 0 10px;
+    }
+    p { margin-bottom: 16px; color: var(--text); }
+    p.lead {
+      font-size: 17px;
+      color: #e8ebf5;
+      line-height: 1.7;
+      margin-bottom: 22px;
+    }
+    ul.bullets, ol.bullets { margin: 0 0 16px 24px; }
+    ul.bullets li, ol.bullets li { margin-bottom: 8px; }
+
+    strong { color: #fff; }
+    em { color: var(--text); }
+
+    code {
+      font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+      font-size: 13px;
+      background: var(--tag-bg);
+      padding: 1px 6px;
+      border-radius: 4px;
+      color: #a8c0ff;
+    }
+
+    .callout {
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin: 20px 0;
+      font-size: 14px;
+      border-left: 4px solid;
+    }
+    .callout.note   { background: #1a2035; border-color: var(--accent);  color: #b8c8f0; }
+    .callout.warn   { background: #241e12; border-color: var(--warn);    color: #e8d3b0; }
+    .callout.danger { background: #241212; border-color: var(--danger);  color: #e8c0c0; }
+    .callout.ok     { background: #122414; border-color: var(--ok);      color: #b8e8c8; }
+    .callout strong { color: inherit; font-weight: 700; }
+    .callout .label {
+      display: inline-block;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      font-size: 11px;
+      margin-right: 8px;
+    }
+
+    table.data {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      margin: 14px 0 22px;
+    }
+    table.data th {
+      text-align: left;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      padding: 0 14px 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    table.data td {
+      padding: 10px 14px 10px 0;
+      border-bottom: 1px solid #1a1f2e;
+      vertical-align: top;
+      color: var(--text);
+    }
+    table.data tr:last-child td { border-bottom: none; }
+    table.data td.k {
+      font-weight: 700;
+      color: #9cdcfe;
+      white-space: nowrap;
+    }
+    table.data td.muted { color: var(--muted); }
+
+    .pillrow { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 18px; }
+    .pillrow .pill {
+      background: var(--tag-bg);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 3px 12px;
+      font-size: 12px;
+      color: var(--accent);
+    }
+
+    .scene {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 22px 28px;
+      margin: 14px 0 22px;
+      font-size: 14.5px;
+    }
+    .scene .scene-label {
+      display: inline-block;
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--accent2);
+      margin-bottom: 10px;
+    }
+    .scene p:last-child { margin-bottom: 0; }
+
+    hr { border: none; border-top: 1px solid var(--border); margin: 48px 0; }
+
+    .footer {
+      font-size: 12px;
+      color: var(--muted);
+      text-align: center;
+      margin-top: 56px;
+    }
+    .footer a { color: var(--accent); text-decoration: none; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">VoidCrewTerminus</div>
+  <div class="subtitle">Upgrade Forge — RFC</div>
+
+  <div class="section-label">Proposal</div>
+  <ul>
+    <li><a href="#summary">Summary</a></li>
+    <li><a href="#motivation">Motivation</a></li>
+    <li><a href="#goals">Goals &amp; Non-Goals</a></li>
+  </ul>
+
+  <div class="section-label">The Design</div>
+  <ul>
+    <li><a href="#levels">Module Levels (3 → 10)</a></li>
+    <li><a href="#forge">The Forge</a></li>
+    <li><a href="#relics">Relic Tiers</a></li>
+    <li><a href="#perks">Perks &amp; Slots</a></li>
+    <li><a href="#meter">Forge Meter</a></li>
+    <li><a href="#escalation">Sector Escalation</a></li>
+    <li><a href="#cursed">Cursed Relics</a></li>
+  </ul>
+
+  <div class="section-label">Player Experience</div>
+  <ul>
+    <li><a href="#flow">A Sample Run</a></li>
+    <li><a href="#costs">Cost Reference</a></li>
+  </ul>
+
+  <div class="section-label">Discussion</div>
+  <ul>
+    <li><a href="#open">Open Questions</a></li>
+    <li><a href="#risks">Risks &amp; Mitigations</a></li>
+    <li><a href="#alternatives">Alternatives Considered</a></li>
+  </ul>
+</nav>
+
+<main>
+
+<h1>Upgrade Forge — RFC</h1>
+<div class="page-meta">
+  <span class="pill">RFC</span>
+  <span class="pill">VoidCrewTerminus mod</span>
+  <span class="pill">Design only</span>
+  <br /><br />
+  Design-level proposal for the Upgrade Forge — a new ship module that extends progression past level 3, up to level 10, and adds three roguelike subsystems (tiered relics, gambling perks, escalating sectors). This document is for designers, players, and stakeholders who know the game's systems but not the mod's implementation. For the technical companion, see <a href="upgrade-forge-design.html" style="color:var(--accent)">upgrade-forge-design.html</a>.
+</div>
+
+<h2 id="summary">Summary</h2>
+<p class="lead">
+  This RFC proposes the <strong>Upgrade Forge</strong>: a new installable ship module that lets a crew push their weapons, shields, reactors, and other modules past the current level-3 ceiling, all the way to level 10. Upgrading is done by physically inserting relics into the Forge. Most relics are now tiered (Common / Rare / Legendary), and some are <em>cursed</em> — they pay better but make the module they touch operationally fragile in interesting ways. The system layers on top of vanilla Void Crew without changing what already works.
+</p>
+
+<h2 id="motivation">Motivation</h2>
+<p>
+  Today's late run hits a ceiling fast. Once your modules are L3 and your hold is full of relics, there's not much to invest in. Relics become "items I pick up to craft a thing later" rather than the centerpiece of progression. The TODO file at the project root has the seed of this idea — "new leveling system for weapons (or ship modules in general); lean into the roguelike aspects of the game; levels 4-10 use relics to upgrade."
+</p>
+<p>This RFC turns that note into a coherent system. The aim is to:</p>
+<ul class="bullets">
+  <li>Give the late run something meaningful to fight for, without inflating numbers past recognition.</li>
+  <li>Make relics feel like loot worth hunting — not just crafting fodder.</li>
+  <li>Add roguelike texture: gambling moments, risk/reward, run-defining choices.</li>
+  <li>Keep the runs themselves clean — no meta-progression, no save files, no permanent unlocks.</li>
+</ul>
+
+<h2 id="goals">Goals &amp; Non-Goals</h2>
+<h3>Goals</h3>
+<ul class="bullets">
+  <li>Extend module progression to L10 in a way that feels <strong>earned</strong> — not granted.</li>
+  <li>Make individual relic drops <strong>matter</strong>: tier, identity, and "do I curse my favorite turret with this?" decisions.</li>
+  <li>Introduce <strong>risk/reward</strong> via cursed relics — the cost is operational, not statistical.</li>
+  <li>Preserve the existing roguelike loop: <strong>everything resets when the ship dies</strong>.</li>
+  <li>Don't break vanilla. L1–3 module behavior is untouched.</li>
+</ul>
+
+<h3>Non-Goals</h3>
+<ul class="bullets">
+  <li>No meta-progression. No persistent module levels across runs. No save format change.</li>
+  <li>No new in-game resources. Only existing currencies are used: <strong>relics</strong> and <strong>alloys</strong>.</li>
+  <li>No replacement of the existing BuildBox / module-swap upgrade flow. Vanilla L1→L2→L3 still happens the way it does today.</li>
+  <li>No new enemies, biomes, or POIs in this proposal. (The TODO file lists those separately; they are out of scope here.)</li>
+</ul>
+
+<h2 id="levels">Module Levels (3 → 10)</h2>
+<p>
+  Today every module caps at L3. This proposal adds <strong>levels 4 through 10</strong>, accessible only through the Upgrade Forge. The vanilla L1→L2→L3 progression continues to work exactly as it does now — when your crew finishes that, they bring the L3 module to the Forge to push further.
+</p>
+<p>
+  Each level above 3 is a small, deterministic stat bump (e.g. damage, fire rate, output, shield capacity) plus — possibly — a perk roll. Stats are tuned so that an L10 module is meaningfully stronger than an L3, but not so strong that L4–L6 feel like wasted intermediate steps.
+</p>
+
+<h2 id="forge">The Forge</h2>
+<p>
+  The Upgrade Forge is a new ship module the crew installs like any other. Physically, it has two interaction surfaces:
+</p>
+<ul class="bullets">
+  <li><strong>Relic slots</strong> — crew carry relics to it and insert them. The Forge holds up to its <em>Forge Capacity</em> at once (which depends on the Forge's own level).</li>
+  <li><strong>Alloy terminal</strong> — crew spend alloys here to push the Forge Meter (see below). This mirrors the Fabricator's existing self-upgrade pattern, so it should feel familiar.</li>
+</ul>
+<p>
+  Upgrading a module: walk relics to the Forge, target a module, commit. The relics are consumed. The module gains a level — and if the relics' tiers match an empty perk slot on the module, a perk is rolled.
+</p>
+<div class="callout note">
+  <span class="label">Diegetic, not menu-driven</span>
+  Insertion is in-world — you physically carry a relic to the Forge, you physically put it in. There's no inventory menu for the relic side. The alloy terminal is a screen because alloys are abstract; relics aren't.
+</div>
+
+<h2 id="relics">Relic Tiers</h2>
+<p>
+  The game today has ~25 distinct relics, and they're functionally interchangeable as crafting inputs. This RFC adds a <strong>tier</strong> property to each:
+</p>
+<div class="pillrow">
+  <span class="pill">Common</span>
+  <span class="pill">Rare</span>
+  <span class="pill">Legendary</span>
+</div>
+<p>
+  Tier is a <strong>quality dial</strong>, not a gate. Any tier can be used for any upgrade level. The difference is what the relic <em>delivers</em>:
+</p>
+<ul class="bullets">
+  <li><strong>Stat magnitude</strong> — a Legendary relic produces a bigger stat bump than a Common at the same upgrade level.</li>
+  <li><strong>Perk-roll chance</strong> — higher tier = better odds of rolling a perk.</li>
+  <li><strong>Perk slot eligibility</strong> — the higher-rarity perk slots can only be filled by higher-tier relics (see below).</li>
+</ul>
+<p>
+  Drop rates are biased by <a href="#escalation">Sector Escalation</a>: early sectors are mostly Common; deeper sectors mix in Rare and Legendary.
+</p>
+
+<h2 id="perks">Perks &amp; Slots</h2>
+<p>
+  Each module has <strong>3 perk slots</strong>, each gated by tier:
+</p>
+<table class="data">
+  <tr><th>Slot</th><th>Required tier</th><th>Description</th></tr>
+  <tr><td class="k">Slot 1</td><td>Any (Common+)</td><td class="muted">The first perk a module ever rolls.</td></tr>
+  <tr><td class="k">Slot 2</td><td>Rare or Legendary</td><td class="muted">A Common upgrade after Slot 1 is full does nothing perk-wise — just the flat stat bump.</td></tr>
+  <tr><td class="k">Slot 3</td><td>Legendary only</td><td class="muted">A fully-perked module requires at least one Legendary relic somewhere along its path.</td></tr>
+</table>
+<p>
+  Perks are <strong>committed first, revealed after</strong>. You don't see what you're getting. You insert the relics, you commit, you live with the result. This is intentional — it preserves the "did I just find a treasure?" tension that picking from a menu would dissolve.
+</p>
+<p>
+  Perks are authored content. Each module category (weapons, reactors, shields, engines, scanners) has its own perk pool. A handful of <strong>flagship relics</strong> (~5–10 of the 25) carry <em>signature perks</em> that only roll when that specific relic is the one inserted. The rest of the relics draw from the shared category pool.
+</p>
+
+<h2 id="meter">Forge Meter</h2>
+<p>
+  The Forge has its own level. The Forge's level determines its <strong>Capacity</strong> — how many relics it can hold at once, which in turn caps the maximum module-upgrade level you can attempt (since L10 needs 4 relics inserted simultaneously, you need a Forge that holds 4).
+</p>
+<p>
+  The Forge gains levels through the <strong>Forge Meter</strong>, which fills from two sources:
+</p>
+<ul class="bullets">
+  <li><strong>Sector progression (passive)</strong> — each successful jump bumps the meter by a fixed amount.</li>
+  <li><strong>Alloy investment (active)</strong> — spend alloys at the Forge terminal to add to the meter.</li>
+</ul>
+<p>
+  Each level threshold is larger than the last (roughly 1.5× growth). The numbers are tuned so that <strong>passive progression alone isn't enough to fully level the Forge</strong> — to unlock L10 module upgrades, the crew must invest alloys. This makes the Forge a real strategic choice: spend alloys on hull, on the Fabricator, on the Forge?
+</p>
+<div class="callout ok">
+  <span class="label">Why it matters</span>
+  Without this dial, the Forge would just be "use it whenever you have relics." With it, the Forge is a commitment: every alloy you spend here is an alloy you didn't spend on something else. That tension is the whole point.
+</div>
+
+<h2 id="escalation">Sector Escalation</h2>
+<p>
+  Each successful sector jump scales the run in two ways:
+</p>
+<ul class="bullets">
+  <li><strong>Enemy threat</strong> — HP, damage, and (optionally) density rise smoothly. Deeper jumps are tougher.</li>
+  <li><strong>Loot quality</strong> — the relic tier distribution shifts. Sector 1 drops are almost all Common; by sector 5+, Rare/Legendary become common.</li>
+</ul>
+<p>
+  Together these create a classic roguelike push: deeper means more dangerous AND more rewarding. The decision "do we jump again or extract?" gets real weight.
+</p>
+
+<h2 id="cursed">Cursed Relics</h2>
+<p>
+  Roughly 30% of relics are <strong>cursed</strong>. A cursed relic still works — the stat bump is full strength, the perk roll still happens — but if a perk lands, it carries a <strong>Maintenance Burden</strong>.
+</p>
+<div class="callout warn">
+  <span class="label">Burden is operational, not statistical</span>
+  A burdened module is not weaker on paper. It just becomes <em>annoying to operate</em>. It might cut out for a few seconds at random. It might require a manual reset every so often. It might radiate heat to neighbors. The cost shows up as <strong>crew work</strong>, not as a debuff in a tooltip.
+</div>
+<p>
+  Example perks (illustrative — final names/values during content authoring):
+</p>
+<table class="data">
+  <tr><th>Perk</th><th>Benefit</th><th>Burden</th></tr>
+  <tr><td class="k">Overcharged</td><td>+30% damage</td><td class="muted">Powers off for 2–4 seconds every 30–90 seconds</td></tr>
+  <tr><td class="k">Vampiric</td><td>5% damage healed to ship hull</td><td class="muted">Module radiates heat; nearby modules tick warmer</td></tr>
+  <tr><td class="k">Erratic</td><td>+50% fire rate</td><td class="muted">~5% chance per shot to require a manual reset</td></tr>
+</table>
+<p>
+  The intent is to create emergent gameplay. A crew with three Overcharged turrets is choosing chaos — when the swarm shows up, someone is running ladder-to-ladder reactivating things.
+</p>
+
+<h2 id="flow">A Sample Run</h2>
+<p>To make this concrete, here's how a run might unfold with the system in place.</p>
+
+<div class="scene">
+  <div class="scene-label">Sector 1 — Departure</div>
+  <p>
+    You install the Upgrade Forge in the back bay before launch. It starts at L1, Capacity 1. Your starboard turret is already L3 from the BuildBox kit. You haven't found any relics yet.
+  </p>
+</div>
+
+<div class="scene">
+  <div class="scene-label">Sector 2 — First relic</div>
+  <p>
+    Looting a derelict, you find a Common relic. You carry it back to the Forge, slot it in, target the starboard turret, and commit. Turret goes L3→L4. Damage tick up. No perk rolls this time. The Meter advances 20 from the jump.
+  </p>
+</div>
+
+<div class="scene">
+  <div class="scene-label">Sector 3 — The Forge levels</div>
+  <p>
+    Another two jumps and a few alloys spent at the Forge terminal push the Meter past 100. Forge L2, Capacity 2. You can now do L6 upgrades. You pick up two Common relics and push the starboard turret to L6. Slot 1 fills with "Hyperflux" — a small reload-speed bonus. Things are getting good.
+  </p>
+</div>
+
+<div class="scene">
+  <div class="scene-label">Sector 5 — The fork in the road</div>
+  <p>
+    You find a Legendary. It glows red — cursed. You hesitate. A cursed Legendary is exactly what you'd need to fill Slot 3 on something — but the burden will follow that module for the rest of the run. You commit it to the starboard turret. Roll: "Overcharged." +30% damage. The turret will now blink off for a few seconds at random.
+  </p>
+  <p>
+    Next combat encounter, the turret cuts out mid-fight. Someone runs back to reset it. The team learns the timing. The fight feels different.
+  </p>
+</div>
+
+<div class="scene">
+  <div class="scene-label">Sector 7 — The L10</div>
+  <p>
+    By sector 7 the Forge is L4, Capacity 4. You've been hoarding for this. Four relics — three Rare, one Legendary — go into the Forge, target the starboard turret. Commit. L9→L10. Slot 2 was already full; Slot 3 gets a "Stormpiercer" signature roll because the Legendary you used was a flagship relic. The turret is now genuinely terrifying. You also have a small ongoing maintenance load from the earlier curse. Tradeoffs everywhere.
+  </p>
+</div>
+
+<div class="scene">
+  <div class="scene-label">Sector 9 — Death</div>
+  <p>
+    A bad jump, a swarm you can't burn down. Ship dies. All of it — the L10 turret, the Forge level, the relic stash, the perks — wipes. Next run starts fresh. That's the deal.
+  </p>
+</div>
+
+<h2 id="costs">Cost Reference</h2>
+<p>The relic cost per module upgrade level:</p>
+<table class="data">
+  <tr><th>Module level</th><th>Relics required</th><th>Suggested tier</th></tr>
+  <tr><td class="k">L4</td><td>1</td><td class="muted">Common</td></tr>
+  <tr><td class="k">L5</td><td>1</td><td class="muted">Common</td></tr>
+  <tr><td class="k">L6</td><td>2</td><td class="muted">Common</td></tr>
+  <tr><td class="k">L7</td><td>2</td><td class="muted">Rare</td></tr>
+  <tr><td class="k">L8</td><td>3</td><td class="muted">Rare</td></tr>
+  <tr><td class="k">L9</td><td>3</td><td class="muted">Rare</td></tr>
+  <tr><td class="k">L10</td><td>4</td><td class="muted">Legendary</td></tr>
+</table>
+<p>
+  <strong>16 relics total</strong> to fully push one module from L3 to L10. Suggested tiers are advisory — you can use any tier, you just won't get the higher perk slots and won't get the bigger stat bumps. A typical run yields fewer than 16 relics in total, which means crews must choose <em>which</em> module to commit to. That's the design.
+</p>
+
+<h2 id="open">Open Questions</h2>
+<p>These are decisions deferred to playtesting rather than locked at design time.</p>
+<ul class="bullets">
+  <li><strong>Cursed ratio.</strong> 30% of relics cursed is the default. Could be 20% (curses are special) or 50% (curses are the norm).</li>
+  <li><strong>Forge visual identity.</strong> What does the Forge look like? Footprint, animation, particle effects. Should it visibly "heat up" as the Meter fills?</li>
+  <li><strong>Burden taxonomy.</strong> "Random shutoffs" is the seed. Other event types — heat ticks, reset interactions, power oscillations — to be authored alongside the cursed perks.</li>
+  <li><strong>Player communication.</strong> How does the player know a module is L7 vs L10? Visible glyphs? Glowing intensity? UI tooltip on look?</li>
+  <li><strong>Capacity gate UX.</strong> When the Forge is L2 and the player tries an L10 upgrade, what does the rejection look like? A clear message? A locked icon on the higher-cost levels?</li>
+  <li><strong>Multiplayer feel.</strong> When a crewmate commits an upgrade, do all players see the same reveal animation? Does the host's roll get a small UI flourish on every screen?</li>
+</ul>
+
+<h2 id="risks">Risks &amp; Mitigations</h2>
+<table class="data">
+  <tr><th>Risk</th><th>Mitigation</th></tr>
+  <tr>
+    <td>L10 modules trivialize the endgame; encounters become one-sided.</td>
+    <td class="muted">Cost ramp is steep enough (16 relics) that one or two modules per good run reach L10. Sector Escalation also pushes enemy difficulty alongside, so the curve evens out. Tune at playtest.</td>
+  </tr>
+  <tr>
+    <td>Cursed relics feel mandatory — the bonus is so good players always take the burden.</td>
+    <td class="muted">Make burdens genuinely costly in active gameplay (forces crew rotation away from other duties). If still mandatory after playtest, reduce the stat bonus or make the burden more disruptive.</td>
+  </tr>
+  <tr>
+    <td>Cursed relics feel like trash — the burden is so bad nobody uses them.</td>
+    <td class="muted">If playtest shows curse-avoidance, sweeten the bonus (e.g. cursed Legendaries always roll a perk; clean ones might not).</td>
+  </tr>
+  <tr>
+    <td>Players hoard relics for the perfect upgrade and never commit during a run.</td>
+    <td class="muted">The Forge has limited capacity early. Holding relics doesn't buy you anything if you can't insert them yet. Combined with per-run reset, hoarding is actively bad.</td>
+  </tr>
+  <tr>
+    <td>New players can't figure out the system.</td>
+    <td class="muted">In-world Forge has clear interaction prompts. Tooltips on relic tiers (color coding). Possibly a tutorial relic at run start that demonstrates the flow.</td>
+  </tr>
+  <tr>
+    <td>Multiplayer feels desynced — clients see different module states.</td>
+    <td class="muted">Host is the only authority on rolls; clients receive results. (Implementation detail covered in the technical doc.)</td>
+  </tr>
+</table>
+
+<h2 id="alternatives">Alternatives Considered</h2>
+
+<h3>Extend the existing Fabricator tier system to L10</h3>
+<p>
+  Void Crew's Fabricator already has a real numeric tier and an L3 cap. We could just raise that cap. <strong>Rejected</strong> because it would upgrade the crafting machine, not the modules it produces. Weapons would still be L1/L2/L3 prefab swaps; nothing about the actual ship modules would change.
+</p>
+
+<h3>Author 7 new prefabs per weapon (L4–L10 variants)</h3>
+<p>
+  The "right" way to extend the existing BuildBox swap mechanic. <strong>Rejected</strong> for content scope — that's 7 × (number of weapons + reactors + shields + ...) new assets, and balancing them is its own multi-month project.
+</p>
+
+<h3>Meta-progression (modules persist across runs)</h3>
+<p>
+  An L10 turret you keep forever. <strong>Rejected</strong> because it dilutes the roguelike loop. Void Crew's identity is "everything dies when the ship dies." A persistent overlay undermines that.
+</p>
+
+<h3>Treat all relics as fungible currency</h3>
+<p>
+  Simpler economy: any relic upgrades any module by some amount, no tiers, no signatures. <strong>Rejected</strong> because it kills the "this specific relic just dropped, what do I do with it?" moment that's the whole point of relics as a loot category.
+</p>
+
+<h3>Visible perk preview before committing (Slay-the-Spire style)</h3>
+<p>
+  Show three possible perks, let the player pick one. <strong>Rejected</strong> because it removes the gamble. We want "what did I just get?" not "what should I shop for?" — they're very different game feels.
+</p>
+
+<h3>A custom upgrade currency separate from relics</h3>
+<p>
+  Introduce a new pickup ("upgrade cores" or similar) for L4–L10. <strong>Rejected</strong> because it crowds the loot table and adds a second loot economy without enriching the existing one. Relics doing double duty is more elegant.
+</p>
+
+<hr />
+
+<div class="footer">
+  VoidCrewTerminus — Upgrade Forge RFC · For the implementation details, see <a href="upgrade-forge-design.html">upgrade-forge-design.html</a>.
+</div>
+
+</main>
+</body>
+</html>
