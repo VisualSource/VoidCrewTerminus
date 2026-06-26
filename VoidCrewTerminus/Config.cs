@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Reflection;
 using BepInEx.Configuration;
+using UnityEngine;
 
 namespace VoidCrewTerminus;
 
@@ -9,12 +10,19 @@ internal static class TerminusConfig
 {
     // Defined entries as static ConfigEntry<TYPE> NAME
 
-
     [BindConfig("ui", false, "Control if relics are allowed to be created from the fabricator")]
     internal static ConfigEntry<bool> AllowRelicReplication;
 
     [BindConfig("dev", false, "Enable dev mode")]
     internal static ConfigEntry<bool> EnableDevMode;
+
+    internal static ConfigEntry<Vector3> FrigateLobbyHangerPosition;
+    internal static ConfigEntry<Vector3> StrikerLobbyHangerPosition;
+    internal static ConfigEntry<Vector3> DestroyerLobbyHangerPosition;
+
+    internal static ConfigEntry<Vector3> FrigateLobbyHangerRot;
+    internal static ConfigEntry<Vector3> StrikerLobbyHangerRot;
+    internal static ConfigEntry<Vector3> DestroyerLobbyHangerRot;
 
 
     internal static void Init(ConfigFile cfg)
@@ -55,6 +63,14 @@ internal static class TerminusConfig
 
             field.SetValue(null, entry);
         }
+
+        FrigateLobbyHangerPosition = cfg.Bind("lobby", "FrigateLobbyHangerPosition", new Vector3(0, -10, -75), "Position of the frigate prefab in the lobby");
+        StrikerLobbyHangerPosition = cfg.Bind("lobby", "StrikerLobbyHangerPosition", new Vector3(0, -15, -75), "Position of the frigate prefab in the lobby");
+        DestroyerLobbyHangerPosition = cfg.Bind("lobby", "FrigateLobbyHangerPosition", new Vector3(0, 0, -100), "Position of the frigate prefab in the lobby");
+
+        FrigateLobbyHangerRot = cfg.Bind("lobby", "FrigateLobbyHangerRot", new Vector3(0, 20, 0), "Position of the frigate prefab in the lobby");
+        StrikerLobbyHangerRot = cfg.Bind("lobby", "StrikerLobbyHangerRot", new Vector3(0, 0, 0), "Position of the frigate prefab in the lobby");
+        DestroyerLobbyHangerRot = cfg.Bind("lobby", "FrigateLobbyHangerRot", new Vector3(0, 0, 0), "Position of the frigate prefab in the lobby");
     }
 }
 
