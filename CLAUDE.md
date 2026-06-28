@@ -43,6 +43,32 @@ Before shipping, fill in `PluginInfo.config`:
 
 The prebuild step will propagate these values into `MyPluginInfo.cs`, the Thunderstore `manifest.json`, and the `README.md`.
 
+## Game Assembly Reference (`.voidcrew/`)
+
+If the `.voidcrew/` directory is present in the project root, it contains decompiled game assemblies for local reference — use these instead of manually decompiling DLLs when researching types or methods to patch.
+
+| Path | Contents |
+|------|---------|
+| `.voidcrew/decompiled/<Assembly>/` | Full decompiled C# source, one file per type |
+| `.voidcrew/types-index.json` | 4,215 entries — each with `type`, `kind`, `namespace`, `assembly`, `file` |
+| `.voidcrew/namespace-index.json` | 273 namespaces mapped to their member types |
+| `.voidcrew/manifest.json` | Per-assembly checksums and file counts (compare to detect stale data after a game update) |
+| `.voidcrew/dlls/` | Raw game DLLs used as the decompilation source |
+
+**Quick lookup examples:**
+```sh
+# Find a type by name across all assemblies
+grep -r "ShipModule" .voidcrew/decompiled/
+
+# Query the index with jq
+jq '.[] | select(.type == "ShipModule")' .voidcrew/types-index.json
+
+# List all types in a namespace
+jq '."CG.Ship"' .voidcrew/namespace-index.json
+```
+
+The key assemblies are `Assembly-CSharp` (main game logic, 3 312 files), `VoidCrewCommon`, `Assembly-CSharp-firstpass`, `PhotonUnityNetworking`, and `Opsive.UltimateCharacterController`.
+
 ## References
 
 - [Void Crew Modding Docs](https://hutlihutgames.github.io/void_crew_modding_documentation/)

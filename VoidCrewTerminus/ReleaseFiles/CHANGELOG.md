@@ -1,3 +1,5 @@
+## 0.0.7
+- use config to load lobby ship
 ## 0.0.6
 - hide relic tab in fab
 - start lobby ship

@@ -16,6 +16,9 @@ internal static class TerminusConfig
     [BindConfig("dev", false, "Enable dev mode")]
     internal static ConfigEntry<bool> EnableDevMode;
 
+    [BindConfig("lobby", 0.6f, "Duration fade affect between ship when after ship selection")]
+    internal static ConfigEntry<float> LobbyShipFadeDuration;
+
     internal static ConfigEntry<Vector3> FrigateLobbyHangerPosition;
     internal static ConfigEntry<Vector3> StrikerLobbyHangerPosition;
     internal static ConfigEntry<Vector3> DestroyerLobbyHangerPosition;
@@ -64,13 +67,13 @@ internal static class TerminusConfig
             field.SetValue(null, entry);
         }
 
-        FrigateLobbyHangerPosition = cfg.Bind("lobby", "FrigateLobbyHangerPosition", new Vector3(0, -10, -75), "Position of the frigate prefab in the lobby");
-        StrikerLobbyHangerPosition = cfg.Bind("lobby", "StrikerLobbyHangerPosition", new Vector3(0, -15, -75), "Position of the frigate prefab in the lobby");
-        DestroyerLobbyHangerPosition = cfg.Bind("lobby", "FrigateLobbyHangerPosition", new Vector3(0, 0, -100), "Position of the frigate prefab in the lobby");
+        FrigateLobbyHangerPosition = cfg.Bind("lobby", "FrigateLobbyHangerPosition", new Vector3(0, 0, -75), "Position of the frigate prefab in the lobby");
+        StrikerLobbyHangerPosition = cfg.Bind("lobby", "StrikerLobbyHangerPosition", new Vector3(0, 0, -75), "Position of the frigate prefab in the lobby");
+        DestroyerLobbyHangerPosition = cfg.Bind("lobby", "FrigateLobbyHangerPosition", new Vector3(0, 0, -75), "Position of the frigate prefab in the lobby");
 
         FrigateLobbyHangerRot = cfg.Bind("lobby", "FrigateLobbyHangerRot", new Vector3(0, 20, 0), "Position of the frigate prefab in the lobby");
         StrikerLobbyHangerRot = cfg.Bind("lobby", "StrikerLobbyHangerRot", new Vector3(0, 0, 0), "Position of the frigate prefab in the lobby");
-        DestroyerLobbyHangerRot = cfg.Bind("lobby", "FrigateLobbyHangerRot", new Vector3(0, 0, 0), "Position of the frigate prefab in the lobby");
+        DestroyerLobbyHangerRot = cfg.Bind("lobby", "FrigateLobbyHangerRot", new Vector3(0, 20, 0), "Position of the frigate prefab in the lobby");
     }
 }
 
