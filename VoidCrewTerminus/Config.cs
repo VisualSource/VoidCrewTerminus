@@ -19,6 +19,33 @@ internal static class TerminusConfig
     [BindConfig("lobby", 0.6f, "Duration fade affect between ship when after ship selection")]
     internal static ConfigEntry<float> LobbyShipFadeDuration;
 
+    // Upgrade Forge — meter & progression
+    [BindConfig("forge", 20f, "Forge Meter fill per successful sector jump")]
+    internal static ConfigEntry<float> ForgeMeterPerSectorJump;
+
+    [BindConfig("forge", 1f, "Forge Meter fill per alloy spent at the Alloy Terminal")]
+    internal static ConfigEntry<float> ForgeMeterPerAlloy;
+
+    [BindConfig("forge", 100f, "Forge Meter threshold for L1→L2; multiplied by ForgeMeterLevelMultiplier each subsequent level")]
+    internal static ConfigEntry<float> ForgeMeterBaseThreshold;
+
+    [BindConfig("forge", 1.5f, "Multiplicative scale applied to meter threshold per Forge level")]
+    internal static ConfigEntry<float> ForgeMeterLevelMultiplier;
+
+    // Upgrade Forge — perk roll chances (0–1)
+    [BindConfig("forge", 0.15f, "Perk roll chance when upgrading with a Common relic")]
+    internal static ConfigEntry<float> PerkRollChanceCommon;
+
+    [BindConfig("forge", 0.40f, "Perk roll chance when upgrading with a Rare relic")]
+    internal static ConfigEntry<float> PerkRollChanceRare;
+
+    [BindConfig("forge", 0.75f, "Perk roll chance when upgrading with a Legendary relic")]
+    internal static ConfigEntry<float> PerkRollChanceLegendary;
+
+    // Upgrade Forge — sector escalation
+    [BindConfig("forge", 0.15f, "Fractional stat multiplier added to enemy HP and damage per DifficultyScalar tick")]
+    internal static ConfigEntry<float> EscalationStatScalarPerJump;
+
     internal static ConfigEntry<Vector3> FrigateLobbyHangerPosition;
     internal static ConfigEntry<Vector3> StrikerLobbyHangerPosition;
     internal static ConfigEntry<Vector3> DestroyerLobbyHangerPosition;
