@@ -19,6 +19,7 @@ namespace VoidCrewTerminus
             TerminusConfig.Init(Config);
             Harmony.CreateAndPatchAll(Assembly.GetExecutingAssembly());
             AssetLoader.TryLoadAssetBundlesNextToDLL();
+            VoidManager.Events.Instance.HostStartSession += (_, _) => VoidCrewTerminus.Forge.ForgeOverlayTable.ClearAll();
             Logger.LogInfo($"Plugin {MyPluginInfo.PLUGIN_GUID} is loaded!");
         }
     }
