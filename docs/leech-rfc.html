@@ -192,16 +192,6 @@
     }
     table.data td.muted { color: var(--muted); }
 
-    .pillrow { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 18px; }
-    .pillrow .pill {
-      background: var(--tag-bg);
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      padding: 3px 12px;
-      font-size: 12px;
-      color: var(--accent);
-    }
-
     .scene {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -249,10 +239,8 @@
   <ul>
     <li><a href="#host">Host Ship</a></li>
     <li><a href="#missile">Leech Missile</a></li>
-    <li><a href="#spawn">Spawn on Impact</a></li>
-    <li><a href="#variants">Leech Variants</a></li>
+    <li><a href="#leech">The Leech</a></li>
     <li><a href="#removal">EVA Removal</a></li>
-    <li><a href="#containment">Containment Failure</a></li>
     <li><a href="#escalation">Sector Escalation Tie-In</a></li>
     <li><a href="#awareness">Crew Awareness</a></li>
   </ul>
@@ -280,242 +268,171 @@
   <span class="pill">VoidCrewTerminus mod</span>
   <span class="pill">Design only</span>
   <br /><br />
-  Design-level proposal for a new combat encounter — a hostile carrier that fires Leech Missiles which spawn small parasitic robots on the player ship's hull. Players must EVA to remove them. This RFC extends the <a href="upgrade-forge-rfc.html" style="color:var(--accent)">Upgrade Forge</a>'s Sector Escalation system: the encounter gates behind a difficulty threshold and scales beyond it. For the technical companion, see <a href="leech-design.html" style="color:var(--accent)">leech-design.html</a>.
+  Design-level proposal for a new combat encounter — a hostile carrier that fires Leech Missiles which spawn parasitic robots on the player ship's hull. Players must EVA to remove them. Gates behind <code>DifficultyScalar &ge; 2</code> from the <a href="upgrade-forge-rfc.html" style="color:var(--accent)">Upgrade Forge</a>'s Sector Escalation system. For the technical companion, see <a href="leech-design.html" style="color:var(--accent)">leech-design.html</a>.
 </div>
 
 <h2 id="summary">Summary</h2>
 <p class="lead">
-  A familiar vanilla enemy class (identified pre-flight) gets a new weapon: the <strong>Leech Missile</strong>. On impact with the player ship it does no hull damage — instead, it deploys <strong>1–3 Leeches</strong>, small robotic parasites that attach to the hull. Most Leeches target a nearby module and degrade it; a smaller share chew through hull HP directly. The only way to remove a Leech is to <strong>EVA and hold a multi-tool on it</strong>, with periodic input prompts; missing a prompt causes the Leech to escape and re-attach somewhere else on the ship. The encounter is locked behind <code>DifficultyScalar &ge; 2</code> on the Upgrade Forge's <code>ForgeMeterController</code>, and several parameters scale up from there.
+  A vanilla enemy ship class gets a new weapon: the <strong>Leech Missile</strong>. On impact it does no hull damage — instead it deploys <strong>1–3 Leeches</strong>, small robotic parasites that latch onto the hull and degrade the nearest module (or chew on hull HP if no module is nearby). The only way to remove a Leech is to <strong>EVA and hold a multi-tool on it</strong> for a few seconds. The encounter is locked behind <code>DifficultyScalar &ge; 2</code> and scales beyond it.
 </p>
 
 <h2 id="motivation">Motivation</h2>
 <p>
-  Sector Escalation (defined in the Upgrade Forge design) scales enemy <em>numbers</em> — HP, damage, loot tier. Two things it doesn't scale: <strong>encounter texture</strong> (deeper sectors still play the same combat loop, just harder) and <strong>crew role pressure</strong> (deep-sector fights still resolve at the cockpit, the guns, and the reactor). The TODO file at the project root names the gap: "<em>lech — launched via missiles, attaches to ship and causes damage to ship until removed by a player like Star Wars buzz droids — small robotic spider</em>."
+  Sector Escalation (defined in the Upgrade Forge RFC) scales enemy <em>numbers</em> — HP, damage, loot tier. Two things it doesn't scale: <strong>encounter texture</strong> (deep-sector combat is still cockpit + guns + reactor) and <strong>crew role pressure</strong>. The TODO file names the gap: <em>"leech — launched via missiles, attaches to ship and causes damage until removed by a player like Star Wars buzz droids."</em>
 </p>
-<p>This RFC turns that note into a coherent encounter. The aim is to:</p>
+<p>This RFC turns that into an encounter. The aim is to:</p>
 <ul class="bullets">
   <li>Add a deep-sector encounter that forces crew to <strong>leave their stations</strong> mid-combat and EVA.</li>
-  <li>Use the Upgrade Forge's existing <code>DifficultyScalar</code> as the natural gating + tuning knob.</li>
-  <li>Reuse vanilla systems (hull HP, module repair, EVA, external observation tools) wherever possible — minimize new content surface area.</li>
-  <li>Reward investment in <strong>crew positioning</strong> (someone watching the hull) and <strong>point-defense layering</strong>.</li>
+  <li>Use the Upgrade Forge's existing <code>DifficultyScalar</code> as the gating + tuning knob.</li>
+  <li>Reuse vanilla systems (hull HP, module repair, EVA, multi-tool, external observation) wherever possible.</li>
 </ul>
 
 <h2 id="goals">Goals &amp; Non-Goals</h2>
 <h3>Goals</h3>
 <ul class="bullets">
   <li>One new combat archetype that <strong>forces EVA mid-combat</strong>.</li>
-  <li><strong>Reuse a vanilla enemy ship</strong> as the Leech Missile carrier — no new ship type.</li>
-  <li><strong>Reuse vanilla observation tools</strong> (telescope module, cockpit 3rd-person, gunner external view) for crew awareness — no bespoke hull-status UI.</li>
-  <li><strong>Reuse the vanilla multi-tool</strong> for removal — no new equippable.</li>
-  <li>Tie the encounter to the Upgrade Forge's <code>DifficultyScalar</code>; scale multiple parameters with it.</li>
+  <li><strong>Reuse a vanilla enemy ship</strong> as the carrier — no new ship type.</li>
+  <li><strong>Reuse the multi-tool</strong> for removal — no new equippable.</li>
+  <li><strong>Reuse vanilla observation tools</strong> (telescope, 3rd-person cockpit, gunner external view) for crew awareness — no bespoke hull-status UI.</li>
+  <li>Tie the encounter to the Upgrade Forge's <code>DifficultyScalar</code>; scale parameters with it.</li>
   <li>Host-arbitrated multiplayer via VoidManager <code>ModMessage</code>, matching the Upgrade Forge pattern.</li>
 </ul>
 
 <h3>Non-Goals</h3>
 <ul class="bullets">
-  <li>No new enemy ship type. (A vanilla class is patched to carry the new weapon.)</li>
-  <li>No new equippable tools. (The existing multi-tool removes Leeches via patched behavior.)</li>
-  <li>No internal destruction of Leeches in v1. (Killable-from-inside is a future variant.)</li>
-  <li>No bespoke hull-status UI. (Crew observation reuses vanilla tools.)</li>
-  <li>No persistence — Leech state, like all run state, resets on ship death.</li>
-  <li>No new loot or rewards from the encounter; existing combat reward systems apply.</li>
+  <li>No new enemy ship type. A vanilla class is patched to carry the new weapon.</li>
+  <li>No new equippable tools. The existing multi-tool removes Leeches.</li>
+  <li>No internal destruction of Leeches in v1. (Future variant.)</li>
+  <li>No bespoke hull-status UI. Crew observation reuses vanilla tools.</li>
+  <li>No persistence. Leech state, like all run state, resets on ship death.</li>
+  <li>No new loot or rewards from the encounter.</li>
 </ul>
 
 <h2 id="host">Host Ship</h2>
 <p>
-  A vanilla enemy class — identified during the pre-flight decompile step — is patched to carry the Leech Missile weapon at appropriate scalar levels. The Host is not a new ship: same model, same AI, same spawn tables. The patched behavior swaps (or supplements) its standard weapon with the Leech Missile launcher once <code>DifficultyScalar &ge; 2</code>.
+  A vanilla enemy class — identified during the pre-flight decompile step — is patched to carry the Leech Missile launcher at <code>DifficultyScalar &ge; 2</code>. Same model, same AI, same spawn tables. The patched behavior swaps (or supplements) its standard weapon with the new launcher.
 </p>
 <div class="callout note">
   <span class="label">Why reuse</span>
-  Building a new enemy ship adds an entire content pipeline (model, AI, spawn registration, balancing) on top of a feature that already introduces a new projectile, two leech variants, an EVA mini-interaction, and host-arbitrated multiplayer state. Reusing a known silhouette also gives players an instant "uh oh, that's the Leech carrier" tell once they've fought one.
+  A new enemy ship adds a full content pipeline (model, AI, spawn registration, balancing) on top of a feature that already introduces a new projectile, a new attached-entity, an EVA interaction, and host-arbitrated state. Reusing a known silhouette also gives players the "uh oh, that's the Leech carrier" tell once they've seen one.
 </div>
 
 <h2 id="missile">Leech Missile</h2>
-<p>The projectile is half the encounter. It's the only counterplay window before Leeches land on the hull.</p>
+<p>The projectile is the only counterplay window before Leeches land on the hull.</p>
 <ul class="bullets">
   <li><strong>Homing with a finite turn rate.</strong> Piloting alone can't shake a fresh shot, but a hard maneuver can outrun its turning circle.</li>
-  <li><strong>Interceptable by any weapon hit.</strong> Main guns, fighter mounts, point-defense — anything that connects kills the missile mid-flight.</li>
-  <li><strong>Engaged by vanilla point-defense automatically</strong>, but the missile is <strong>resistant</strong> — higher HP and a fast terminal phase mean PD often catches it early-sector and frequently slips through late-sector. PD is a layered defense, not a free pass.</li>
-  <li><strong>Distinct silhouette and audio warble</strong> — visually longer than vanilla projectiles, a steady audible warble (constant pitch, no escalation) — so crews can learn to recognize and prioritize them.</li>
+  <li><strong>Interceptable by any weapon hit.</strong> Main guns, fighter mounts, point-defense — anything that connects kills the missile.</li>
+  <li><strong>Engaged by vanilla point-defense automatically</strong>, but missiles are resistant — PD catches them early-sector and frequently slips late-sector. PD is a layered defense, not a free pass.</li>
+  <li><strong>Distinct silhouette and audio warble</strong> so crews can learn to recognize and prioritize them.</li>
 </ul>
 
-<h2 id="spawn">Spawn on Impact</h2>
+<h2 id="leech">The Leech</h2>
 <p>
-  When a Leech Missile hits the player ship, it does <strong>no hull damage</strong>. The impact deploys a number of Leeches, scaled by <code>DifficultyScalar</code>:
+  When a Leech Missile hits the player ship, it does <strong>no hull damage</strong>. The impact deploys 1–3 Leeches, scaling with <code>DifficultyScalar</code> (see <a href="#scaling">Scaling Reference</a>). Each Leech anchors where it landed and immediately starts working:
 </p>
-<table class="data">
-  <tr><th>Scalar tier</th><th>Leeches per missile (random range)</th><th>Notes</th></tr>
-  <tr><td class="k">0–1</td><td>—</td><td class="muted">Gate not met; Leech Missiles do not appear.</td></tr>
-  <tr><td class="k">2–3</td><td>1–2</td><td class="muted">First appearance. Cheap-hit minimum.</td></tr>
-  <tr><td class="k">4–5</td><td>1–3</td><td class="muted">Full range.</td></tr>
-  <tr><td class="k">6+</td><td>2–3</td><td class="muted">Floor rises — no more lucky 1-leech impacts.</td></tr>
-</table>
-<p>
-  The 3-Leech ceiling is a hard cap regardless of scalar. Multiple missiles in flight, however, can compound — a 3-missile salvo across high scalar can put up to 9 Leeches on the ship before any are removed.
-</p>
-<div class="callout warn">
-  <span class="label">Concurrency safety rail</span>
-  Total active Leeches on the player ship are capped at <strong>8 simultaneously</strong>. When the cap is hit, subsequent missile impacts trigger impact VFX and consume the projectile, but spawn no Leeches (the in-fiction excuse: the hull is saturated with electromagnetic noise from existing Leeches). This prevents runaway swarm states from soft-bricking a run.
-</div>
-
-<h2 id="variants">Leech Variants</h2>
-<p>Each spawned Leech is one of two types. Type is decided <strong>deterministically by where it anchored</strong>, not by RNG:</p>
-<div class="pillrow">
-  <span class="pill">Module-Biter (B-type)</span>
-  <span class="pill">Hull-Biter (A-type)</span>
-</div>
 <ul class="bullets">
-  <li>If the Leech anchors within proximity of a module → <strong>Module-Biter (B-type)</strong>. Locks onto the nearest module.</li>
-  <li>If it anchors outside that proximity → <strong>Hull-Biter (A-type)</strong>. Locks onto the hull section it's on.</li>
+  <li><strong>If a module is nearby</strong>, the Leech locks onto it and applies a <strong>flat effectiveness debuff</strong> (e.g. engines at 50% thrust, weapons at 70% fire rate) plus a slow tick of module HP damage. The debuff lifts when the Leech is removed; HP is recovered via vanilla module repair.</li>
+  <li><strong>If no module is nearby</strong>, the Leech chews the hull section it's on at a visible bite cadence — a slow audible chomp from inside the ship. Left long enough, it breaches the section by vanilla rules and depressurizes the room.</li>
+  <li><strong>Multiple Leeches on the same module do not stack the debuff</strong> (flat multiplier applies once). HP damage from each does stack.</li>
+  <li><strong>If the targeted module is destroyed</strong>, the Leech self-destructs — "mission complete" — with VFX/audio and no AOE damage.</li>
 </ul>
 <div class="callout note">
-  <span class="label">Why deterministic, not random</span>
-  Players can angle their ship so incoming missiles strike bare hull sections — and earn Hull-Biters-only outcomes for their flying. Random variant assignment would erase that skill expression. Position-driven assignment also reads correctly: when a Leech lands next to your engines, of course it goes for the engines.
+  <span class="label">Why position-driven, not random</span>
+  Players can angle their ship so missiles strike bare hull sections — and earn hull-chewer outcomes (slower, recoverable damage) instead of module-biters for their flying. Position-driven behavior also reads correctly: the Leech that lands next to your engines is going for the engines.
 </div>
-
-<h3>Module-Biter (B-type)</h3>
-<p>The default variant. While attached:</p>
-<ul class="bullets">
-  <li>Applies a <strong>flat effectiveness debuff</strong> to the target module (e.g. engines at 50% thrust, weapons at 70% fire rate). Removed when the Leech is removed.</li>
-  <li>Also deals <strong>HP damage</strong> to the module on a slow tick. Vanilla module repair handles recovery after the Leech is gone.</li>
-  <li>Multiple Leeches on the same module <strong>do not stack the debuff</strong> (a flat multiplier is applied if any Module-Biter is attached). HP damage from each Leech does stack.</li>
-  <li>If the targeted module is destroyed (by the Leech or by other fire), the Leech <strong>self-destructs</strong> — "mission complete" — with a graceful VFX/audio cue and no AOE damage.</li>
-</ul>
-
-<h3>Hull-Biter (A-type)</h3>
-<p>The rarer variant. While attached:</p>
-<ul class="bullets">
-  <li>Deals damage to the <strong>hull HP of the section it's on</strong> on a visible <strong>bite cadence</strong> (~one chomp every couple of seconds, audible from inside the ship). Vanilla hull-damage and breach mechanics handle the consequences.</li>
-  <li>No debuff layer — the bite damage is its only effect.</li>
-  <li>If left unattended long enough, will breach the section by vanilla rules and trigger room depressurization. The encounter then layers a hull-patching emergency on top of the Leech removal.</li>
-</ul>
+<div class="callout warn">
+  <span class="label">Concurrency safety rail</span>
+  Total active Leeches on the player ship are capped at <strong>8 simultaneously</strong>. When the cap is hit, subsequent missile impacts play VFX and consume the projectile, but spawn no Leeches (in-fiction excuse: hull is saturated with EM noise). This prevents runaway swarms from soft-bricking a run.
+</div>
 
 <h2 id="removal">EVA Removal</h2>
 <p>
-  Leeches are <strong>EVA-only</strong>. Inside the ship, there is no way to engage them in v1. (See <a href="#future">Future Variants</a> for the "internal destruction" option.)
+  Leeches are <strong>EVA-only</strong>. Inside the ship, there is no way to engage them in v1. A crewmember suits up, exits the airlock, mag-walks to the Leech, aims the <strong>existing multi-tool</strong>, and holds it on the target for <strong>3–5 seconds</strong> (scales with <code>DifficultyScalar</code>). The Leech detaches and dies. Done.
 </p>
-<ul class="bullets">
-  <li>A crewmember suits up, exits via the airlock, and approaches the Leech on the hull.</li>
-  <li>They aim the <strong>existing multi-tool</strong> at it and <strong>hold to remove</strong>. Removal takes ~3–5 seconds (scales with <code>DifficultyScalar</code>).</li>
-  <li>While holding, periodic <strong>containment input prompts</strong> appear (see next section). Make them all → Leech detaches and dies. Miss one → Leech escapes.</li>
-  <li>Removal cannot be performed remotely. Cannot be done from inside through the hull. Cannot be done while the Leech is mid-crawl after an escape.</li>
-</ul>
+<p>
+  No mini-game, no input prompts, no escape mechanic. The cost is the EVA itself — leaving your station, traversing the hull, standing still and exposed while you hold the trigger.
+</p>
 <div class="callout ok">
   <span class="label">Why EVA-only</span>
-  The whole identity of the encounter is "stop what you're doing, suit up, and go outside." Watering that down — letting people shoot Leeches through the hull from internal turrets — collapses the design into "another HP-bar enemy that happens to render on the hull." The EVA commitment is the design.
+  The identity of the encounter is "stop what you're doing, suit up, and go outside." Watering that down — letting people shoot Leeches through the hull from internal turrets — collapses the design into "another HP bar that happens to render on the hull." The EVA commitment is the design.
 </div>
-
-<h2 id="containment">Containment Failure</h2>
-<p>
-  During hold-to-remove, the Leech tries to break containment. The player must complete brief input prompts (Void Crew's existing boot-panel-style mini-prompts) under a time pressure. Missing a prompt → containment fails.
-</p>
-<ul class="bullets">
-  <li>Prompt count per removal: <strong>1 (intro scalar) → 3 (deep scalar)</strong>.</li>
-  <li>Prompt window: <strong>1.5s (intro) → 1.0s (deep)</strong>.</li>
-  <li>On failure, the Leech detaches, plays a brief "wake-up" animation, and <strong>crawls to a new random hull location</strong> where it re-anchors (re-rolling its A/B type at the new location). Damage <strong>pauses during the crawl</strong>.</li>
-  <li><strong>One escape per Leech.</strong> A Leech that has escaped once cannot escape again — the next containment attempt resolves normally regardless of missed prompts. This guarantees the encounter ends in finite time.</li>
-</ul>
 
 <h2 id="escalation">Sector Escalation Tie-In</h2>
 <p>
   The Upgrade Forge's <code>ForgeMeterController.DifficultyScalar</code> increments by +1 per sector jump. This RFC adds the Leech Carrier encounter to the things that scale with it:
 </p>
 <ul class="bullets">
-  <li><strong>Gating.</strong> Leech Missiles only appear at <code>DifficultyScalar &ge; 2</code>. Players have at least one full sector to learn the rest of the game before this threat archetype lands.</li>
-  <li><strong>Encounter scaling.</strong> Multiple parameters scale beyond the gate — see <a href="#scaling">Scaling Reference</a>.</li>
-  <li><strong>Tuning knob compatibility.</strong> All scaling values live in <code>TerminusConfig</code> and are tunable without rebuilding.</li>
+  <li><strong>Gating.</strong> Leech Missiles only appear at <code>DifficultyScalar &ge; 2</code>. Players have a full sector to learn the rest of the game before this archetype lands.</li>
+  <li><strong>Encounter scaling.</strong> Leeches per missile, missile turn rate / HP / speed, host fire interval, removal time, and damage rates all scale beyond the gate — see <a href="#scaling">Scaling Reference</a>.</li>
+  <li><strong>Tunable.</strong> All scaling values live in <code>TerminusConfig</code> and are tunable without rebuilding.</li>
 </ul>
-<div class="callout note">
-  <span class="label">Composition with the Upgrade Forge</span>
-  Upgrade Forge Phase 6 (Sector Escalation) and this encounter both light up at roughly the same scalar. They cooperate: deeper sectors mean tougher enemies AND new threat archetypes AND better loot. The "do we jump again?" decision gains weight.
-</div>
 
 <h2 id="awareness">Crew Awareness</h2>
 <p>
-  The encounter operates on the principle that <em>someone on the crew should be watching the ship</em>. Awareness is a crew communication problem, by design — no bespoke alert popup, no hull-status console.
+  Awareness is a crew communication problem, by design — no bespoke alert popup, no hull-status console.
 </p>
 <ul class="bullets">
-  <li><strong>Visual awareness comes from existing tools</strong>: the ship's telescope module (external 3rd-person view), the pilot's 3rd-person cockpit view, and the external view available at gunner turret stations.</li>
-  <li><strong>Communication is the binding agent.</strong> Whoever's on lookout calls out Leech positions to whoever's free to EVA. This rewards Void Crew's existing role specialization.</li>
-  <li><strong>Audio cues are diegetic</strong> — bite/chomp/impact sounds travel through the hull and can be heard by crew inside the affected section. Acts as a secondary "something's wrong nearby" signal but doesn't substitute for visual confirmation.</li>
-  <li><strong>One global cue</strong>: the first Leech of an encounter triggers a subtle ship-wide hull-resonance hum so even idle crew know the encounter has started. After that first sting, all audio is purely diegetic.</li>
+  <li><strong>Visual awareness reuses existing tools</strong>: telescope module, 3rd-person cockpit, gunner external view.</li>
+  <li><strong>Audio cues are diegetic</strong> — bite/chomp sounds travel through the hull and can be heard from inside the affected section.</li>
+  <li><strong>One global sting</strong>: the first Leech of an encounter triggers a subtle ship-wide hull-resonance hum so idle crew know it has started. After that, audio is purely diegetic.</li>
 </ul>
 
 <h2 id="flow">A Sample Encounter</h2>
-<p>To make this concrete, here's how a Leech encounter might unfold mid-run, at <code>DifficultyScalar 4</code>:</p>
+<p>At <code>DifficultyScalar 4</code>, mid-fight in sector 5:</p>
 
 <div class="scene">
   <div class="scene-label">T+0s — Inbound</div>
   <p>
-    Mid-fight in sector 5. The pilot, watching from the cockpit's 3rd-person view, sees a familiar enemy frigate. A long, oddly-colored missile detaches from its launcher, audibly warbling. Vanilla projectile warning pings. Pilot calls "Leech missile, port side." Gunner pivots a turret — too slow, the missile slips inside the gun arc. Point-defense engages and lands a hit, but the missile keeps coming. Impact.
+    The pilot, watching from 3rd-person, sees a familiar frigate. A long oddly-colored missile detaches, audibly warbling. Vanilla projectile warning pings. Pilot calls "Leech missile, port side." Gunner pivots — too slow. Point-defense lands a hit, but the missile keeps coming. Impact.
   </p>
 </div>
 
 <div class="scene">
   <div class="scene-label">T+3s — Spawn</div>
   <p>
-    Hull-wide resonance hum — the encounter's opening sting. The missile bursts on impact and deploys 2 Leeches. One lands beside the starboard engine module — Module-Biter, locks on. The other lands on an exposed hull section near the medbay — Hull-Biter. Engines drop to 60% thrust. From inside the medbay, the crewmate on stim duty hears a slow metallic <em>chomp</em> from the hull above her head.
+    Hull-wide resonance hum. The missile bursts and deploys 2 Leeches. One lands beside the starboard engine — locks on. The other lands on an exposed hull section near the medbay — no module nearby, starts chewing the plate. Engines drop to 60% thrust. From inside the medbay, the crewmate hears a slow metallic <em>chomp</em> from above her head.
   </p>
 </div>
 
 <div class="scene">
-  <div class="scene-label">T+12s — Triage</div>
+  <div class="scene-label">T+15s — Triage</div>
   <p>
-    Captain calls it: "Engine Leech first — we lose thrust we lose the fight. Hull Leech second." Crewmate suits up, exits through the rear airlock, mag-walks to the engine Leech. Aims the multi-tool, starts holding. After 2 seconds, a containment prompt appears — "Tap A!" — she taps it in time. Second prompt 2 seconds later — same, in time. Third — she fumbles. The Leech detaches, sparks fly, and it scurries off across the hull. Engines snap back to 100% — for now.
+    Captain calls it: "Engine Leech first — we lose thrust we lose the fight." Crewmate suits up, exits the rear airlock, mag-walks to the engine Leech. Aims the multi-tool, holds. Four seconds later, pop. Engines snap back to 100%.
   </p>
 </div>
 
 <div class="scene">
-  <div class="scene-label">T+30s — Chase</div>
+  <div class="scene-label">T+30s — Hull</div>
   <p>
-    The escaped Leech re-anchors at a new spot — happens to be near the cargo module. Re-rolls as Module-Biter, locks on. Cargo capacity drops to 60%. The crewmate, still on EVA, jogs across the hull to the new position. Holds the multi-tool. This time all prompts land. The Leech detaches with a satisfying pop. One down.
-  </p>
-  <p>
-    Meanwhile, the Hull-Biter has been chewing on the medbay's outer plate. Hull HP for that section is at 40%. If she doesn't get there soon, the medbay breaches and depressurizes.
-  </p>
-</div>
-
-<div class="scene">
-  <div class="scene-label">T+50s — Resolution</div>
-  <p>
-    She reaches the Hull-Biter. The chomp cadence is louder now — she can hear it through her suit. Hold. Three prompts, all landed. Pop. Section hull stops bleeding. Crewmate calls "Hull clear" and heads back to the airlock. Total downtime: ~50 seconds, no module loss, no breach. Engines and cargo will need a small repair pass after the fight to top up HP.
+    She jogs across the hull to the second Leech. The chomp cadence is louder now — she can hear it through her suit. Holds the multi-tool. Pop. Hull section stops bleeding at 40%. "Hull clear." She heads back to the airlock. Total downtime: ~30 seconds, no module lost, no breach. Engines and hull will need a small repair pass after the fight.
   </p>
 </div>
 
 <h2 id="scaling">Scaling Reference</h2>
-<p>All values live in <code>TerminusConfig</code> and are starter values intended for playtest tuning.</p>
+<p>All values live in <code>TerminusConfig</code> and are starter values for playtest tuning.</p>
 <table class="data">
-  <tr><th>Parameter</th><th>Scalar 2–3 (intro)</th><th>Scalar 4–5 (full)</th><th>Scalar 6+ (deep)</th></tr>
-  <tr><td class="k">Leeches per missile</td><td>1–2</td><td>1–3</td><td>2–3 (cap 3)</td></tr>
-  <tr><td class="k">Missile turn rate</td><td>1.0×</td><td>1.3×</td><td>1.6×</td></tr>
-  <tr><td class="k">Missile HP (PD resistance)</td><td>1.0×</td><td>1.5×</td><td>2.0×</td></tr>
-  <tr><td class="k">Missile speed</td><td>1.0×</td><td>1.15×</td><td>1.3×</td></tr>
+  <tr><th>Parameter</th><th>Scalar 2–3</th><th>Scalar 4–5</th><th>Scalar 6+</th></tr>
+  <tr><td class="k">Leeches per missile</td><td>1–2</td><td>1–3</td><td>2–3</td></tr>
+  <tr><td class="k">Missile turn / HP / speed</td><td>1.0×</td><td>1.3× / 1.5× / 1.15×</td><td>1.6× / 2.0× / 1.3×</td></tr>
   <tr><td class="k">Host missile fire interval</td><td>30 s</td><td>25 s</td><td>20 s</td></tr>
-  <tr><td class="k">Containment prompts per removal</td><td>1</td><td>2</td><td>3</td></tr>
-  <tr><td class="k">Prompt response window</td><td>1.5 s</td><td>1.2 s</td><td>1.0 s</td></tr>
   <tr><td class="k">Hold-to-remove duration</td><td>3 s</td><td>4 s</td><td>5 s</td></tr>
-  <tr><td class="k">B-type debuff magnitude</td><td>−25%</td><td>−40%</td><td>−50%</td></tr>
-  <tr><td class="k">B-type module HP damage rate</td><td>1.0×</td><td>1.5×</td><td>2.0×</td></tr>
-  <tr><td class="k">A-type chomp damage</td><td>1.0×</td><td>1.5×</td><td>2.0×</td></tr>
+  <tr><td class="k">Module debuff magnitude</td><td>−25%</td><td>−40%</td><td>−50%</td></tr>
+  <tr><td class="k">Damage rates (module &amp; hull)</td><td>1.0×</td><td>1.5×</td><td>2.0×</td></tr>
 </table>
 <p><strong>Constants (do not scale):</strong></p>
 <ul class="bullets">
-  <li>A/B variant proximity-to-module threshold</li>
-  <li>One escape per Leech</li>
-  <li>Concurrent-Leech ship cap (8)</li>
+  <li>Concurrent-Leech cap (8)</li>
   <li>Self-destruct on targeted-module destruction</li>
-  <li>Concurrency safety rail behavior on missile impact</li>
+  <li>Position-driven module-vs-hull behavior threshold</li>
 </ul>
 
 <h2 id="open">Open Questions</h2>
-<p>Deferred to playtest rather than locked at design time.</p>
 <ul class="bullets">
-  <li><strong>Which vanilla enemy class is the Host?</strong> Pre-flight decompile to identify a mid-tier frigate or similar that already appears in deeper sectors. Once identified, the patch surface is specific.</li>
-  <li><strong>Does vanilla point-defense already detect custom projectiles?</strong> If yes, free integration. If no, we need to register the Leech Missile as a valid PD target.</li>
-  <li><strong>Does the vanilla projectile-warning system pick up custom projectiles?</strong> Affects whether the "incoming missile" alert fires automatically or needs a patched-in announcement.</li>
-  <li><strong>EVA tool interaction shape.</strong> Does the multi-tool already have a "hold to do thing" gesture we can hook, or do we need a new interaction state? Pre-flight check.</li>
+  <li><strong>Which vanilla enemy class is the Host?</strong> Pre-flight decompile to identify a mid-tier frigate that already appears in deeper sectors.</li>
+  <li><strong>Does vanilla point-defense detect custom projectiles?</strong> If yes, free integration. If no, register the Leech Missile as a valid PD target.</li>
+  <li><strong>Does the vanilla projectile-warning system pick up custom projectiles?</strong> Affects whether the "incoming missile" alert fires automatically.</li>
+  <li><strong>Multi-tool hold gesture.</strong> Does the multi-tool already have a "hold to do thing" gesture we can hook, or do we need a new interaction state?</li>
   <li><strong>Concurrency cap value.</strong> 8 is the starter — playtest may push it up or down.</li>
-  <li><strong>Containment prompt UI.</strong> Reuse the existing boot-panel UI element, or author a new bespoke prompt? Cheap to reuse; depends on whether the existing element looks right in the EVA HUD context.</li>
 </ul>
 
 <h2 id="risks">Risks &amp; Mitigations</h2>
@@ -527,23 +444,19 @@
   </tr>
   <tr>
     <td>Encounter punishing for solo / low-headcount crews — pilot can't both fly and EVA.</td>
-    <td class="muted">Encounter intentionally rewards crew. Solo players will lose modules and take hull damage — that's a known cost of playing solo at deep sectors. Sector Escalation gates the encounter so solos can extract earlier.</td>
-  </tr>
-  <tr>
-    <td>Containment prompts feel mashy / inputs feel disconnected from EVA fiction.</td>
-    <td class="muted">Reuse the boot-panel prompt grammar players already know. If reuse looks wrong in HUD, author a bespoke EVA-specific prompt UI in Phase: Polish.</td>
+    <td class="muted">Encounter intentionally rewards crew. Solo players will lose modules and take hull damage at deep sectors — a known cost of playing solo. Sector gating lets solos extract earlier.</td>
   </tr>
   <tr>
     <td>Leeches stacking on the same module → module destroyed before crew can EVA.</td>
-    <td class="muted">Non-stacking debuff multiplier (debuff cap is one Leech's worth, even if 3 are on the same module). HP damage still stacks, so it remains a threat, but not an unrecoverable one.</td>
+    <td class="muted">Non-stacking debuff multiplier. HP damage still stacks, but at a recoverable rate.</td>
   </tr>
   <tr>
-    <td>Concurrency safety rail (8 cap) makes the encounter trivially defeatable late-run — fly the ship into missiles to "tank out" the cap.</td>
-    <td class="muted">Each missile still consumes a projectile slot, so absorbing 8 Leeches' worth still requires several impacts. If exploit emerges, reduce cap, or add cap-recovery behavior over time.</td>
+    <td>Concurrency cap (8) makes the encounter trivial late-run by tanking impacts.</td>
+    <td class="muted">Each missile still consumes a projectile slot — absorbing 8 Leeches' worth requires several impacts. If exploit emerges, reduce cap or add slow cap-recovery.</td>
   </tr>
   <tr>
-    <td>EVA traversal across hull is slow → encounter resolves on a 60–90s timeline that drags combat.</td>
-    <td class="muted">Per-scalar fire interval tuning ensures encounters don't overlap. Hold-to-remove duration is short (3–5s). If still slow, mag-boot traversal speed is a vanilla knob.</td>
+    <td>EVA traversal slow → encounter drags combat into a 60–90s tail.</td>
+    <td class="muted">Per-scalar fire interval ensures encounters don't overlap. Hold-to-remove is short (3–5s). Mag-boot traversal speed is a vanilla knob.</td>
   </tr>
   <tr>
     <td>Multiplayer desync — clients see Leeches in different states.</td>
@@ -555,53 +468,43 @@
 
 <h3>New enemy ship type as Host</h3>
 <p>
-  Design a brand-new ship — model, AI, spawn registration. <strong>Rejected</strong> because the repo has no enemy authoring infrastructure yet; building it on top of the Leech feature triples scope. A patched vanilla class is enough.
+  Design a brand-new ship — model, AI, spawn registration. <strong>Rejected</strong> — the repo has no enemy authoring infrastructure yet; building it on top of the Leech feature triples scope. A patched vanilla class is enough.
 </p>
 
-<h3>Random A/B variant assignment</h3>
+<h3>Distinct A-type / B-type Leech variants</h3>
 <p>
-  Roll each Leech's variant on spawn from a probability table. <strong>Rejected</strong> because it erases the skill expression of "fly the ship so missiles hit bare hull." Deterministic position-driven variant assignment also reads better — the Leech that lands next to your engines is going for the engines, not by lottery.
+  Two named variants (Module-Biter and Hull-Biter) with separate behavior tuning. <strong>Rejected</strong> — the variant distinction can be expressed as a single behavior driven by spawn position (module nearby vs. not), saving a parallel authoring track for very little additional game-feel gain.
+</p>
+
+<h3>Containment input prompts during removal</h3>
+<p>
+  Periodic on-screen prompts during the hold; missing one lets the Leech escape and re-anchor. <strong>Rejected</strong> — adds a QTE loop and a chase loop on top of the EVA. The EVA itself is already the commitment; layering a mini-game inside it dilutes the focus and roughly doubles the encounter timeline.
 </p>
 
 <h3>Internal destruction (kill Leeches with internal turrets)</h3>
 <p>
-  Let players engage Leeches through the hull from inside. <strong>Rejected for v1</strong> because it collapses the EVA-centric identity of the encounter. <em>Captured as a future variant</em> for a deeper-sector "armored" Leech subtype.
+  Let players engage Leeches through the hull from inside. <strong>Rejected for v1</strong> — collapses the EVA-centric identity. <em>Captured as a future variant</em> for a deeper-sector "armored" Leech.
 </p>
 
 <h3>Dedicated EVA tool (Leech Pry-Bar)</h3>
 <p>
-  Author a new equippable specifically for Leech removal. <strong>Rejected for v1</strong> because the existing multi-tool is enough and adding a new tool means a new pickup, a new UI slot, and new tutorialization. <em>Captured as a future variant</em>.
-</p>
-
-<h3>Crawling-by-default Leeches</h3>
-<p>
-  Leeches actively patrol or seek across the hull. <strong>Rejected for v1</strong> because hull-surface locomotion on arbitrary mesh geometry is a significant engineering investment. Static-with-escape-on-failure preserves enough drama; mobile Leeches are a future variant.
-</p>
-
-<h3>Pure RNG containment failure (no input prompts)</h3>
-<p>
-  Random per-second roll for containment break, no player agency. <strong>Rejected</strong> because it feels unfair in multiplayer ("EVA player just lost 30 seconds to the dice"). Hybrid hold + prompts gives players ownership of the outcome.
-</p>
-
-<h3>Pure input-sequence removal (no hold)</h3>
-<p>
-  Removal is purely a button-mash mini-game, no hold period. <strong>Rejected</strong> because it loses the "committed to the spot" tension of hold-to-remove and trivializes the encounter into a QTE.
+  Author a new equippable specifically for Leech removal. <strong>Rejected for v1</strong> — the existing multi-tool is enough. <em>Captured as a future variant</em>.
 </p>
 
 <h3>Bespoke hull-status UI / alert popups</h3>
 <p>
-  Mod-side UI showing all attached Leech positions, plus on-attach alert popups. <strong>Rejected</strong> because the ship already has telescope, cockpit, and turret external views. Crew awareness should reuse existing tools, not be overridden by a mod-side cheat sheet.
+  Mod-side UI showing all attached Leech positions. <strong>Rejected</strong> — telescope, cockpit, and turret external views already exist. Crew awareness should reuse those, not be overridden by a mod-side cheat sheet.
 </p>
 
 <h2 id="future">Future Variants</h2>
-<p>Captured during design but explicitly out of scope for v1. Each is a meaningful addition once the core encounter is locked.</p>
+<p>Captured during design but out of scope for v1.</p>
 <ul class="bullets">
-  <li><strong>Internal-destructible armored Leeches</strong> — deep-sector subtype that can be shot through the hull with internal turrets, but with a steep cost (chip damage to your own hull). Re-introduces the "emergency button" without trivializing v1's EVA loop.</li>
-  <li><strong>Dedicated removal tool</strong> — a Leech Pry-Bar equippable that removes faster or with fewer prompts. Adds a build-decision layer ("do we bring the pry-bar?").</li>
-  <li><strong>Crawling Leeches with IK locomotion</strong> — full procedural spider-walk across the hull (Animation Rigging package), either random-walk or seeking. Requires hull-surface pathing infrastructure.</li>
-  <li><strong>Defensive lunge on close range</strong> — Leeches snap at the EVA crewmember during removal, interrupting the hold or chip-damaging the suit. Requires the IK locomotion foundation.</li>
-  <li><strong>Burrowing Leech subtype</strong> — fleeing Leeches penetrate the hull and become internal pests requiring a different removal mechanic. Effectively a whole second design pillar; reserved for v2.</li>
-  <li><strong>Self-destruct AOE on mission completion</strong> — destroyed module victims trigger a small explosion damaging adjacent systems. Adds escalation flavor; gated on playtest feedback that the current graceful self-destruct feels underwhelming.</li>
+  <li><strong>Internal-destructible armored Leeches</strong> — deep-sector subtype shootable through the hull with internal turrets, at a steep cost (chip damage to your own hull).</li>
+  <li><strong>Dedicated removal tool</strong> — a Leech Pry-Bar equippable that removes faster.</li>
+  <li><strong>Crawling Leeches</strong> — procedural spider-walk across the hull, either random-walk or seeking the EVA crew. Requires hull-surface pathing.</li>
+  <li><strong>Escape-and-re-anchor</strong> — Leeches break containment under input pressure during removal, scurrying to a new location. Adds drama once core encounter is locked.</li>
+  <li><strong>Defensive lunge</strong> — Leeches snap at the EVA crewmember during removal, chip-damaging the suit. Requires the crawling foundation.</li>
+  <li><strong>Burrowing subtype</strong> — fleeing Leeches penetrate the hull and become internal pests requiring a different removal mechanic.</li>
   <li><strong>Custom audio / visual polish pass</strong> — bespoke Leech model, missile model, VFX, SFX. v1 ships with primitives.</li>
 </ul>
 
