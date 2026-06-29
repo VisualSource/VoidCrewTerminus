@@ -6,6 +6,7 @@ using UnityEngine;
 using VoidCrewTerminus.Forge;
 using VoidManager.Chat.Router;
 using VoidManager.Utilities;
+using Object = UnityEngine.Object;
 
 namespace VoidCrewTerminus.Commands;
 
@@ -74,6 +75,40 @@ internal class GetLevelCommand : PublicCommand
             Messaging.Notification($"{module.name}: L{state.Level}");
         else
             Messaging.Notification($"{module.name}: L3 (vanilla, no overlay)");
+    }
+}
+
+internal class DumpTagsCommand : PublicCommand
+{
+    public override string[] CommandAliases() => new[] { "dumptags" };
+    public override string Description() => "[DevMode] Print the CsTags and runtime stat-tags of the nearest ship module";
+    public override List<Argument> Arguments() => [];
+    public override string[] UsageExamples() => ["!dumptags"];
+
+    public override void Execute(string arguments, int sender)
+    {
+        if (!TerminusConfig.EnableDevMode.Value) return;
+
+        var module = ModuleFinder.NearestToPlayer();
+        if (module == null)
+        {
+            Messaging.Notification("No module found nearby.");
+            return;
+        }
+
+        var initTags = module.CsTags;
+        var initNames = initTags != null && initTags.Length > 0
+            ? string.Join(", ", initTags.Select(t => ((Object)t).name))
+            : "(none)";
+        Messaging.Notification($"{module.name} — init tags: {initNames}");
+
+        var localTags = module.Stats.LocalTags();
+        var runtimeOnly = localTags
+            .Where(t => initTags == null || !initTags.Contains(t))
+            .Select(t => ((Object)t).name)
+            .ToList();
+        if (runtimeOnly.Count > 0)
+            Messaging.Notification($"{module.name} — runtime tags: {string.Join(", ", runtimeOnly)}");
     }
 }
 
