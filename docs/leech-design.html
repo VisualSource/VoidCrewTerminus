@@ -315,6 +315,7 @@
   <div class="section-label">Implementation</div>
   <ul>
     <li><a href="#architecture">Architecture</a></li>
+    <li><a href="#ship-exposure">Ship-level Leech Exposure</a></li>
     <li><a href="#filemap">File Map</a></li>
     <li><a href="#patches">Patch Surfaces</a></li>
     <li><a href="#networking">Multiplayer Sync</a></li>
@@ -473,9 +474,10 @@
 }</code></pre>
 <p>Behavior:</p>
 <ul class="bullets">
-  <li><strong>Debuff application.</strong> While any B-type is attached to a module, the module's effectiveness multiplier drops by the per-scalar magnitude (−25% / −40% / −50%). Implemented as a Harmony postfix on the module's effectiveness getter (target methods TBD pre-flight). <strong>Non-stacking</strong>: the debuff applies once regardless of how many B-types are on the module.</li>
-  <li><strong>Module HP damage.</strong> Every <code>moduleDamageTickSec</code> (~1.0s), deal <code>moduleDamagePerTick × scalarMultiplier</code> to the target module's vanilla HP. <strong>Stacking</strong>: each B-type ticks independently.</li>
-  <li><strong>Self-destruct trigger.</strong> Subscribe to the target module's destruction event (or poll its HP). When the module is destroyed, the leech plays self-destruct VFX/SFX and despawns. No AOE damage in v1.</li>
+  <li><strong>Debuff application.</strong> While any B-type is attached to a module, the module's effectiveness multiplier drops by the per-scalar magnitude (−25% / −40% / −50%). Implemented via the native <code>StatTagCollection</code> pipeline — a singleton <code>LeechModuleDebuffApplicator</code> implements <code>IModifierSource</code>, owns a per-module reference count, and on first attach pushes a category-tagged <code>StatMod</code> bundle into <code>module.Stats</code> via <code>ApplyModifiers</code>. On last detach it calls <code>RemoveModifier(this)</code>. No Harmony postfix on effectiveness getters. <strong>Non-stacking</strong> falls out naturally from the ref count. See <a href="#ship-exposure">Ship-level Leech Exposure</a> for the shared <code>CsTagRegistry</code> / <code>ModuleStatBundles</code> utilities.</li>
+  <li><strong>Module HP damage.</strong> Every <code>moduleDamageTickSec</code> (~1.0s), deal <code>moduleDamagePerTick × scalarMultiplier</code> to the target module's vanilla HP. <strong>Stacking</strong>: each B-type ticks independently. Direct value change — not a stat modifier.</li>
+  <li><strong>Self-destruct trigger.</strong> Subscribe to the target module's destruction event (or poll its HP). When the module is destroyed, the leech plays self-destruct VFX/SFX and despawns. Routes through <code>LeechModuleDebuffApplicator.Detach</code> so the ref count decrements correctly. No AOE damage in v1.</li>
+  <li><strong>Tag injection.</strong> The applicator's <code>StatMod</code> bundle carries <code>ModTagConfiguration { TagsToAdd = [ Module_Leech_Attached ] }</code>. The native pipeline attaches the tag on first apply and strips it on remove. Other systems (audio, future hooks) filter by <code>RequiredLocalTags = [ Module_Leech_Attached ]</code>.</li>
 </ul>
 
 <h2 id="avariant">Hull-Biter (A-type)</h2>
@@ -589,8 +591,70 @@
   <li><strong>Mod-side overlay, no game-data modification.</strong> Same pattern as the Upgrade Forge — no ScriptableObjects modified, no asset-bundle changes to the game install.</li>
   <li><strong>Host-arbitrated state.</strong> All authoritative state lives on the host's <code>LeechEncounterController</code> singleton. Clients hold a mirror that updates on inbound <code>ModMessage</code>s.</li>
   <li><strong>Per-leech MonoBehaviour.</strong> Each leech is a <code>LeechController</code> component attached as a child of the player ship transform. Position is in ship-local space so it follows during ship maneuvers.</li>
-  <li><strong>Reuses Upgrade Forge primitives.</strong> Reads <code>DifficultyScalar</code> from <code>ForgeMeterController</code>. Hooks into the same per-run reset events. Uses the same <code>ModMessage</code> registration discovery.</li>
+  <li><strong>Reuses Upgrade Forge primitives.</strong> Reads <code>DifficultyScalar</code> from <code>ForgeMeterController</code>. Hooks into the same per-run reset events. Uses the same <code>ModMessage</code> registration discovery. Reuses the forge's <code>CsTagRegistry</code> and <code>ModuleStatBundles</code> (see <a href="upgrade-forge-design.html#refinements">Forge Refinements</a>) for tag lookup and per-category stat lists.</li>
+  <li><strong>Native StatModifier pipeline for the B-type debuff.</strong> No Harmony postfix on effectiveness getters — the debuff is delivered via <code>module.Stats.ApplyModifiers</code> through a singleton <code>IModifierSource</code> applicator. Reference counting in the applicator delivers the design's non-stacking rule.</li>
+  <li><strong>Ship-level exposure of leech count.</strong> The encounter controller emits both tags (qualitative bucketing) and a custom <code>ModDynamicValue</code> / <code>ModDynamicCondition</code> pair (continuous scalar + gating), mirroring how the game exposes <code>BreakersFlipped</code>. See <a href="#ship-exposure">Ship-level Leech Exposure</a>.</li>
 </ul>
+
+<h2 id="ship-exposure">Ship-level Leech Exposure</h2>
+<p>
+  Other mods (and future leech-side effects) should be able to react to <em>how many leeches are currently on the ship</em> through the native modifier pipeline, the same way they can react to <code>BreakersFlipped</code>. The encounter controller exposes the count three ways: qualitative tag bucketing, a continuous scalar dynamic value, and a threshold dynamic condition.
+</p>
+
+<h3>Tag bucketing (qualitative)</h3>
+<p>
+  <code>LeechEncounterController</code> injects ship-level tags as the active count crosses thresholds. Bucketing transitions remove the old bucket and add the new one in one update.
+</p>
+<table class="data">
+  <tr><th>Tag</th><th>Active when…</th></tr>
+  <tr><td class="k">Ship_HasLeeches</td><td>count ≥ 1</td></tr>
+  <tr><td class="k">Ship_LeechSwarm_Small</td><td>1 ≤ count ≤ 2</td></tr>
+  <tr><td class="k">Ship_LeechSwarm_Heavy</td><td>3 ≤ count ≤ 5</td></tr>
+  <tr><td class="k">Ship_LeechSwarm_Critical</td><td>count ≥ 6</td></tr>
+</table>
+<p>
+  Other mods declare modifiers with <code>ModTagConfiguration.RequiredTags = [ Ship_LeechSwarm_Heavy ]</code> (or similar) to activate effects only during heavy infestation. Pure native-pipeline filtering, no bespoke hook.
+</p>
+
+<h3>LeechAttachedCountValue (continuous scalar)</h3>
+<p>
+  A custom <code>ModDynamicValue&lt;FloatModifier, float&gt;</code> subclass that exposes the live attached count as a <code>float</code> source for any modifier's <code>DynamicValue</code> slot. Implements:
+</p>
+<ul class="bullets">
+  <li><code>RecalculateValue()</code> — reads <code>LeechEncounterController.AttachedCount</code> on demand.</li>
+  <li><code>OnInitialize()</code> / <code>OnDestroy()</code> — registers/unregisters a listener on the controller's <code>AttachedCountChanged</code> event.</li>
+  <li><code>ValidateType()</code> — declares compatibility with <code>FloatModifier</code>.</li>
+  <li><code>DynamicValueDescription(...)</code> — tooltip string for inspector / debug output.</li>
+</ul>
+<p>
+  Update is push-based: the controller raises <code>AttachedCountChanged</code> on every attach / detach / flee; the value calls inherited <code>InformValueChange()</code>, which fires <code>OnValueChange</code> on each subscribed <code>StatMod</code>. No per-frame polling.
+</p>
+
+<h3>LeechAttachedCountCondition (threshold gating)</h3>
+<p>
+  A parallel <code>ModDynamicCondition</code> subclass for the condition slot. Constructor takes a threshold and a comparison operator (<code>≥</code>, <code>≤</code>, <code>==</code>, etc.). <code>ShouldApply()</code> reads <code>LeechEncounterController.AttachedCount</code> and compares. Honors the inherited <code>InvertApplication</code> flag. Used by modifiers that need binary activation — e.g. <em>"this perk is disabled while any leech is attached"</em>.
+</p>
+
+<h3>Construction without JSON</h3>
+<p>
+  Both subclasses are normal classes; the abstract base has a parameterless constructor. They are instantiated directly in C# — bypassing the static <code>LoadDynamicValue(JObject)</code> / <code>LoadDynamicCondition(JObject)</code> factories. After assignment to <code>statMod.DynamicValue</code> / <code>statMod.DynamicCondition</code>, the helper calls <code>statMod.InitDynamicElements()</code> if pre-flight confirms it's required. A small <code>LeechDynamics</code> static helper centralises the wiring:
+</p>
+<pre><code>// "shield recharge drops up to 30% as leech count rises"
+LeechDynamics.WithLeechCountScaling(statMod, min: 0f, max: 0.30f, curve: Linear);
+
+// "this cockpit perk is disabled while 3+ leeches are attached"
+LeechDynamics.GateByLeechCount(statMod, atLeast: 3);</code></pre>
+
+<div class="callout note">
+  <span class="label">Example consumer</span>
+  Imagine a future "panic mode" cockpit perk that activates when <code>Ship_LeechSwarm_Heavy</code> is set: piloting controls become twitchier (engine power up, accuracy down). Authored as a normal <code>StatMod</code> with <code>RequiredTags = [ Ship_LeechSwarm_Heavy ]</code> — no leech-specific code anywhere. The leech feature exposes the surface; other features consume it.
+</div>
+
+<div class="callout warn">
+  <span class="label">Out of scope</span>
+  <strong><code>ModDynamicCondition</code> is not consumed by the leech debuff itself</strong> (the debuff is unconditional while attached). The leech contributes a condition <em>source</em> for other systems to consume; it doesn't gate its own effects.
+  <strong>Tick-based damage paths</strong> (B-type module HP damage, A-type hull section chomp) remain direct value changes — they are not stat modifiers.
+</div>
 
 <h2 id="filemap">File Map</h2>
 <div class="ref-card">
@@ -602,14 +666,18 @@
     <tr><td class="k">Leech/LeechMissileBehavior.cs</td><td>Projectile MonoBehaviour. Homing logic, collision, point-defense interface.</td></tr>
     <tr><td class="k">Leech/LeechVariantAssigner.cs</td><td>Proximity check on spawn / flee. <code>AssignVariant(anchorPoint, shipContext) → (Variant, TargetId)</code>.</td></tr>
     <tr><td class="k">Leech/LeechRemovalInteraction.cs</td><td>EVA player-side hold-to-remove state machine. Drives prompt timing, accumulates progress, dispatches tick messages.</td></tr>
+    <tr><td class="k">Leech/LeechModuleDebuffApplicator.cs</td><td>Singleton <code>IModifierSource</code>. Per-module ref count; on first attach pushes a category-tagged <code>StatMod</code> bundle to <code>module.Stats</code>; on last detach calls <code>RemoveModifier(this)</code>. Replaces what would have been a per-subclass effectiveness Harmony postfix.</td></tr>
     <tr><td class="k">Leech/LeechEscalationScaling.cs</td><td><code>GetParams(int difficultyScalar) → LeechScalingParams</code>. Reads <code>TerminusConfig</code> values.</td></tr>
     <tr><td class="k">Leech/LeechConcurrencyRail.cs</td><td>Tracks active leech count; gates spawn on cap; clears on per-run reset.</td></tr>
     <tr><td class="k">Leech/LeechAudio.cs</td><td>Diegetic SFX management — impact, chomp, debuff stutter, servo snap, pop, self-destruct, first-impact sting.</td></tr>
+    <tr><td class="k">Leech/Dynamics/LeechAttachedCountValue.cs</td><td><code>ModDynamicValue&lt;FloatModifier, float&gt;</code> subclass exposing the live attached count as a continuous scalar (push-based via <code>AttachedCountChanged</code>). See <a href="#ship-exposure">Ship-level Leech Exposure</a>.</td></tr>
+    <tr><td class="k">Leech/Dynamics/LeechAttachedCountCondition.cs</td><td><code>ModDynamicCondition</code> subclass — threshold + comparison gating on the attached count.</td></tr>
+    <tr><td class="k">Leech/Dynamics/LeechDynamics.cs</td><td>Static helper. <code>WithLeechCountScaling(...)</code> and <code>GateByLeechCount(...)</code> wire <code>StatMod.DynamicValue</code> / <code>.DynamicCondition</code> and call <code>InitDynamicElements()</code> if needed.</td></tr>
+    <tr><td class="k">Modules/ModuleStatBundles.cs</td><td>Shared per-category <code>StatType[]</code> lists (Weapon / Shield / Engine / Reactor / Utility) consumed by both the leech debuff applicator and the forge's <code>BuildMods()</code>. Path tentative.</td></tr>
     <tr><td class="k">Patches/HostShipWeaponPatch.cs</td><td>Patch the vanilla Host enemy's weapon-firing method. Postfix that adds Leech Missile firing at <code>DifficultyScalar &ge; 2</code>.</td></tr>
     <tr><td class="k">Patches/LeechMultiToolPatch.cs</td><td>Patch the vanilla multi-tool to detect <code>LeechController</code> raycast hits and route activation to <code>LeechRemovalInteraction</code>.</td></tr>
     <tr><td class="k">Patches/LeechPointDefensePatch.cs</td><td>Register Leech Missile as a valid PD target so vanilla PD modules engage automatically. (Conditional on pre-flight: may be no-op if vanilla already handles custom projectiles.)</td></tr>
     <tr><td class="k">Patches/LeechProjectileWarningPatch.cs</td><td>Register Leech Missile with vanilla projectile-warning system. (Conditional on pre-flight.)</td></tr>
-    <tr><td class="k">Patches/ModuleEffectivenessOverlayPatch.cs</td><td>Postfix on module effectiveness getters. Applies B-type debuff multiplier if any B-type is attached.</td></tr>
     <tr><td class="k">Net/LeechMissileFiredMessage.cs</td><td>Host → all. Missile spawn (origin, heading, type, ID, scaling params snapshot).</td></tr>
     <tr><td class="k">Net/LeechSpawnMessage.cs</td><td>Host → all. On-impact leech batch (positions, variants, target module IDs / hull section IDs).</td></tr>
     <tr><td class="k">Net/LeechStateUpdateMessage.cs</td><td>Host → all. Per-leech state delta (HP, damage progress, debuff active).</td></tr>
@@ -631,7 +699,8 @@
   <table class="data">
     <tr><th>File</th><th>Use</th></tr>
     <tr><td class="k">Forge/ForgeMeterController.cs</td><td>Read <code>DifficultyScalar</code>. (Implemented in Upgrade Forge Phase 5.)</td></tr>
-    <tr><td class="k">AssetLoader.cs</td><td>Load placeholder leech / missile assets if/when bundled (Polish phase). v1 uses runtime-generated primitives.</td></tr>
+    <tr><td class="k">Forge/CsTagRegistry.cs</td><td>Resolve built-in <code>CsTag</code> instances and the mod's own tags. Leech extends it with <code>Module_Leech_Attached</code>, <code>Ship_HasLeeches</code>, <code>Ship_LeechSwarm_Small/Heavy/Critical</code>. Bundled <code>CsTag</code> ScriptableObjects ship in the leech asset bundle.</td></tr>
+    <tr><td class="k">AssetLoader.cs</td><td>Load placeholder leech / missile assets if/when bundled (Polish phase). v1 uses runtime-generated primitives. Also loads the bundled <code>CsTag</code> ScriptableObjects.</td></tr>
     <tr><td class="k">Patches/RelicReplicationPatch.cs</td><td>Pattern reference: single-file Harmony patch.</td></tr>
     <tr><td class="k">Patches/LobbyShipPatch.cs</td><td>Pattern reference: patch + MonoBehaviour.</td></tr>
     <tr><td class="k">Commands/SpawnItem.cs</td><td>Pattern reference for dev commands (recommended: add <code>!leech</code> debug commands gated on <code>EnableDevMode</code>).</td></tr>
@@ -646,7 +715,7 @@
   <tr><td class="k">&lt;Multi-tool interaction class&gt;</td><td>Activation / raycast target resolution</td><td>Route activation against a leech to <code>LeechRemovalInteraction</code>.</td></tr>
   <tr><td class="k">&lt;Point-defense module class&gt;</td><td>Target acquisition</td><td>Expose Leech Missile as valid PD target (no-op if vanilla already does this).</td></tr>
   <tr><td class="k">&lt;Projectile-warning system&gt;</td><td>Threat registration</td><td>Include Leech Missile in inbound-threat warnings (no-op if vanilla already does this).</td></tr>
-  <tr><td class="k">&lt;Module effectiveness getter&gt; per subclass</td><td>Postfix on the effectiveness/multiplier method</td><td>Apply non-stacking B-type debuff while attached.</td></tr>
+  <tr><td class="k">module.Stats (StatTagCollection)</td><td><em>No patch.</em> Direct API: <code>ApplyModifiers</code> / <code>RemoveModifier</code></td><td>B-type debuff via native modifier pipeline through <code>LeechModuleDebuffApplicator</code>. See <a href="#bvariant">B-type</a> and <a href="#ship-exposure">Ship-level Exposure</a>.</td></tr>
   <tr><td class="k">&lt;Module HP / vanilla repair&gt;</td><td>Direct method calls</td><td>Apply B-type module HP damage on tick.</td></tr>
   <tr><td class="k">&lt;Hull section HP&gt;</td><td>Direct method calls</td><td>Apply A-type chomp damage.</td></tr>
   <tr><td class="k">&lt;EVA detection API&gt;</td><td>Read-only</td><td>Gate removal to EVA-only.</td></tr>
@@ -691,28 +760,40 @@
 </div>
 <p>On a system with a live Void Crew install:</p>
 <pre><code>dotnet tool install -g ilspycmd
-ilspycmd "&lt;steam&gt;/Void Crew/VoidCrew_Data/Managed/Assembly-CSharp.dll" \
-  -p -o ./decompiled --type CG.Ship.Modules.WeaponModule
-ilspycmd "&lt;steam&gt;/Void Crew/VoidCrew_Data/Managed/Assembly-CSharp.dll" \
-  -p -o ./decompiled --type CG.Ship.Tools
-ilspycmd "&lt;steam&gt;/Void Crew/VoidCrew_Data/Managed/Assembly-CSharp.dll" \
-  -p -o ./decompiled --type Gameplay.Enemies
-ilspycmd "&lt;steam&gt;/Void Crew/VoidCrew_Data/Managed/Assembly-CSharp.dll" \
-  -p -o ./decompiled --type CG.Ship.Hull
-ilspycmd "&lt;steam&gt;/Void Crew/VoidCrew_Data/Managed/Assembly-CSharp.dll" \
-  -p -o ./decompiled --type CG.Ship.PointDefense</code></pre>
+ilspycmd "&lt;steam&gt;/Void Crew/VoidCrew_Data/Managed/Assembly-CSharp.dll" -p -o ./decompiled \
+  --type CG.Ship.Modules.WeaponModule \
+  --type CG.Ship.Tools \
+  --type Gameplay.Enemies \
+  --type CG.Ship.Hull \
+  --type CG.Ship.PointDefense \
+  --type ModTagConfiguration \
+  --type StatTagCollection \
+  --type CsTag \
+  --type ModDynamicValue \
+  --type ModDynamicCondition \
+  --type PrimitiveModifier \
+  --type FloatModifier</code></pre>
 <ol class="bullets">
   <li><strong>Identify the Host enemy class.</strong> Survey the vanilla enemy ship roster. Choose a mid-tier frigate that appears in scalar-2-and-deeper sectors and has a clear weapon-firing method.</li>
   <li><strong>Identify the multi-tool interaction surface.</strong> Find the method that handles activation + raycast target resolution. Confirm we can postfix or transpile to handle leech targets.</li>
   <li><strong>Confirm point-defense behavior.</strong> Does vanilla PD already engage arbitrary <code>MonoBehaviour</code> projectiles, or does it require explicit registration? If explicit, identify the registration API.</li>
   <li><strong>Confirm projectile-warning system.</strong> Same question — automatic or explicit? Identify the registration API if needed.</li>
-  <li><strong>Identify module effectiveness getters per subclass.</strong> <code>WeaponModule</code>, <code>ReactorModule</code>, <code>EngineModule</code>, <code>ShieldModule</code>, etc. — find the method we patch to apply the B-type debuff multiplier. (Overlaps with Upgrade Forge Phase 2's same pre-flight.)</li>
   <li><strong>Identify hull section identification API.</strong> How do we resolve "the hull section at world position X" for A-type targeting?</li>
   <li><strong>Identify module identification at proximity.</strong> For B-type variant assignment, we need "the nearest module to world position X within radius R."</li>
   <li><strong>Confirm EVA detection.</strong> The state/event that tells us a player is in EVA. Used to gate removal.</li>
   <li><strong>Confirm boot-panel UI reusability.</strong> Can we instantiate the existing boot-panel-prompt UI element programmatically with arbitrary content, or is it deeply tied to its current context? If the latter, fall back to a bespoke prompt UI.</li>
   <li><strong>Confirm hull mesh access for raycasting.</strong> We need to project anchor points onto the player ship's hull surface — confirm the hull mesh is accessible to a Harmony-side raycast.</li>
+  <li><strong>StatModifier pipeline (shared with Forge refinement).</strong> Confirm <code>ModTagConfiguration</code> parameterless constructor + mutable <code>RequiredTags</code> / <code>TagsToAdd</code> / <code>RequiredLocalTags</code> arrays; confirm <code>Resources.FindObjectsOfTypeAll&lt;CsTag&gt;()</code> resolves built-in tags post-init; confirm the <code>Module_Category_*</code> tag names match.</li>
+  <li><strong>Bundled <code>CsTag</code> shipping.</strong> Confirm the leech asset bundle can ship six <code>CsTag</code> ScriptableObjects (<code>Module_Leech_Attached</code>, <code>Ship_HasLeeches</code>, <code>Ship_LeechSwarm_Small</code>, <code>Ship_LeechSwarm_Heavy</code>, <code>Ship_LeechSwarm_Critical</code>) and that <code>CsTagRegistry</code> resolves them after <code>AssetLoader</code> runs.</li>
+  <li><strong>Ship tag-collection write API.</strong> Identify how the ship exposes its <code>StatTagCollection</code> / runtime tag list, and what API mutates it (add / remove tag). If the only public path is <code>ApplyModifier</code> with a <code>TagsToAdd</code>-bearing mod, the bucketing strategy uses a no-op <code>StatMod</code> as a tag-injection vehicle. Otherwise prefer direct tag-list mutation.</li>
+  <li><strong>Custom <code>ModDynamicValue&lt;T,V&gt;</code> viability.</strong> Confirm the abstract method signatures (<code>RecalculateValue</code>, <code>ValidateType</code>, <code>OnInitialize</code>, <code>OnDestroy</code>, <code>DynamicValueDescription</code>); that assigning a manually-constructed (non-<code>LoadDynamicValue</code>) subclass to <code>StatMod.DynamicValue</code> works end-to-end; whether <code>StatMod.InitDynamicElements()</code> is required after assignment; that <code>OnValueChange</code> fires when our subclass calls <code>InformValueChange()</code>.</li>
+  <li><strong>Custom <code>ModDynamicCondition</code> viability.</strong> Same question set — abstract method contracts, manual construction, lifecycle (<code>Init</code> / <code>Destroy</code>), and that <code>CheckIfActive</code> + <code>SetActive</code> propagate to consumers when our condition flips.</li>
+  <li><strong>Dynamic source lifecycle ownership.</strong> Decide whether the custom value/condition instances live as long as the <code>StatMod</code> that owns them (one per consumer) or as a shared singleton multiplexed across consumers (lower allocation, but contention on listener lists). Pre-flight inspection of the destroy path should make this clear.</li>
 </ol>
+<div class="callout note">
+  <span class="label">Removed pre-flight item</span>
+  The earlier draft included "Identify module effectiveness getters per subclass." That item is <strong>removed</strong>: the B-type debuff now flows through <code>module.Stats.ApplyModifiers</code> rather than a per-subclass getter postfix, so the getter identification is no longer needed.
+</div>
 
 <h2 id="phases">Phased Implementation Plan</h2>
 <p>
@@ -729,7 +810,9 @@ ilspycmd "&lt;steam&gt;/Void Crew/VoidCrew_Data/Managed/Assembly-CSharp.dll" \
     ↓
 Phase 1 (Leech Missile projectile, no spawn yet)
     ↓
-Phase 2 (Spawn on impact + Module-Biter B-type)
+Phase 2 (Spawn on impact + Module-Biter B-type + ship-level tags)
+    ↓
+Phase 2.5 (Leech Dynamic Source — custom ModDynamicValue / Condition)
     ↓
 Phase 3 (Hull-Biter A-type + variant assignment)
     ↓
@@ -749,8 +832,9 @@ Phase 8 (Diegetic Audio + First-impact sting + Polish hooks)
   <tr><th>Phase</th><th>Title</th><th>Depends on</th><th>What's testable at the end</th></tr>
   <tr><td class="k">0</td><td>Foundation</td><td class="muted">—</td><td class="muted">Build green, config keys exist, mod loads with no behavior change</td></tr>
   <tr><td class="k">1</td><td>Leech Missile projectile</td><td class="muted">0</td><td class="muted">Dev-command spawns missile; homes; interceptable by weapon fire and PD</td></tr>
-  <tr><td class="k">2</td><td>Spawn on impact + B-type</td><td class="muted">1</td><td class="muted">Missile impact spawns leeches; B-types attach to nearest module; debuff + module HP damage observable</td></tr>
-  <tr><td class="k">3</td><td>A-type + variant assignment</td><td class="muted">2</td><td class="muted">Missile on bare hull → A-type chomps hull HP; missile near module → B-type</td></tr>
+  <tr><td class="k">2</td><td>Spawn on impact + B-type + ship-level tags</td><td class="muted">1</td><td class="muted">Missile impact spawns leeches; B-types attach to nearest module via native StatMod pipeline; <code>Module_Leech_Attached</code> + ship-level swarm bucket tags inject correctly; debuff + module HP damage observable</td></tr>
+  <tr><td class="k">2.5</td><td>Leech Dynamic Source</td><td class="muted">2</td><td class="muted">Custom <code>ModDynamicValue</code> + <code>ModDynamicCondition</code> subclasses; test modifier scales / gates on attached count</td></tr>
+  <tr><td class="k">3</td><td>A-type + variant assignment</td><td class="muted">2.5</td><td class="muted">Missile on bare hull → A-type chomps hull HP; missile near module → B-type</td></tr>
   <tr><td class="k">4</td><td>EVA Removal</td><td class="muted">3</td><td class="muted">EVA player holds multi-tool on leech; removes after duration</td></tr>
   <tr><td class="k">5</td><td>Containment Failure + Flee</td><td class="muted">4</td><td class="muted">Missed prompt → leech detaches, crawls to new anchor, re-anchors with new variant; one escape per leech enforced</td></tr>
   <tr><td class="k">6</td><td>Sector Escalation Scaling</td><td class="muted">5, Forge Phase 5</td><td class="muted">All params scale per <code>DifficultyScalar</code>; gate at scalar ≥ 2 enforced</td></tr>
@@ -782,19 +866,36 @@ Phase 8 (Diegetic Audio + First-impact sting + Polish hooks)
 </div>
 <p><strong>Test:</strong> Spawn missile via dev command. Observe homing (turns toward player). Shoot it with main guns → destroyed. Spawn another → PD engages → missile takes hits over multiple PD shots before dying. Confirm distinct silhouette (placeholder primitive) and constant warble audio.</p>
 
-<h3>Phase 2 — Spawn on impact + Module-Biter (B-type only)</h3>
-<p><strong>Goal:</strong> Missile impact spawns leeches. All spawned leeches treated as B-type for this phase (no variant logic yet). Debuff and module damage observable.</p>
+<h3>Phase 2 — Spawn on impact + Module-Biter (B-type only) + ship-level tags</h3>
+<p><strong>Goal:</strong> Missile impact spawns leeches. All spawned leeches treated as B-type for this phase (no variant logic yet). Debuff via native pipeline; module damage observable; <code>Module_Leech_Attached</code> + ship-level swarm-bucket tags injected correctly.</p>
 <ul class="bullets">
-  <li><code>Leech/LeechController.cs</code> — leech MonoBehaviour. B-type state and tick logic.</li>
-  <li><code>Leech/LeechEncounterController.cs</code> — host singleton; spawn arbitration.</li>
-  <li><code>Patches/ModuleEffectivenessOverlayPatch.cs</code> — debuff postfix.</li>
+  <li><code>Leech/LeechController.cs</code> — leech MonoBehaviour. B-type state and tick logic. Routes attach / detach through the applicator.</li>
+  <li><code>Leech/LeechEncounterController.cs</code> — host singleton; spawn arbitration; ship-level tag bucketing; raises <code>AttachedCountChanged</code> on every transition.</li>
+  <li><code>Leech/LeechModuleDebuffApplicator.cs</code> — singleton <code>IModifierSource</code>; ref-counted apply / remove of category-tagged <code>StatMod</code> bundles via <code>module.Stats.ApplyModifiers</code> / <code>RemoveModifier</code>.</li>
+  <li><code>Modules/ModuleStatBundles.cs</code> — per-category <code>StatType[]</code> lists (shared with the forge refinement).</li>
+  <li>Extend <code>Forge/CsTagRegistry.cs</code> with <code>ModuleLeechAttached</code> + <code>ShipHasLeeches</code> + <code>ShipLeechSwarmSmall/Heavy/Critical</code> fields.</li>
+  <li>Add a <code>!dumptags</code> dev command (module + ship variants) for verification.</li>
   <li>On impact: spawn config-driven 1–3 leeches near the nearest module (manual / dev-command override of the variant assignment for this phase).</li>
 </ul>
 <div class="callout warn">
   <span class="label">Pre-flight required</span>
-  Confirm module effectiveness getter targets per subclass (overlaps with Upgrade Forge Phase 2).
+  Items #10–#12 in <a href="#preflight">Pre-Flight Verification</a> — <code>CsTag</code> resolution, bundled <code>CsTag</code> shipping, ship tag-collection write API. Shares item #10 with the forge refinement.
 </div>
-<p><strong>Test:</strong> Spawn missile via dev command → impact → leeches spawn → engine debuff observable (e.g. thrust drops to 75%). Wait — module HP ticks down. Destroy module → leech self-destructs. Concurrency cap honored (spawn 4 missiles → only 8 leeches on ship; 9th missile spawns no leeches).</p>
+<p><strong>Test:</strong> Spawn missile via dev command → impact → leeches spawn → engine debuff observable (e.g. thrust drops to 75%). Spawn a second leech on the same module → <code>module.Stats.ActiveModifiers</code> count for the applicator's source is 1 (non-stacking via ref count). Detach one → debuff still active. Detach the last → debuff clears. <code>!dumptags &lt;module&gt;</code> shows <code>Module_Leech_Attached</code> while ≥1 attached, gone after full detach. <code>!dumptags ship</code> shows <code>Ship_HasLeeches</code> + the correct swarm bucket as count crosses 1 / 3 / 6 thresholds. Wait — module HP ticks down (independent stacking). Destroy module → leech self-destructs → ref count decrements. Concurrency cap honored (spawn 4 missiles → only 8 leeches on ship; 9th missile spawns no leeches).</p>
+
+<h3>Phase 2.5 — Leech Dynamic Source</h3>
+<p><strong>Goal:</strong> Custom <code>ModDynamicValue</code> + <code>ModDynamicCondition</code> subclasses live in the mod, ready for any consumer (future leech-side perks, forge perks, other features) to scale or gate against attached leech count. See <a href="#ship-exposure">Ship-level Leech Exposure</a>.</p>
+<ul class="bullets">
+  <li><code>Leech/Dynamics/LeechAttachedCountValue.cs</code> — subclass of <code>ModDynamicValue&lt;FloatModifier, float&gt;</code>.</li>
+  <li><code>Leech/Dynamics/LeechAttachedCountCondition.cs</code> — subclass of <code>ModDynamicCondition</code> with threshold + comparison.</li>
+  <li><code>Leech/Dynamics/LeechDynamics.cs</code> — static helper. <code>WithLeechCountScaling(...)</code> and <code>GateByLeechCount(...)</code> factories that wire <code>StatMod.DynamicValue</code> / <code>.DynamicCondition</code> and call <code>InitDynamicElements()</code> if required.</li>
+  <li>Dev command <code>!leechperk &lt;module&gt;</code> applies a temporary test <code>StatMod</code> using both factories so the pipeline can be exercised end-to-end.</li>
+</ul>
+<div class="callout warn">
+  <span class="label">Pre-flight required</span>
+  Items #12–#14 in <a href="#preflight">Pre-Flight Verification</a> — custom <code>ModDynamicValue</code> viability, custom <code>ModDynamicCondition</code> viability, and lifecycle ownership.
+</div>
+<p><strong>Test:</strong> Apply test perk via <code>!leechperk</code> → measured stat scales / gates as expected when attached count is 0 / 2 / 5. <code>OnValueChange</code> fires exactly once per count transition (verified via debug log). Run session reset multiple times → no listener leaks on <code>AttachedCountChanged</code> (count subscribed observers; should return to baseline).</p>
 
 <h3>Phase 3 — Hull-Biter (A-type) + variant assignment</h3>
 <p><strong>Goal:</strong> Spawning now resolves variant by proximity. A-types chew hull HP on a bite cadence.</p>

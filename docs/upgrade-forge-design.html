@@ -297,6 +297,7 @@
   <div class="section-label">Implementation</div>
   <ul>
     <li><a href="#architecture">Architecture</a></li>
+    <li><a href="#refinements">Native-system Refinements</a></li>
     <li><a href="#patches">Patch Surfaces</a></li>
     <li><a href="#networking">Multiplayer Sync</a></li>
     <li><a href="#preflight">Pre-Flight Verification</a></li>
@@ -540,9 +541,10 @@
   <table class="data">
     <tr><th>File</th><th>Responsibility</th></tr>
     <tr><td class="k">Patches/SectorJumpHook.cs</td><td>Subscribe to <code>GameSessionSectorManager.OnSectorEntered</code>; drive meter + escalation.</td></tr>
-    <tr><td class="k">Patches/ModuleStatOverlayPatch.cs</td><td>Postfix patches on per-module stat getters; apply stacked stat mods from overlay state.</td></tr>
     <tr><td class="k">Patches/ForgeInteractionPatch.cs</td><td>Patches binding in-world Forge interactions (relic insert, alloy terminal) to controller logic.</td></tr>
-    <tr><td class="k">Forge/ForgeModuleState.cs</td><td>Per-<code>CellModule</code> overlay record (level, slots, burden, accumulated mods).</td></tr>
+    <tr><td class="k">Forge/ForgeModuleState.cs</td><td>Per-<code>CellModule</code> overlay record (level, slots, burden, accumulated mods). Implements <code>IModifierSource</code> and pushes <code>StatMod</code> bundles into <code>module.Stats</code> directly — no per-getter Harmony patches needed. See <a href="#refinements">Refinements</a>.</td></tr>
+    <tr><td class="k">Forge/ForgeOverlayTable.cs</td><td>Static <code>ConditionalWeakTable&lt;CellModule, ForgeModuleState&gt;</code>; per-run reset on session start.</td></tr>
+    <tr><td class="k">Forge/CsTagRegistry.cs</td><td>Resolves built-in <code>CsTag</code> ScriptableObjects (<code>Module_Category_Weapon</code>, etc.) by name + exposes the mod's own <code>Forge_Upgraded</code> tag. See <a href="#refinements">Refinements</a>.</td></tr>
     <tr><td class="k">Forge/ForgeMeterController.cs</td><td>Authoritative singleton: Forge level, meter, difficulty. Host-side rolls.</td></tr>
     <tr><td class="k">Forge/RelicTierData.cs</td><td>Maps each of ~25 vanilla relics to its Tier + IsCursed flag.</td></tr>
     <tr><td class="k">Forge/PerkPool.cs</td><td>Category pools + signature perk overrides; <code>RollPerk(...)</code> entry point.</td></tr>
@@ -571,11 +573,83 @@
   </table>
 </div>
 
+<h2 id="refinements">Native-system Refinements</h2>
+<p>
+  Three pieces of the modding API documented at
+  <a href="https://hutlihutgames.github.io/void_crew_modding_documentation/">hutlihutgames.github.io/void_crew_modding_documentation</a> —
+  <strong>StatModifiers</strong>, <strong>Tags</strong>, and <strong>DynamicModifiers</strong> — replace what would otherwise be hand-rolled Harmony work.
+  Stat application uses the native <code>StatMod</code> / <code>IModifierSource</code> pipeline (no per-getter patches);
+  targeting uses native <code>ModTagConfiguration</code>; a small number of signature perks pick up live-state scaling via <code>ModDynamicScalingValue</code>.
+</p>
+
+<h3>1. Tag-narrowed StatMod bundles</h3>
+<p>
+  <code>ForgeModuleState.BuildMods()</code> emits one <code>StatMod</code> group per module category instead of broadcasting all 20 stat-type IDs to every module.
+  Each group carries a <code>ModTagConfiguration</code> with <code>RequiredTags = [ Module_Category_X ]</code> so the native filter applies it only where it makes sense.
+</p>
+<table class="data">
+  <tr><th>Tag bucket</th><th>StatTypes covered</th></tr>
+  <tr><td class="k">Module_Category_Weapon</td><td><code>Damage</code>, <code>FireRate</code>, <code>Range</code>, <code>ProjectileSpeed</code>, <code>Accuracy</code></td></tr>
+  <tr><td class="k">Module_Category_Shield</td><td><code>ShieldMaxHitPoints</code>, <code>ShieldRechargeSpeed</code>, <code>ShieldAbsorption</code></td></tr>
+  <tr><td class="k">Module_Category_Engine</td><td><code>ForwardPower</code>, <code>EnginePower</code>, <code>YawTorque</code>, <code>ElevationPower</code>, <code>StrafePower</code>, <code>JumpChargeSpeed</code></td></tr>
+  <tr><td class="k">Module_Category_Reactor</td><td><code>PowerProvided</code>, <code>BatteryRechargeAmount</code></td></tr>
+  <tr><td class="k">Module_Category_Utility</td><td><code>ProcessingSpeed</code>, <code>HealingSpeed</code>, <code>AttractorMaxRange</code>, <code>AttractorPullVelocity</code></td></tr>
+</table>
+<p>
+  Built-in tag names are resolved at first access via <code>Resources.FindObjectsOfTypeAll&lt;CsTag&gt;()</code> and cached in <code>CsTagRegistry</code>.
+  If a built-in tag fails to resolve (renamed by a game update), the registry logs a warning and falls back to <em>no tag filtering</em> for that bundle — preserves
+  the broadcast behavior rather than silently dropping all upgrades.
+</p>
+
+<h3>2. Forge_Upgraded tag injection (<code>TagsToAdd</code>)</h3>
+<p>
+  Every Forge-applied <code>StatMod</code> sets <code>TagsToAdd = [ Forge_Upgraded ]</code>. The native <code>StatTagCollection.ApplyModifier</code> path attaches the
+  tag to the target's runtime tag list. Later phases (Phase 4 perks, Phase 7 cursed/signatures) declare modifiers with <code>RequiredLocalTags = [ Forge_Upgraded ]</code>
+  to target only modules that have been pushed past L3 — without re-querying <code>ForgeOverlayTable</code>.
+</p>
+<p>
+  <code>Forge_Upgraded</code> is the mod's own <code>CsTag</code> ScriptableObject, shipped inside <code>Assets/upgrade_forge.metem</code> alongside the Forge prefab.
+</p>
+
+<h3>3. ModDynamicScalingValue for ~2 signature perks (Phase 7)</h3>
+<p>
+  <code>ModDynamicValue</code> is abstract — the concrete subclass <code>ModDynamicScalingValue : ModDynamicValue&lt;FloatModifier, float&gt;</code> scales a perk's
+  magnitude against live game state (built-in sources: <code>ShipSpeed</code>, <code>ResourceCount</code>, <code>PowerUsage</code>, <code>DefectCount</code>, <code>BreakersFlipped</code>;
+  curves: <code>Linear</code>, <code>Exponential</code>, <code>Diminishing</code>).
+  Since the type is abstract with a <code>LoadDynamicValue(JObject)</code> static factory, <code>PerkPool.cs</code> builds the configuration as a programmatic <code>JObject</code> —
+  no asset-bundle JSON required.
+</p>
+<pre><code>var dvJson = new JObject {
+    ["type"]      = "ModDynamicScalingValue",
+    ["scaling"]   = "Linear",       // ValueScalingType enum
+    ["source"]    = "ShipSpeed",    // closed set
+    ["min_value"] = 0f,
+    ["max_value"] = 0.30f,
+};
+var dynamicValue = ModDynamicValue.LoadDynamicValue(dvJson);
+var statMod = new StatMod(new FloatModifier(0f, ModifierType.AdditiveMultiplier, this),
+                          StatType.Damage.Id, weaponTagCfg);
+statMod.DynamicValue = dynamicValue;
+statMod.InitDynamicElements();</code></pre>
+<p>v1 dynamic signatures (the rest of the perk roster stays flat):</p>
+<table class="data">
+  <tr><th>Perk</th><th>Stat</th><th>Source</th><th>Curve</th><th>Effect</th></tr>
+  <tr><td class="k">Stalker</td><td><code>Damage</code></td><td><code>ShipSpeed</code></td><td>Linear</td><td>Up to +30% damage at top speed</td></tr>
+  <tr><td class="k">Hoarder</td><td><code>FireRate</code></td><td><code>ResourceCount</code></td><td>Diminishing</td><td>+X% fire rate; diminishing returns past N resources</td></tr>
+</table>
+
+<div class="callout warn">
+  <span class="label">Out of scope</span>
+  <strong><code>ModDynamicCondition</code> is not used.</strong> Maintenance Burden (cursed-perk operational quirks) stays MonoBehaviour-driven — random shutoffs,
+  manual reset interactions, heat ticks — per the design's original intent. Conditions can be revisited in a later content pass if any cursed perk genuinely
+  benefits from native state gating.
+</div>
+
 <h2 id="patches">Patch Surfaces</h2>
 <p>Identified from the reference-only NuGet DLL (signatures verified; method bodies not available — see <a href="#preflight">Pre-Flight</a>):</p>
 <table class="data">
-  <tr><th>Game class</th><th>Hook</th><th>Purpose</th></tr>
-  <tr><td class="k">CG.Ship.Modules.CellModule</td><td>(per-subclass stat getters)</td><td>Apply mod-side stat overlay.</td></tr>
+  <tr><th>Game class / API</th><th>Hook</th><th>Purpose</th></tr>
+  <tr><td class="k">module.Stats (StatTagCollection)</td><td><em>No patch.</em> Direct API: <code>ApplyModifiers</code> / <code>RemoveModifier</code></td><td>Stat overlay via native pipeline — see <a href="#refinements">Refinements</a>.</td></tr>
   <tr><td class="k">GameSessionSectorManager</td><td><code>OnSectorEntered</code> event</td><td>Detect successful sector jumps.</td></tr>
   <tr><td class="k">Gameplay.Ship.VoidJump.VoidJumpSystem</td><td>(fallback hook)</td><td><code>EnterSectorInternal</code> if event proves unreliable.</td></tr>
   <tr><td class="k">VoidManager.Events</td><td><code>MasterClientSwitched</code>, <code>PlayerEnteredRoom</code>, <code>HostStartSession</code></td><td>Host migration; late-joiner sync; per-run state reset.</td></tr>
@@ -602,19 +676,24 @@
 </div>
 <p>On a system with a live Void Crew install:</p>
 <pre><code>dotnet tool install -g ilspycmd
-ilspycmd "&lt;steam&gt;/Void Crew/VoidCrew_Data/Managed/Assembly-CSharp.dll" \
-  -p -o ./decompiled --type CG.Ship.Modules.CellModule
-ilspycmd "&lt;steam&gt;/Void Crew/VoidCrew_Data/Managed/Assembly-CSharp.dll" \
-  -p -o ./decompiled --type Gameplay.Ship.VoidJump.VoidJumpSystem
-ilspycmd "&lt;steam&gt;/Void Crew/VoidCrew_Data/Managed/Assembly-CSharp.dll" \
-  -p -o ./decompiled --type GameSessionSectorManager</code></pre>
+ilspycmd "&lt;steam&gt;/Void Crew/VoidCrew_Data/Managed/Assembly-CSharp.dll" -p -o ./decompiled \
+  --type CG.Ship.Modules.CellModule \
+  --type Gameplay.Ship.VoidJump.VoidJumpSystem \
+  --type GameSessionSectorManager \
+  --type ModTagConfiguration \
+  --type ModDynamicValue \
+  --type ModDynamicScalingValue \
+  --type StatTagCollection \
+  --type CsTag</code></pre>
 <ol class="bullets">
   <li>Confirm <code>GameSessionSectorManager.OnSectorEntered</code> delegate signature.</li>
-  <li>Confirm per-subclass stat-calculation methods on <code>WeaponModule</code>, <code>ReactorModule</code>, <code>ShieldModule</code>, etc.</li>
+  <li>Confirm <code>module.Stats</code> exposes <code>StatTagCollection</code> on the module classes targeted (<code>WeaponModule</code>, <code>ReactorModule</code>, <code>ShieldModule</code>, <code>EngineModule</code>, scanners) — the existing <code>ForgeModuleState</code> compile against the reference DLL implies this, but runtime behavior needs confirmation.</li>
   <li>Confirm <code>VoidJumpSystem.EnterSectorInternal</code> accessibility (fallback hook).</li>
   <li>Confirm interdiction-sector identification so the hook can de-dupe interdictions from real jumps.</li>
   <li>Confirm Fabricator alloy-spend pattern (<code>FabricatorModule.Upgrade</code> / <code>UpgradeInternal</code>) so the Forge terminal can mirror it.</li>
   <li>Confirm <code>VoidManager.ModMessages.ModMessage.Send</code> transport semantics under <code>MultiplayerType.All</code>.</li>
+  <li><strong>Refinements:</strong> confirm built-in <code>CsTag</code> asset names (<code>Module_Category_Weapon</code>, <code>Module_Category_Reactor</code>, etc.); confirm <code>InclusionCriteria</code> enum literals (<code>And</code> / <code>Or</code>); confirm <code>Resources.FindObjectsOfTypeAll&lt;CsTag&gt;()</code> returns them post-init.</li>
+  <li><strong>Refinements:</strong> confirm <code>ModDynamicScalingValue.LoadDynamicValue(JObject)</code> JSON schema (exact field names + <code>ValueScalingType</code> string forms); confirm whether <code>StatMod.InitDynamicElements()</code> is required after setting <code>DynamicValue</code> post-construction.</li>
 </ol>
 
 <h2 id="phases">Phased Implementation Plan</h2>
@@ -678,16 +757,16 @@ Phase 8 (Multiplayer Sync + Edge Cases)</code></pre>
 <h3>Phase 2 — Module Overlay + Stat Application</h3>
 <p><strong>Goal:</strong> Modules can be upgraded via dev command; stat changes observable in-game. No Forge, no relic consumption, no perks yet.</p>
 <ul class="bullets">
-  <li><code>Forge/ForgeModuleState.cs</code> — overlay record type (level, slots, burden flags, accumulated stat mods).</li>
-  <li><code>Forge/ForgeOverlayTable.cs</code> — static <code>ConditionalWeakTable&lt;CellModule, ForgeModuleState&gt;</code> accessor.</li>
-  <li><code>Patches/ModuleStatOverlayPatch.cs</code> — Harmony postfixes on per-module stat getters.</li>
-  <li>Dev commands <code>!setlevel</code>, <code>!getlevel</code>, <code>!resetoverlay</code>.</li>
+  <li><code>Forge/ForgeModuleState.cs</code> — overlay record (level, slots, burden flags). Implements <code>IModifierSource</code>; pushes category-tagged <code>StatMod</code> bundles into <code>module.Stats</code> directly via <code>ApplyModifiers</code> / <code>RemoveModifier</code>. <strong>No Harmony patches on stat getters.</strong></li>
+  <li><code>Forge/ForgeOverlayTable.cs</code> — static <code>ConditionalWeakTable&lt;CellModule, ForgeModuleState&gt;</code> accessor; per-run reset on session start.</li>
+  <li><code>Forge/CsTagRegistry.cs</code> — resolves built-in <code>CsTag</code> instances (<code>Module_Category_Weapon</code>, etc.) and the mod's own <code>Forge_Upgraded</code> tag.</li>
+  <li>Dev commands <code>!setlevel</code>, <code>!getlevel</code>, <code>!resetoverlay</code>, <code>!dumptags</code>.</li>
 </ul>
 <div class="callout warn">
   <span class="label">Pre-flight required</span>
-  Decompile live <code>Assembly-CSharp.dll</code> to identify the actual stat-calc methods on <code>WeaponModule</code>, <code>ReactorModule</code>, <code>ShieldModule</code>, etc.
+  Decompile live <code>Assembly-CSharp.dll</code> to confirm: (1) the names of built-in module-category <code>CsTag</code> assets, (2) <code>InclusionCriteria</code> enum literals (<code>And</code> / <code>Or</code>), and (3) that <code>Resources.FindObjectsOfTypeAll&lt;CsTag&gt;()</code> returns the built-in tags after game init.
 </div>
-<p><strong>Test:</strong> Force a weapon to L7 via <code>!setlevel</code>; fire weapon; observe damage exceeds vanilla. <code>!resetoverlay</code> reverts. Vanilla L1–3 BuildBox swap still works. Run-end clears state.</p>
+<p><strong>Test:</strong> Force a weapon to L7 via <code>!setlevel</code>; fire weapon; damage exceeds vanilla. Force a reactor to L7; weapon's per-shot stats unchanged (cross-category bleed eliminated). <code>_module.Stats.ActiveModifiers</code> count matches category size, not 20. <code>!dumptags</code> on the upgraded module includes <code>Forge_Upgraded</code>. <code>!resetoverlay</code> reverts. Vanilla L1–3 BuildBox swap still works. Run-end clears state.</p>
 
 <h3>Phase 3 — Upgrade Forge MVP</h3>
 <p><strong>Goal:</strong> Players can install the Forge, insert a relic, target a module, and commit an upgrade. Cost curve enforced.</p>
@@ -742,9 +821,14 @@ Phase 8 (Multiplayer Sync + Edge Cases)</code></pre>
   <li>Update <code>RelicTierData.cs</code> — flag ~30% of relics with <code>IsCursed = true</code>.</li>
   <li>Update <code>PerkPool.cs</code> — add ~5–10 signature perks tied to specific flagship relic IDs.</li>
   <li>Update <code>PerkPool.RollPerk</code> to draw from cursed-augmented pool when relic is cursed.</li>
-  <li><code>Forge/MaintenanceBurden.cs</code> — operational quirks (random shutoffs, increased heat ticks, etc.) on burdened modules.</li>
+  <li><strong>Dynamic-scaling signatures</strong> — author ~2 signature perks using <code>ModDynamicScalingValue</code> (Stalker / Hoarder; see <a href="#refinements">Refinements §3</a>). Constructed in-code via <code>JObject</code> → <code>ModDynamicValue.LoadDynamicValue</code>; no asset-bundle JSON.</li>
+  <li><code>Forge/MaintenanceBurden.cs</code> — operational quirks (random shutoffs, increased heat ticks, etc.) on burdened modules. <strong>MonoBehaviour-driven</strong>; <code>ModDynamicCondition</code> is explicitly not used.</li>
 </ul>
-<p><strong>Test:</strong> Flagship relic on empty Slot 1 has chance to roll its signature. Cursed relic → upgrade succeeds, perk rolls from cursed pool, Maintenance Burden activates. Clean L10 module (no cursed relics ever used) operates perfectly. Per-run reset clears all flags.</p>
+<div class="callout warn">
+  <span class="label">Pre-flight required</span>
+  Confirm the <code>ModDynamicScalingValue</code> JSON schema (exact field names: <code>scaling</code> / <code>source</code> / <code>min_value</code> / <code>max_value</code> or otherwise) and the <code>ValueScalingType</code> enum's string forms by decompiling live <code>Assembly-CSharp.dll</code>. Also confirm whether <code>StatMod.InitDynamicElements()</code> must be called manually after assigning <code>DynamicValue</code> post-construction, or whether <code>ApplyModifiers</code> invokes it.
+</div>
+<p><strong>Test:</strong> Flagship relic on empty Slot 1 has chance to roll its signature. Cursed relic → upgrade succeeds, perk rolls from cursed pool, Maintenance Burden activates. Force-apply Stalker via <code>!forceperk stalker &lt;weapon&gt;</code>; observe damage at idle vs. full sublight scales (zero at zero speed, +30% at top). Clean L10 module (no cursed relics ever used) operates perfectly. Per-run reset clears all flags.</p>
 
 <h3>Phase 8 — Multiplayer Sync + Edge Cases</h3>
 <p><strong>Goal:</strong> All Phase 0–7 mechanics work correctly in a hosted multiplayer session.</p>
