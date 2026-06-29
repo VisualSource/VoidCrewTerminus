@@ -58,3 +58,6 @@ TestResult.xml
 nunit-*.xml
 
 .voidcrew
+VoidCrewUnityEditor
+Blend/Ectype_Base.blend
+*.blend1
