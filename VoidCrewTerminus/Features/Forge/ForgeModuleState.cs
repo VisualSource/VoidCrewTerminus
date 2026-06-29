@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using CG.Ship.Modules;
+using Gameplay.Tags;
 using Gameplay.Utilities;
 
 namespace VoidCrewTerminus.Forge;
@@ -49,45 +50,53 @@ public class ForgeModuleState : IModifierSource
     }
 
     // Build AdditiveMultiplier boosts for each bonus level above vanilla L3.
-    // We create mods for all "positive" stat categories; ApplyModifiers only affects
-    // stats actually registered on the module, so this is safe across all module types.
+    // Each group is narrowed by module category via ModTagConfiguration.RequiredTags so
+    // mods only activate on modules that carry the matching category CsTag.
+    // TagsToAdd = [Forge_Upgraded] stamps upgraded modules so later perk phases can
+    // gate on RequiredLocalTags = [Forge_Upgraded].
     private List<StatMod> BuildMods()
     {
         float amount = (Level - 3) * 0.08f;
         var mods = new List<StatMod>();
 
-        var targets = new[]
+        AddGroup(mods, amount, CsTagRegistry.Weapon, new[]
         {
-            // Weapons
-            StatType.Damage,
-            StatType.FireRate,
-            StatType.Range,
-            StatType.ProjectileSpeed,
-            StatType.Accuracy,
-            // Shields
-            StatType.ShieldMaxHitPoints,
-            StatType.ShieldRechargeSpeed,
-            StatType.ShieldAbsorption,
-            // Engines / thrust
-            StatType.ForwardPower,
-            StatType.EnginePower,
-            StatType.YawTorque,
-            StatType.ElevationPower,
-            StatType.StrafePower,
-            StatType.JumpChargeSpeed,
-            // Reactor / power
-            StatType.PowerProvided,
-            StatType.BatteryRechargeAmount,
-            // Utility
-            StatType.ProcessingSpeed,
-            StatType.HealingSpeed,
-            StatType.AttractorMaxRange,
-            StatType.AttractorPullVelocity,
-        };
-
-        foreach (var statType in targets)
-            mods.Add(new StatMod(new FloatModifier(amount, ModifierType.AdditiveMultiplier, this), statType.Id));
+            StatType.Damage, StatType.FireRate, StatType.Range,
+            StatType.ProjectileSpeed, StatType.Accuracy,
+        });
+        AddGroup(mods, amount, CsTagRegistry.Defense, new[]
+        {
+            StatType.ShieldMaxHitPoints, StatType.ShieldRechargeSpeed, StatType.ShieldAbsorption,
+        });
+        AddGroup(mods, amount, CsTagRegistry.BuiltIn, new[]
+        {
+            StatType.ForwardPower, StatType.EnginePower, StatType.YawTorque,
+            StatType.ElevationPower, StatType.StrafePower, StatType.JumpChargeSpeed,
+        });
+        AddGroup(mods, amount, CsTagRegistry.PowerProvider, new[]
+        {
+            StatType.PowerProvided, StatType.BatteryRechargeAmount,
+        });
+        AddGroup(mods, amount, CsTagRegistry.Utility, new[]
+        {
+            StatType.ProcessingSpeed, StatType.HealingSpeed,
+            StatType.AttractorMaxRange, StatType.AttractorPullVelocity,
+        });
 
         return mods;
+    }
+
+    private void AddGroup(List<StatMod> mods, float amount, CsTag categoryTag, StatType[] statTypes)
+    {
+        if (categoryTag == null) return;
+
+        var tagCfg = new ModTagConfiguration
+        {
+            RequiredTags = new[] { categoryTag },
+            TagsToAdd = new[] { CsTagRegistry.ForgeUpgraded },
+        };
+
+        foreach (var statType in statTypes)
+            mods.Add(new StatMod(new FloatModifier(amount, ModifierType.AdditiveMultiplier, this), statType.Id, tagCfg));
     }
 }
