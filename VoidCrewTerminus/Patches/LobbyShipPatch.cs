@@ -9,7 +9,6 @@ using UnityEngine.Rendering.HighDefinition;
 
 namespace VoidCrewTerminus.Patches;
 
-// Attaches HangarShipController to HubShipManager's GameObject when the hub scene loads.
 [HarmonyPatch(typeof(HubShipManager), nameof(HubShipManager.Start))]
 internal class HubShipManagerPatch
 {
@@ -243,7 +242,7 @@ internal class HangarShipController : MonoBehaviour
             mat.shader = ResolveShader(mat.shader.name);
             mats[i] = mat;
         }
-        dst.sharedMaterials = mats; // mats are already fresh instances; avoid the auto-clone that .materials does
+        dst.sharedMaterials = mats;
     }
 
     private static void MakeTransparent(Material mat)
