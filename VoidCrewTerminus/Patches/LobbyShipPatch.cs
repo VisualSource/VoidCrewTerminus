@@ -9,7 +9,6 @@ using UnityEngine.Rendering.HighDefinition;
 
 namespace VoidCrewTerminus.Patches;
 
-// Attaches HangarShipController to HubShipManager's GameObject when the hub scene loads.
 [HarmonyPatch(typeof(HubShipManager), nameof(HubShipManager.Start))]
 internal class HubShipManagerPatch
 {
@@ -30,6 +29,17 @@ internal class HangarShipController : MonoBehaviour
     private string _currentShipType;
     private Coroutine _swapRoutine;
     private readonly Dictionary<string, GameObject> _cache = [];
+    private static readonly Dictionary<string, Shader> _shaderCache = [];
+
+    private static Shader ResolveShader(string name)
+    {
+        if (!_shaderCache.TryGetValue(name, out var shader))
+        {
+            shader = Shader.Find(name);
+            _shaderCache[name] = shader;
+        }
+        return shader;
+    }
 
     void Start()
     {
@@ -57,10 +67,22 @@ internal class HangarShipController : MonoBehaviour
     private IEnumerator PreloadAll()
     {
         var container = ResourceAssetContainer<ShipLoadoutDataContainer, ShipLoadoutData, ShipLoadoutDataDef>.Instance;
+        var pending = new List<(string shipType, ResourceRequest req)>();
         foreach (var item in container.GetAllItems())
         {
             if (item is not ShipLoadoutDataDef def) continue;
-            yield return StartCoroutine(BuildAndCache(def));
+            var shipType = GetShipType(def);
+            if (shipType == null) continue;
+            var path = def.Asset?.ShipLoadout?.ReferenceShip?.Path;
+            if (string.IsNullOrEmpty(path)) continue;
+            BepinPlugin.Log.LogDebug($"[HangarShip] Async loading {shipType}: {path}");
+            pending.Add((shipType, Resources.LoadAsync<GameObject>(path)));
+        }
+        foreach (var (shipType, req) in pending)
+        {
+            yield return req;
+            BuildAndCacheLoaded(shipType, req.asset as GameObject);
+            yield return null; // one-frame breather between builds to avoid a single mega-hitch
         }
         if (_currentShipType == null)
         {
@@ -70,29 +92,17 @@ internal class HangarShipController : MonoBehaviour
         }
     }
 
-    private IEnumerator BuildAndCache(ShipLoadoutDataDef def)
+    private void BuildAndCacheLoaded(string shipType, GameObject prefab)
     {
-        var shipType = GetShipType(def);
-        if (shipType == null) yield break;
-
-        var path = def.Asset?.ShipLoadout?.ReferenceShip?.Path;
-        if (string.IsNullOrEmpty(path)) yield break;
-
-        BepinPlugin.Log.LogDebug($"[HangarShip] Async loading {shipType}: {path}");
-        var req = Resources.LoadAsync<GameObject>(path);
-        yield return req;
-
-        var prefab = req.asset as GameObject;
-        if (prefab == null) { BepinPlugin.Log.LogWarning($"[HangarShip] Load failed: {path}"); yield break; }
+        if (prefab == null) { BepinPlugin.Log.LogWarning($"[HangarShip] Load failed for {shipType}"); return; }
 
         var (offset, rot) = GetPositionRot(shipType);
         var parked = new Vector3(transform.position.x + offset.x, ParkY, transform.position.z + offset.z);
         var go = BuildVisualMesh(prefab, parked, rot);
-        if (go == null) { BepinPlugin.Log.LogWarning($"[HangarShip] No mesh for {shipType}"); yield break; }
+        if (go == null) { BepinPlugin.Log.LogWarning($"[HangarShip] No mesh for {shipType}"); return; }
 
         go.transform.localScale = Vector3.one * HangarScale;
-        ApplyPerMaterial(go, MakeTransparent); // warms transparent shader variant during preload
-        SetAlpha(go, 0f);
+        MakeTransparentAndSetAlpha(go, 0f); // warms transparent shader variant during preload
         _cache[shipType] = go;
         BepinPlugin.Log.LogDebug($"[HangarShip] Cached {shipType}");
     }
@@ -186,6 +196,9 @@ internal class HangarShipController : MonoBehaviour
         return true;
     }
 
+    // Possible optimization: convert to a coroutine and yield every N nodes (or after each renderer copy)
+    // to spread the per-ship build cost across multiple frames. Only worth doing if a single ship's build
+    // shows up as a visible hitch in the profiler — the parallel preload already absorbs most of the cost.
     private static int CopyHierarchy(Transform src, Transform dst, HashSet<Renderer> lod0, HashSet<Renderer> allLod)
     {
         int count = 0;
@@ -224,11 +237,12 @@ internal class HangarShipController : MonoBehaviour
         var mats = new Material[src.Length];
         for (int i = 0; i < src.Length; i++)
         {
+            if (src[i] == null) continue;
             var mat = new Material(src[i]);
-            mat.shader = Shader.Find(mat.shader.name);
+            mat.shader = ResolveShader(mat.shader.name);
             mats[i] = mat;
         }
-        dst.materials = mats;
+        dst.sharedMaterials = mats;
     }
 
     private static void MakeTransparent(Material mat)
@@ -274,8 +288,31 @@ internal class HangarShipController : MonoBehaviour
     private static void ApplyPerMaterial(GameObject go, System.Action<Material> fn)
     {
         foreach (var r in go.GetComponentsInChildren<Renderer>(true))
-            foreach (var mat in r.materials)
-                fn(mat);
+            foreach (var mat in r.sharedMaterials)
+                if (mat != null) fn(mat);
+    }
+
+    private static void MakeTransparentAndSetAlpha(GameObject go, float alpha)
+    {
+        foreach (var r in go.GetComponentsInChildren<Renderer>(true))
+            foreach (var mat in r.sharedMaterials)
+            {
+                if (mat == null) continue;
+                MakeTransparent(mat);
+                SetMaterialAlpha(mat, alpha);
+            }
+    }
+
+    private static void SetMaterialAlpha(Material mat, float alpha)
+    {
+        if (mat.HasProperty("_BaseColor"))
+        {
+            var c = mat.GetColor("_BaseColor"); c.a = alpha; mat.SetColor("_BaseColor", c);
+        }
+        if (mat.HasProperty("_Color"))
+        {
+            var c = mat.GetColor("_Color"); c.a = alpha; mat.SetColor("_Color", c);
+        }
     }
 
     private IEnumerator Fade(GameObject go, float target)
@@ -318,16 +355,10 @@ internal class HangarShipController : MonoBehaviour
     private static void SetAlpha(GameObject go, float alpha)
     {
         foreach (var r in go.GetComponentsInChildren<Renderer>(true))
-            foreach (var mat in r.materials)
+            foreach (var mat in r.sharedMaterials)
             {
-                if (mat.HasProperty("_BaseColor"))
-                {
-                    var c = mat.GetColor("_BaseColor"); c.a = alpha; mat.SetColor("_BaseColor", c);
-                }
-                if (mat.HasProperty("_Color"))
-                {
-                    var c = mat.GetColor("_Color"); c.a = alpha; mat.SetColor("_Color", c);
-                }
+                if (mat == null) continue;
+                SetMaterialAlpha(mat, alpha);
             }
     }
 }

@@ -9,6 +9,8 @@ namespace VoidCrewTerminus;
 internal static class TerminusConfig
 {
     // Defined entries as static ConfigEntry<TYPE> NAME
+    // Assigned via reflection in Init(); suppress "never assigned" warning.
+#pragma warning disable CS0649
 
     [BindConfig("ui", false, "Control if relics are allowed to be created from the fabricator")]
     internal static ConfigEntry<bool> AllowRelicReplication;
@@ -45,6 +47,8 @@ internal static class TerminusConfig
     // Upgrade Forge — sector escalation
     [BindConfig("forge", 0.15f, "Fractional stat multiplier added to enemy HP and damage per DifficultyScalar tick")]
     internal static ConfigEntry<float> EscalationStatScalarPerJump;
+
+#pragma warning restore CS0649
 
     internal static ConfigEntry<Vector3> FrigateLobbyHangerPosition;
     internal static ConfigEntry<Vector3> StrikerLobbyHangerPosition;
