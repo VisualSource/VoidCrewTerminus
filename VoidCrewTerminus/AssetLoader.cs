@@ -18,21 +18,16 @@ public class AssetLoader
             var dir = Path.GetDirectoryName(dllPath);
             if (string.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir))
             {
-                BepinPlugin.Log.LogError($"[AssetLoader] Cound not resolve DLL Directory (dllPath='{dllPath}')");
+                BepinPlugin.Log.LogError($"[AssetLoader] Could not resolve DLL Directory (dllPath='{dllPath}')");
                 return;
             }
 
             BepinPlugin.Log.LogInfo($"[AssetLoader] Scanning for asset bundle manifests in: {dir}");
 
             int loaded = 0;
-            foreach (var filepath in Directory.EnumerateFiles(dir, "*", SearchOption.TopDirectoryOnly))
+            foreach (var filepath in Directory.EnumerateFiles(dir, "*.metem", SearchOption.TopDirectoryOnly))
             {
                 var filename = Path.GetFileName(filepath);
-                var fileExt = Path.GetExtension(filepath);
-
-                if (!string.IsNullOrEmpty(fileExt) && fileExt != ".metem") continue;
-                if (!File.Exists(filepath)) continue;
-
                 try
                 {
                     var bundle = AssetBundle.LoadFromFile(filepath);
@@ -41,7 +36,6 @@ public class AssetLoader
 
                     RuntimeAssetsAPI.LoadAssetBundle(filepath);
                     loaded++;
-
 
                     BepinPlugin.Log.LogInfo($"[AssetLoader] Loaded asset bundle: {filename}");
                 }
@@ -53,7 +47,6 @@ public class AssetLoader
         }
         catch (System.Exception e)
         {
-
             BepinPlugin.Log.LogError($"[AssetLoader] Failed loading asset bundles: {e}");
         }
     }
