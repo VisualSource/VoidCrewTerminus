@@ -14,11 +14,11 @@ public static class CsTagRegistry
     private static CsTag _builtIn;
     private static CsTag _forgeUpgraded;
 
-    public static CsTag Weapon        => _weapon        ??= Resolve("Module_Category_Weapon");
-    public static CsTag Defense       => _defense       ??= Resolve("Module_Category_Defense");
+    public static CsTag Weapon => _weapon ??= Resolve("Module_Category_Weapon");
+    public static CsTag Defense => _defense ??= Resolve("Module_Category_Defense");
     public static CsTag PowerProvider => _powerProvider ??= Resolve("Module_Category_PowerProvider");
-    public static CsTag Utility       => _utility       ??= Resolve("Module_Category_Utility");
-    public static CsTag BuiltIn       => _builtIn       ??= Resolve("Module_Category_BuiltIn");
+    public static CsTag Utility => _utility ??= Resolve("Module_Category_Utility");
+    public static CsTag BuiltIn => _builtIn ??= Resolve("Module_Category_BuiltIn");
 
     // Mod-authored tag: stamped on every Forge-applied StatMod via TagsToAdd so that
     // future perk mods can narrow with RequiredLocalTags = [Forge_Upgraded].
@@ -28,7 +28,7 @@ public static class CsTagRegistry
         {
             if (_forgeUpgraded != null) return _forgeUpgraded;
             _forgeUpgraded = ScriptableObject.CreateInstance<CsTag>();
-            ((Object)_forgeUpgraded).name = "Tag_Forge_Upgraded";
+            _forgeUpgraded.name = "Tag_Forge_Upgraded";
             return _forgeUpgraded;
         }
     }

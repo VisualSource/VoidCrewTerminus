@@ -98,14 +98,14 @@ internal class DumpTagsCommand : PublicCommand
 
         var initTags = module.CsTags;
         var initNames = initTags != null && initTags.Length > 0
-            ? string.Join(", ", initTags.Select(t => ((Object)t).name))
+            ? string.Join(", ", initTags.Select(t => t.name))
             : "(none)";
         Messaging.Notification($"{module.name} — init tags: {initNames}");
 
         var localTags = module.Stats.LocalTags();
         var runtimeOnly = localTags
             .Where(t => initTags == null || !initTags.Contains(t))
-            .Select(t => ((Object)t).name)
+            .Select(t => t.name)
             .ToList();
         if (runtimeOnly.Count > 0)
             Messaging.Notification($"{module.name} — runtime tags: {string.Join(", ", runtimeOnly)}");
