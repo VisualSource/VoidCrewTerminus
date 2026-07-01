@@ -1,15 +1,15 @@
 ManifestFileVersion: 0
-CRC: 2217933403
+CRC: 1308336783
 Hashes:
   AssetFileHash:
     serializedVersion: 2
-    Hash: a44d171c77da5795dfb9d2bb58d5b061
+    Hash: de38bf60481a44fbb367e3374ed90e90
   TypeTreeHash:
     serializedVersion: 2
     Hash: d29377adefffe9eb5877a899de46a651
   IncrementalBuildHash:
     serializedVersion: 2
-    Hash: a44d171c77da5795dfb9d2bb58d5b061
+    Hash: de38bf60481a44fbb367e3374ed90e90
 HashAppended: 0
 ClassTypes:
 - Class: 1
@@ -32,6 +32,6 @@ ClassTypes:
   Script: {instanceID: 0}
 SerializeReferenceClassIdentifiers: []
 Assets:
-- Assets/Mods/VoidCrewTerminus/ UpgradeForge.fbx
+- Assets/Mods/VoidCrewTerminus/UpgradeForge.fbx
 - Assets/Mods/VoidCrewTerminus/UpgradeForgeModuleCell.prefab
 Dependencies: []
