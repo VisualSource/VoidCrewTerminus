@@ -45,6 +45,7 @@ The prebuild step will propagate these values into `MyPluginInfo.cs`, the Thunde
 
 ## Game Assembly Reference (`.voidcrew/`)
 
+
 If the `.voidcrew/` directory is present in the project root, it contains decompiled game assemblies for local reference — use these instead of manually decompiling DLLs when researching types or methods to patch.
 
 | Path | Contents |
@@ -68,6 +69,10 @@ jq '."CG.Ship"' .voidcrew/namespace-index.json
 ```
 
 The key assemblies are `Assembly-CSharp` (main game logic, 3 312 files), `VoidCrewCommon`, `Assembly-CSharp-firstpass`, `PhotonUnityNetworking`, and `Opsive.UltimateCharacterController`.
+
+
+lookup api http://0.0.0.0:3157/ 
+ask for token
 
 ## References
 
