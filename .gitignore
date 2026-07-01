@@ -60,4 +60,5 @@ nunit-*.xml
 .voidcrew
 VoidCrewUnityEditor
 Blend/Ectype_Base.blend
-*.blend1
+Blend/*.blend1
+Blend/*.fbx

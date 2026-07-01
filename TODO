@@ -1,7 +1,27 @@
 # Void crew mod 
 
 https://hutlihutgames.github.io/void_crew_modding_documentation/Cosmetics/Cosmetics.html
-https://github.com/Maverik/VoidCrewMods/tree/main/HigherDifficulty
+https://github.com/Maverik/VoidCrewMods/tree/main/HigherDifficulty\
+
+In Progress:
+   Upgrade Forge:
+        ✔ phase 0 @done(26-06-30 18:34)
+        ✔ Phase 1 @done(26-06-30 18:34)
+        ✔ phase 2 @done(26-06-30 18:34)
+        [] phase 3
+        [] phase 4
+        [] phase 5
+        [] phase 6
+        [] phase 7
+        [] phase 8
+        Cleanup:
+                [] update caryable hover module to reflect mod level
+                [] upgrade hover module name to reflect mod level
+                [] update fab to display correct recyle value
+   Leeach:
+
+   Fab Relic:
+        ✔ disable relic fabrication @done(26-06-30 18:33)
 
 Want:
 	- new enemies
