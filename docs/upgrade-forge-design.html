@@ -472,17 +472,22 @@
 
 <h2 id="forge">The Forge Itself</h2>
 <p>
-  The Forge is a new installable ship module shipped as a custom prefab in <code>Assets/upgrade_forge.metem</code> (loaded via the existing
-  <code>AssetLoader.cs</code> pipeline). It has two interaction surfaces:
+  The Forge is a new installable ship module shipped as a custom prefab in <code>Assets/voidcrewterminus.metem</code> (loaded via the existing
+  <code>AssetLoader.cs</code> pipeline). It has three interaction surfaces:
 </p>
 <ol class="bullets">
+  <li><strong>Module socket</strong> — a single-payload socket that accepts the <code>BuildBox</code> of the module being upgraded, mirroring the Fabricator's <code>RecycleSocket.Payload</code> pattern. The target module is <em>deconstructed first</em>; the resulting BuildBox is dropped into the Forge socket for the duration of the upgrade. The Forge writes the new pending level via <code>ForgeOverlayTable.SavePendingLevel(box.photonView.ViewID, level)</code>, and the existing <code>ForgePersistPatch</code> restores the level when the crew rebuilds the box elsewhere on the ship — so the Forge never touches the live <code>CellModule</code>'s stats directly.</li>
   <li><strong>Relic insertion</strong> — crew physically carries a relic and inserts it into the Forge. The Forge holds up to <em>Forge Capacity</em> relics simultaneously.</li>
   <li><strong>Alloy terminal</strong> — crew spends alloys at a Fabricator-style terminal to push the Forge Meter (see below). Mirrors the existing Fabricator self-upgrade pattern.</li>
 </ol>
 <p>
-  Upgrade flow: target a module → insert the required number of relics (matching the cost curve for the desired level) → commit. The Forge consumes
-  the inserted relics, the host computes stat-mod + perk roll, the result broadcasts to all clients.
+  Upgrade flow: deconstruct the target module → drop the resulting BuildBox into the Forge's module socket → insert the required number of relics (matching the cost curve for the desired level) → commit. The Forge consumes
+  the spent relics, the host computes stat-mod + perk roll, the result broadcasts to all clients, and the BuildBox is released so the crew can rebuild it in-place at the new level.
 </p>
+<div class="callout note">
+  <span class="label">Design clarification (2026-07-01)</span>
+  Original wording said "target a module → insert relics → commit" without specifying <em>how</em> the target is selected. The chosen model is the Fabricator-style single-payload socket: the module is physically deconstructed into a BuildBox first, and the BuildBox occupies the Forge's module socket during the upgrade. This lets the Forge reuse the existing deconstruct/reconstruct → <code>ForgePersistPatch</code> level-persistence bridge without any live-stat manipulation, and gives players a legible physical loop (carry the module in, carry it out).
+</div>
 
 <h2 id="meter">Forge Meter — Investment Commitment</h2>
 <p>

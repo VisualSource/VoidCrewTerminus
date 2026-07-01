@@ -23,25 +23,32 @@ jobs:
       run: dotnet restore
     - name: Build
       run: dotnet build VoidCrewTerminus.slnx --no-restore -c Release
-    - name: release
-      uses: actions/create-release@v1
-      id: create_release
+    - name: Extract release notes from CHANGELOG.md
+      shell: pwsh
+      run: |
+        $tag = "${{ github.ref_name }}"
+        $lines = Get-Content "VoidCrewTerminus/ReleaseFiles/CHANGELOG.md"
+        $start = -1
+        $end = $lines.Length
+        for ($i = 0; $i -lt $lines.Length; $i++) {
+            if ($lines[$i] -eq "## $tag") {
+                $start = $i + 1
+            } elseif ($start -ge 0 -and $lines[$i] -match '^## ') {
+                $end = $i
+                break
+            }
+        }
+        if ($start -lt 0) {
+            Write-Error "No CHANGELOG.md section found for tag '$tag'"
+            exit 1
+        }
+        $body = ($lines[$start..($end - 1)] -join "`n").Trim()
+        Set-Content -Path release-body.md -Value $body -Encoding utf8
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
       with:
-        draft: true 
+        draft: true
         prerelease: false
-        release_name: VoidCrewTerminus
-        tag_name: ${{ github.ref }}
-        body_path: ./RELEASE.md
-      env:
-        GITHUB_TOKEN: ${{ github.token }}
-    - uses: olegtarasov/get-tag@v2.1.3
-      id: tagName
-    - name: upload artifact
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ github.token }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./VoidCrewTerminus/bin/Release/net472/Releases/VoidCrewTerminus-${{steps.tagName.outputs.tag}}.zip
-        asset_name: VoidCrewTerminus-${{steps.tagName.outputs.tag}}.zip
-        asset_content_type: application/zip
+        name: VoidCrewTerminus ${{ github.ref_name }}
+        body_path: release-body.md
+        files: ./VoidCrewTerminus/bin/Release/net472/Releases/VoidCrewTerminus-${{ github.ref_name }}.zip
