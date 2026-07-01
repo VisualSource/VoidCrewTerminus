@@ -22,9 +22,8 @@ public class AssetLoader
                 return;
             }
 
-            BepinPlugin.Log.LogInfo($"[AssetLoader] Scanning for asset bundle manifests in: {dir}");
+            BepinPlugin.Log.LogDebug($"[AssetLoader] Scanning for asset bundle manifests in: {dir}");
 
-            int loaded = 0;
             foreach (var filepath in Directory.EnumerateFiles(dir, "*.metem", SearchOption.TopDirectoryOnly))
             {
                 var filename = Path.GetFileName(filepath);
@@ -35,13 +34,11 @@ public class AssetLoader
                     bundle.Unload(true);
 
                     RuntimeAssetsAPI.LoadAssetBundle(filepath);
-                    loaded++;
-
-                    BepinPlugin.Log.LogInfo($"[AssetLoader] Loaded asset bundle: {filename}");
+                    BepinPlugin.Log.LogDebug($"[AssetLoader] Loaded asset bundle: {filename}");
                 }
                 catch (System.Exception e)
                 {
-                    BepinPlugin.Log.LogInfo($"[AssetLoader] Error while probing/loading '{filename}': {e}");
+                    BepinPlugin.Log.LogError($"[AssetLoader] Error while probing/loading '{filename}': {e}");
                 }
             }
         }
