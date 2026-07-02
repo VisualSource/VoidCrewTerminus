@@ -2,6 +2,7 @@
 
 https://hutlihutgames.github.io/void_crew_modding_documentation/Cosmetics/Cosmetics.html
 https://github.com/Maverik/VoidCrewMods/tree/main/HigherDifficulty\
+https://github.com/BepInEx/BepInEx.Debug
 
 In Progress:
    Upgrade Forge:
@@ -18,7 +19,7 @@ In Progress:
                 [] update caryable hover module to reflect mod level
                 [] upgrade hover module name to reflect mod level
                 [] update fab to display correct recyle value
-                []
+                [] reuse or create new BuildBox asset
    Leeach:
 
    Fab Relic:
