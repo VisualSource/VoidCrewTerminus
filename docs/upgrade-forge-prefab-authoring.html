@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Upgrade Forge — Prefab Authoring Guide</title>
+  <style>
+    :root {
+      --bg:      #0f1117;
+      --surface: #181c27;
+      --border:  #2a2f42;
+      --accent:  #5c8aff;
+      --accent2: #9b59f5;
+      --text:    #d4d8e8;
+      --muted:   #7a80a0;
+      --code-bg: #12151f;
+      --warn:    #e0a35c;
+      --ok:      #5ce08a;
+      --danger:  #e05c5c;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 15px; line-height: 1.7;
+    }
+    main { max-width: 900px; margin: 0 auto; padding: 40px 28px 80px; }
+    h1 { font-size: 26px; margin-bottom: 6px; color: #fff; }
+    h1 + p.sub { color: var(--muted); margin-bottom: 28px; }
+    h2 { font-size: 20px; margin: 38px 0 12px; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+    h3 { font-size: 16px; margin: 24px 0 8px; color: var(--accent2); }
+    p { margin: 10px 0; }
+    code {
+      background: var(--code-bg); border: 1px solid var(--border);
+      border-radius: 4px; padding: 1px 6px; font-size: 13px;
+      font-family: 'Cascadia Code', Consolas, monospace;
+    }
+    pre {
+      background: var(--code-bg); border: 1px solid var(--border);
+      border-radius: 8px; padding: 14px 16px; overflow-x: auto; margin: 12px 0;
+    }
+    pre code { background: none; border: none; padding: 0; }
+    table.data { border-collapse: collapse; width: 100%; margin: 14px 0; }
+    table.data th, table.data td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; }
+    table.data th { background: var(--surface); color: #fff; }
+    td.k { color: var(--accent); font-family: Consolas, monospace; font-size: 13px; white-space: nowrap; }
+    .muted { color: var(--muted); }
+    ul.bullets { margin: 10px 0 10px 24px; }
+    ul.bullets li { margin: 6px 0; }
+    ol.steps { margin: 10px 0 10px 24px; }
+    ol.steps li { margin: 8px 0; }
+    .callout {
+      border-left: 3px solid var(--accent); background: var(--surface);
+      border-radius: 0 8px 8px 0; padding: 12px 16px; margin: 14px 0;
+    }
+    .callout.warn { border-left-color: var(--warn); }
+    .callout.ok { border-left-color: var(--ok); }
+    .callout .label {
+      display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 1px;
+      text-transform: uppercase; margin-right: 8px; color: var(--warn);
+    }
+    .callout.ok .label { color: var(--ok); }
+    .callout:not(.warn):not(.ok) .label { color: var(--accent); }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Upgrade Forge — Prefab Authoring Guide</h1>
+  <p class="sub">How to edit <code>UpgradeForgeModuleCell.prefab</code> in the Unity editor so the mod's runtime wiring picks it up. Companion to the interaction code in <code>Features/Forge/UpgradeForgeBehavior.cs</code>.</p>
+
+  <h2 id="contract">The runtime contract</h2>
+  <p>
+    The metem pipeline cannot carry game script components, so the prefab communicates with the mod purely through
+    <strong>named transforms</strong> and <strong>plain Unity components</strong> (colliders, meshes, lights).
+    At runtime, <code>UpgradeForgeBehavior.BuildInteractables()</code> scans the built module for these names
+    (exact, case-sensitive):
+  </p>
+  <table class="data">
+    <tr><th>Name</th><th>Required</th><th>What the runtime does with it</th></tr>
+    <tr><td class="k">RelicTubeTarget</td><td>yes (any count; 6 currently)</td><td>Relic mount point. Gets a click target; inserted relics dock here (base pivot aligned to the anchor's position <em>and rotation</em>).</td></tr>
+    <tr><td class="k">InputTarget</td><td>yes (one)</td><td>Module socket. A carried BuildBox is loaded here; empty-handed clicks commit the upgrade (when no CommitTarget exists).</td></tr>
+    <tr><td class="k">CommitTarget</td><td>optional (one)</td><td>Dedicated commit button. Empty-handed click = commit. Strongly recommended — without it, committing means clicking the module-socket rim.</td></tr>
+  </table>
+  <p>Each of the anchors above also supports three <strong>optional child objects</strong>:</p>
+  <table class="data">
+    <tr><th>Child name</th><th>Component(s)</th><th>Behavior</th></tr>
+    <tr><td class="k">ClickTarget</td><td>any Collider (Is&nbsp;Trigger ✓)</td><td>Used as the click region instead of the auto-generated default box. A collider placed directly on the anchor itself works too.</td></tr>
+    <tr><td class="k">Highlight</td><td>mesh / light, <strong>disabled</strong></td><td>Enabled while the player's crosshair is on the interactable, disabled otherwise. Substitute for the vanilla socket outline.</td></tr>
+    <tr><td class="k">Filled</td><td>mesh / light, <strong>disabled</strong></td><td>Enabled while a relic (or the BuildBox, on <code>InputTarget</code>) is docked on that anchor.</td></tr>
+  </table>
+  <div class="callout">
+    <span class="label">Note</span>
+    Layers are forced by the mod at runtime (<code>InteractiveObjects</code>), because the editor project's layer table
+    doesn't match the game's. Leave everything on <em>Default</em> — don't try to set layers in the editor.
+  </div>
+
+  <h2 id="open">1 · Open the prefab</h2>
+  <ol class="steps">
+    <li>Open the <code>VoidCrewUnityEditor/VoidCrewUnityEditor</code> project in Unity Hub.</li>
+    <li>In the Project window, navigate to <code>Assets/Mods/VoidCrewTerminus/</code>.</li>
+    <li>Double-click <code>UpgradeForgeModuleCell</code> to enter <strong>Prefab Mode</strong> (the isolated editing view). All edits below happen here; Unity saves them back to the prefab asset when you exit (or with <em>Auto Save</em> on).</li>
+  </ol>
+
+  <h2 id="commit">2 · Add the CommitTarget anchor</h2>
+  <ol class="steps">
+    <li>In the Hierarchy, right-click the <strong>prefab root</strong> (<code>UpgradeForgeModuleCell</code>) → <em>Create Empty</em>.</li>
+    <li>Rename it exactly <code>CommitTarget</code>.</li>
+    <li>With the move tool (<kbd>W</kbd>), place it on whatever part of the mesh should read as the commit button/lever — somewhere visually distinct from the tubes and the module socket.</li>
+    <li>Orientation doesn't matter for a button (nothing docks on it), position does.</li>
+  </ol>
+  <div class="callout ok">
+    <span class="label">Tip</span>
+    Parent new anchors <strong>directly under the prefab root</strong>, not under FBX child nodes. The FBX nodes carry
+    tiny non-uniform import scales (0.01 / 0.033…) that make hand-editing sizes and offsets confusing. The existing
+    <code>RelicTubeTarget</code>/<code>InputTarget</code> anchors live under FBX nodes — that works (the runtime
+    compensates for scale on generated colliders), but unit-scale parents are much easier to author against.
+  </div>
+
+  <h2 id="colliders">3 · Author precise click colliders</h2>
+  <p>Without these, the mod generates plain boxes (0.35&nbsp;m on tubes, 1.2&nbsp;m on the socket, 0.3&nbsp;m on the commit button). To match click regions to the visible geometry:</p>
+  <ol class="steps">
+    <li>Right-click an anchor (e.g. a <code>RelicTubeTarget</code>) → <em>Create Empty</em> → rename it <code>ClickTarget</code>.</li>
+    <li><em>Add Component</em> → <strong>Box Collider</strong> (or Capsule Collider for round tubes).</li>
+    <li>Check <strong>Is Trigger</strong>. This matters twice: players shouldn't collide with click regions, and solid colliders would occlude other interactables.</li>
+    <li>Click <em>Edit Collider</em> and drag the handles until the green wireframe hugs the tube/button mesh. The gizmo shows the true world-space result, so inherited FBX scale is a non-issue here — what you see is what the raycast hits.</li>
+    <li>Repeat per anchor. A collider placed directly on the anchor GameObject (instead of a <code>ClickTarget</code> child) is also honored.</li>
+  </ol>
+  <div class="callout warn">
+    <span class="label">Gotcha</span>
+    The player's interaction ray is <strong>blocked by solid (non-trigger) colliders</strong>. If the module's collision
+    mesh sits in front of a click target, clicks hit the hull instead. Keep click targets slightly proud of the collision
+    surface, or recess the collision mesh around them.
+  </div>
+
+  <h2 id="feedback">4 · Hover + filled indicators</h2>
+  <h3>Highlight (hover feedback)</h3>
+  <ol class="steps">
+    <li>Under an anchor, create a child named exactly <code>Highlight</code>.</li>
+    <li>Give it something visible: an emissive ring/quad mesh around the tube mouth, a slightly scaled duplicate of the tube mesh with an emissive HDRP material, or a small <em>Point Light</em>.</li>
+    <li><strong>Disable the GameObject</strong> (uncheck the box next to its name in the Inspector). The mod enables it while hovered and disables it again on look-away.</li>
+  </ol>
+  <h3>Filled (docked-state feedback)</h3>
+  <ol class="steps">
+    <li>Same recipe, child named exactly <code>Filled</code>, disabled by default.</li>
+    <li>Shown while a relic is docked in that tube (or while the BuildBox occupies <code>InputTarget</code>). A lit tube cap or status lamp reads well from across the room.</li>
+    <li>An anchor can have both — Highlight tracks the crosshair, Filled tracks contents.</li>
+  </ol>
+
+  <h2 id="placement">5 · Anchor placement rules</h2>
+  <ul class="bullets">
+    <li><strong>Rotation is meaningful on dock anchors.</strong> Docked items are aligned base-pivot-to-anchor, matching the anchor's rotation — the anchor's +Y is the docked relic's "up". Tilt the anchor, and the relic mounts tilted.</li>
+    <li><strong>Leave clearance at <code>InputTarget</code>.</strong> The BuildBox is the largest docked item; its mesh shouldn't clip the forge body, and players need to see and grab it back out.</li>
+    <li><strong>Tube count is free.</strong> All <code>RelicTubeTarget</code>s are registered; Phase&nbsp;3 uses at most 4 (hardcoded capacity), Phase&nbsp;5 raises capacity with Forge level — six tubes is forward-compatible.</li>
+    <li><strong>Names are load-bearing.</strong> <code>RelicTubeTarget</code>, <code>InputTarget</code>, <code>CommitTarget</code>, <code>ClickTarget</code>, <code>Highlight</code>, <code>Filled</code> — exact and case-sensitive. A typo silently gets ignored (check the BepInEx log line described below).</li>
+    <li><strong>Plain Unity components only.</strong> Game scripts (sockets, interactables, etc.) can't ride the metem bundle; the only game-package component on the prefab should remain the <code>VoidCrewAsset</code> marker on the root.</li>
+  </ul>
+
+  <h2 id="export">6 · Export and deploy</h2>
+  <ol class="steps">
+    <li>Exit Prefab Mode and save.</li>
+    <li>In the Project window, select the <strong>folder</strong> <code>Assets/Mods/VoidCrewTerminus</code> (the folder itself, exactly one selection).</li>
+    <li>Menu bar → <strong>Void Crew → Export Asset Bundle</strong>.</li>
+    <li>The bundle lands in <code>Exported Assets/</code> at the Unity project root as <code>voidcrewterminus.metem</code> + <code>voidcrewterminus.metem.manifest</code>.</li>
+    <li>Copy both files to the repo's <code>Assets/</code> directory (tracked in git), and next to <code>VoidCrewTerminus.dll</code> in the game's <code>BepInEx/plugins/…</code> folder — <code>AssetLoader</code> loads every <code>*.metem</code> sitting beside the DLL.</li>
+    <li>No C# rebuild is needed for prefab-only changes.</li>
+  </ol>
+
+  <h2 id="verify">7 · Verify in game</h2>
+  <ul class="bullets">
+    <li>On building the Forge, the BepInEx log should print <code>[Forge] Built interactables: N relic tubes, module socket, commit button.</code> — if the tube count or commit button is missing, an anchor name didn't match.</li>
+    <li>Hover a tube: HUD prompt appears and your <code>Highlight</code> child lights up.</li>
+    <li>Insert a relic (click a tube while carrying one): relic mounts on the anchor, <code>Filled</code> lights, chat shows <em>“Relic inserted (n/4)…”</em>.</li>
+    <li>Grab a docked relic: it comes off, <code>Filled</code> goes dark, <code>!forgestatus</code> agrees.</li>
+    <li>Carry a BuildBox to <code>InputTarget</code>, click: box docks. Empty-handed click on <code>CommitTarget</code>: commit fires with a chat result.</li>
+  </ul>
+</main>
+</body>
+</html>

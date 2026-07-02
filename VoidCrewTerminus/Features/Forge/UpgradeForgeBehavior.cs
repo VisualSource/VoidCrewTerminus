@@ -1,6 +1,11 @@
 using System.Collections.Generic;
+using System.Linq;
+using CG.Game.Player;
+using CG.Network;
+using CG.Objects;
 using CG.Ship.Object;
 using UnityEngine;
+using VoidManager.Utilities;
 
 namespace VoidCrewTerminus.Forge;
 
@@ -15,11 +20,14 @@ namespace VoidCrewTerminus.Forge;
 //   - Persist the new level via ForgeOverlayTable.SavePendingLevel so the level rides
 //     the BuildBox through reconstruction — ForgePersistPatch does the restoration.
 //
-// Physical socket wiring (colliders / trigger volumes on the prefab that route
-// relic drops and BuildBox loads into TryInsertRelic / TryTakeModule) lives in
-// ForgeInteractionPatch. That side depends on live-decompile signatures and is
-// scaffolded rather than implemented — dev commands drive the state machine
-// end-to-end until then.
+// In-world interaction model (see also ForgeInteractionPatch):
+//   - BuildInteractables() spawns ForgeInteractable colliders on the prefab's named
+//     anchors: RelicTubeTarget (×6), InputTarget (module socket), and an optional
+//     CommitTarget. Clicks are routed here via the CarryableInteract prefix.
+//   - Inserted relics / the loaded BuildBox stay live in the world: they are docked
+//     kinematically to their anchor (LateUpdate keeps them pinned while the ship
+//     moves) and remain grabbable. Update() reconciles state when a player grabs a
+//     docked item back out or a commit destroys consumed relics.
 public class UpgradeForgeBehavior : MonoBehaviour
 {
     // Hardcoded per the Phase 3 plan. Phase 5 replaces this with a value driven by
@@ -30,8 +38,21 @@ public class UpgradeForgeBehavior : MonoBehaviour
     // ForgeInteractionPatch to identify Forge modules as they build.
     public const string PrefabName = "UpgradeForgeModuleCell";
 
+    // Anchor names baked into the shipped prefab. CommitTarget is optional — when
+    // absent, an empty-handed click on the module socket commits instead.
+    public const string RelicTubeAnchorName = "RelicTubeTarget";
+    public const string InputAnchorName = "InputTarget";
+    public const string CommitAnchorName = "CommitTarget";
+
     private BuildBox _moduleBox;
     private readonly List<GameObject> _relics = new();
+
+    // Physically docked items (relics + BuildBox) → the anchor they sit on.
+    private readonly Dictionary<GameObject, Transform> _docked = new();
+    private readonly List<KeyValuePair<GameObject, Transform>> _undockScratch = new();
+    private Transform[] _tubeAnchors = System.Array.Empty<Transform>();
+    private Transform _inputAnchor;
+    private bool _interactablesBuilt;
 
     public bool HasModule => _moduleBox != null;
     public int RelicCount => _relics.Count;
@@ -132,7 +153,7 @@ public class UpgradeForgeBehavior : MonoBehaviour
         {
             var relic = _relics[0];
             _relics.RemoveAt(0);
-            if (relic != null) Destroy(relic);
+            DestroyRelic(relic);
         }
 
         BepinPlugin.Log.LogInfo(
@@ -142,14 +163,289 @@ public class UpgradeForgeBehavior : MonoBehaviour
         return CommitResult.Ok;
     }
 
+    // ---- In-world interactables ----------------------------------------
+
+    // Spawns ForgeInteractable click targets on the prefab's named anchors.
+    // Idempotent — called every time ForgeInteractionPatch re-attaches after a
+    // module rebuild.
+    public void BuildInteractables()
+    {
+        if (_interactablesBuilt) return;
+        _interactablesBuilt = true;
+
+        var transforms = GetComponentsInChildren<Transform>(true);
+        _tubeAnchors = transforms.Where(t => t.name == RelicTubeAnchorName).ToArray();
+        _inputAnchor = transforms.FirstOrDefault(t => t.name == InputAnchorName);
+        var commitAnchor = transforms.FirstOrDefault(t => t.name == CommitAnchorName);
+
+        int layer = LayerMask.NameToLayer("InteractiveObjects");
+        if (layer < 0)
+        {
+            BepinPlugin.Log.LogWarning("[Forge] Layer 'InteractiveObjects' not found — interactables will not be raycast-targetable.");
+            layer = gameObject.layer;
+        }
+
+        foreach (var tube in _tubeAnchors)
+            CreateInteractable(tube, ForgeInteractableKind.RelicTube, new Vector3(0.35f, 0.35f, 0.35f), layer);
+        if (_inputAnchor != null)
+            // Oversized relative to a docked BuildBox so its rim stays clickable
+            // for empty-handed commits even while a box occupies the socket.
+            CreateInteractable(_inputAnchor, ForgeInteractableKind.ModuleSocket, new Vector3(1.2f, 1.2f, 1.2f), layer);
+        if (commitAnchor != null)
+            CreateInteractable(commitAnchor, ForgeInteractableKind.CommitButton, new Vector3(0.3f, 0.3f, 0.3f), layer);
+
+        if (_tubeAnchors.Length == 0 || _inputAnchor == null)
+            BepinPlugin.Log.LogWarning(
+                $"[Forge] Prefab anchors incomplete (tubes={_tubeAnchors.Length}, input={(_inputAnchor != null ? "ok" : "missing")}) — " +
+                "check the metem bundle matches UpgradeForgeModuleCell.prefab.");
+        else
+            BepinPlugin.Log.LogInfo($"[Forge] Built interactables: {_tubeAnchors.Length} relic tubes, module socket{(commitAnchor != null ? ", commit button" : "")}.");
+    }
+
+    // Prefab authoring contract (all optional, plain Unity components so they survive
+    // the metem bundle): a Collider on the anchor itself or on a child named
+    // "ClickTarget" becomes the click region instead of the generated default box;
+    // a disabled child named "Highlight" is shown while the player hovers; a disabled
+    // child named "Filled" is shown while an item is docked on that anchor.
+    private void CreateInteractable(Transform anchor, ForgeInteractableKind kind, Vector3 size, int layer)
+    {
+        GameObject go;
+        var authored = anchor.GetComponent<Collider>();
+        if (authored == null)
+            authored = anchor.Find("ClickTarget")?.GetComponent<Collider>();
+
+        if (authored != null)
+        {
+            go = authored.gameObject;
+        }
+        else
+        {
+            go = new GameObject($"ForgeInteractable_{kind}");
+            go.transform.SetParent(anchor, false);
+            var col = go.AddComponent<BoxCollider>();
+            col.isTrigger = true;
+            // The anchors ride under FBX nodes with tiny non-uniform scales, so the
+            // requested world-space size must be divided out of the inherited scale.
+            var lossy = anchor.lossyScale;
+            col.size = new Vector3(
+                size.x / Mathf.Max(Mathf.Abs(lossy.x), 1e-4f),
+                size.y / Mathf.Max(Mathf.Abs(lossy.y), 1e-4f),
+                size.z / Mathf.Max(Mathf.Abs(lossy.z), 1e-4f));
+        }
+
+        // Layer is always forced at runtime — the editor project's layer table does
+        // not match the game's, so authored layer indices can't be trusted.
+        go.layer = layer;
+
+        var fi = go.GetComponent<ForgeInteractable>();
+        if (fi == null) fi = go.AddComponent<ForgeInteractable>();
+        fi.Forge = this;
+        fi.Kind = kind;
+        fi.Anchor = anchor;
+        fi.ShowContextInfo = false;
+        fi.InteractionInfo = ForgeInteractable.InfoFor(kind);
+    }
+
+    // Entry point for all Forge clicks, invoked by the CarryableInteract prefix in
+    // ForgeInteractionPatch. Runs on the interacting player's client.
+    public void HandleInteraction(ForgeInteractable target, LocalPlayer player)
+    {
+        var payload = player.Payload;
+        if (payload != null)
+        {
+            if (payload is BuildBox box)
+            {
+                if (target.Kind != ForgeInteractableKind.ModuleSocket)
+                { Messaging.Notification("Place module boxes on the Forge's module socket."); return; }
+                if (HasModule)
+                { Messaging.Notification("The Forge already holds a module box."); return; }
+
+                player.Carrier.ReleaseCarryable();
+                TryTakeModule(box);
+                Dock(box.gameObject, _inputAnchor != null ? _inputAnchor : transform);
+                Messaging.Notification($"Module loaded (L{CurrentBoxLevel}). Insert relics and commit to upgrade.");
+            }
+            else if (IsRelic(payload.gameObject))
+            {
+                if (target.Kind == ForgeInteractableKind.ModuleSocket)
+                { Messaging.Notification("Insert relics into the relic tubes."); return; }
+
+                var tube = NextFreeTube();
+                if (!TryInsertRelic(payload.gameObject))
+                { Messaging.Notification($"The Forge is full ({RelicCount}/{Capacity} relics)."); return; }
+
+                player.Carrier.ReleaseCarryable();
+                Dock(payload.gameObject, tube);
+                Messaging.Notification($"Relic inserted ({RelicCount}/{Capacity}). Projected level: L{ProjectedTargetLevel}.");
+            }
+            else
+            {
+                Messaging.Notification("The Forge only accepts relics and module boxes.");
+            }
+            return;
+        }
+
+        // Empty-handed: commit via the module socket (or the dedicated commit button).
+        // Docked relics and the docked box are retrieved by grabbing them directly.
+        switch (target.Kind)
+        {
+            case ForgeInteractableKind.ModuleSocket:
+            case ForgeInteractableKind.CommitButton:
+                DoCommit();
+                break;
+            case ForgeInteractableKind.RelicTube:
+                Messaging.Notification(HasModule
+                    ? $"Forge: L{CurrentBoxLevel} module loaded, {RelicCount}/{Capacity} relics, projected L{ProjectedTargetLevel}."
+                    : $"Forge: no module loaded, {RelicCount}/{Capacity} relics.");
+                break;
+        }
+    }
+
+    private void DoCommit()
+    {
+        switch (TryCommit(out int newLevel, out int consumed))
+        {
+            case CommitResult.Ok:
+                Messaging.Notification($"Upgrade committed: L{newLevel} (consumed {consumed} relic{(consumed == 1 ? "" : "s")}). Rebuild the module to apply.");
+                break;
+            case CommitResult.NoModule:
+                Messaging.Notification("Load a deconstructed module box into the Forge first.");
+                break;
+            case CommitResult.NoRelics:
+                Messaging.Notification("Insert relics into the tubes before committing.");
+                break;
+            case CommitResult.AlreadyAtMax:
+                Messaging.Notification("This module is already at L10.");
+                break;
+            case CommitResult.InsufficientRelics:
+                Messaging.Notification($"Next level requires {ForgeCostCurve.CostForNextLevel(CurrentBoxLevel)} relics; the Forge holds {RelicCount}.");
+                break;
+            case CommitResult.MissingViewId:
+                Messaging.Notification("Forge error: module box has no network identity.");
+                break;
+        }
+    }
+
+    // ---- Physical docking ------------------------------------------------
+
+    private void Dock(GameObject item, Transform anchor)
+    {
+        if (item == null || anchor == null) return;
+        _docked[item] = anchor;
+        var co = item.GetComponent<CarryableObject>();
+        var rb = co != null ? co.MainRigidbody : item.GetComponent<Rigidbody>();
+        if (rb != null) rb.isKinematic = true;
+        PlaceAtAnchor(item, co, anchor);
+        SetAnchorFilled(anchor, true);
+    }
+
+    // Optional prefab-authored fill indicator: a disabled child named "Filled" under
+    // the anchor is toggled while something is docked there.
+    private static void SetAnchorFilled(Transform anchor, bool filled)
+    {
+        var indicator = anchor != null ? anchor.Find("Filled") : null;
+        if (indicator != null) indicator.gameObject.SetActive(filled);
+    }
+
+    // Base-pivot alignment, mirroring CarryablesSocket.PlaceCarryableOnSocket.
+    private static void PlaceAtAnchor(GameObject item, CarryableObject co, Transform anchor)
+    {
+        var pivot = co != null ? co.BasePivot : item.transform;
+        var rel = item.transform.worldToLocalMatrix * pivot.localToWorldMatrix;
+        var final = anchor.localToWorldMatrix * rel.inverse;
+        item.transform.SetPositionAndRotation(final.GetPosition(), final.rotation);
+    }
+
+    private Transform NextFreeTube()
+    {
+        foreach (var tube in _tubeAnchors)
+            if (tube != null && !_docked.ContainsValue(tube))
+                return tube;
+        return transform; // anchorless fallback — relic sits at the forge base
+    }
+
+    // Reconcile forge state with the world: players grab docked items back out via
+    // the vanilla Grabbable flow, and commits destroy consumed relics. Both surface
+    // here as docked entries whose item is gone or carried again.
+    private void Update()
+    {
+        _relics.RemoveAll(r => r == null);
+        if (!ReferenceEquals(_moduleBox, null) && _moduleBox == null) _moduleBox = null;
+        if (_docked.Count == 0) return;
+
+        foreach (var kv in _docked)
+        {
+            var go = kv.Key;
+            if (go == null) { _undockScratch.Add(kv); continue; }
+            var co = go.GetComponent<CarryableObject>();
+            if (co != null && co.Carrier != null) _undockScratch.Add(kv);
+        }
+
+        foreach (var kv in _undockScratch)
+        {
+            var go = kv.Key;
+            _docked.Remove(go);
+            SetAnchorFilled(kv.Value, false);
+            if (go == null) continue;
+
+            var co = go.GetComponent<CarryableObject>();
+            var rb = co != null ? co.MainRigidbody : null;
+            if (rb != null) rb.isKinematic = false;
+
+            var box = go.GetComponent<BuildBox>();
+            if (box != null && box == _moduleBox)
+            {
+                TryReleaseModule(out _);
+                BepinPlugin.Log.LogInfo($"[Forge] Module box {go.name} retrieved from socket.");
+            }
+            else if (_relics.Remove(go))
+            {
+                BepinPlugin.Log.LogInfo($"[Forge] Relic {go.name} retrieved ({RelicCount}/{Capacity} remain).");
+            }
+        }
+        _undockScratch.Clear();
+    }
+
+    // Keep docked items pinned to their anchors while the ship moves.
+    private void LateUpdate()
+    {
+        if (_docked.Count == 0) return;
+        foreach (var kv in _docked)
+        {
+            if (kv.Key == null || kv.Value == null) continue;
+            PlaceAtAnchor(kv.Key, kv.Key.GetComponent<CarryableObject>(), kv.Value);
+        }
+    }
+
+    // Consumed relics are networked objects — destroy through the game's factory
+    // when we own them so the removal replicates; plain Destroy otherwise.
+    private static void DestroyRelic(GameObject relic)
+    {
+        if (relic == null) return;
+        var co = relic.GetComponent<CarryableObject>();
+        if (co != null && co.photonView != null && co.photonView.AmOwner)
+            ObjectFactory.DestroyCloneStarObject(co);
+        else
+            Destroy(relic);
+    }
+
     // ---- Helpers ------------------------------------------------------
 
-    // A GameObject is considered a relic if RelicTierData recognises its normalized
-    // prefab name, OR its name starts with "Relic_" (so mod-added or unmapped relics
-    // still work — they fall through to RelicTierData's default tier).
+    // A GameObject is a relic when its carryable carries the game's canonical relic
+    // CsTag (RuntimeAssetTable.RelicTag — the same check the vanilla relic shrine
+    // filter resolves to, and the tag RuntimeCarryable stamps on modded relics).
+    // Name matching against RelicTierData / the "Relic_" prefix remains as a fallback
+    // for objects that aren't tagged carryables.
     public static bool IsRelic(GameObject go)
     {
         if (go == null) return false;
+
+        var carryable = go.GetComponent<CarryableObject>();
+        var relicTag = CsTagRegistry.Relic;
+        if (carryable != null && relicTag != null && carryable.CsTags != null &&
+            System.Array.IndexOf(carryable.CsTags, relicTag) >= 0)
+            return true;
+
         if (RelicTierData.TryGet(go.name, out _)) return true;
         var normalized = RelicTierData.NormalizeName(go.name);
         return !string.IsNullOrEmpty(normalized) &&

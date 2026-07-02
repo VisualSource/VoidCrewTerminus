@@ -13,6 +13,8 @@ public static class CsTagRegistry
     private static CsTag _utility;
     private static CsTag _builtIn;
     private static CsTag _forgeUpgraded;
+    private static CsTag _forgeModule;
+    private static CsTag _relic;
 
     public static CsTag Weapon => _weapon ??= Resolve("Module_Category_Weapon");
     public static CsTag Defense => _defense ??= Resolve("Module_Category_Defense");
@@ -30,6 +32,36 @@ public static class CsTagRegistry
             _forgeUpgraded = ScriptableObject.CreateInstance<CsTag>();
             _forgeUpgraded.name = "Tag_Forge_Upgraded";
             return _forgeUpgraded;
+        }
+    }
+
+    // Mod-authored tag stamped onto the Upgrade Forge CellModule when the behavior
+    // attaches (ForgeAttachHelper), so Forge instances are identifiable by tag
+    // instead of prefab name everywhere past the initial build.
+    public static CsTag ForgeModule
+    {
+        get
+        {
+            if (_forgeModule != null) return _forgeModule;
+            _forgeModule = ScriptableObject.CreateInstance<CsTag>();
+            _forgeModule.name = "Tag_Forge_Module";
+            return _forgeModule;
+        }
+    }
+
+    // The game's canonical relic tag. This is the same asset RuntimeCarryable stamps
+    // onto RuntimeAssets-modded relics (RuntimeAssetTable.RelicTag), and vanilla relic
+    // carryables carry it in their serialized CsTags — so a reference-equality check
+    // against CarryableObject.CsTags identifies relics without name matching.
+    public static CsTag Relic
+    {
+        get
+        {
+            if (_relic != null) return _relic;
+            _relic = DataTable<RuntimeAssetTable>.Instance?.RelicTag?.Asset as CsTag;
+            if (_relic == null)
+                BepinPlugin.Log.LogWarning("[CsTagRegistry] RuntimeAssetTable.RelicTag not resolvable (yet).");
+            return _relic;
         }
     }
 
