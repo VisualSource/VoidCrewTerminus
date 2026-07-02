@@ -8,7 +8,7 @@ In Progress:
         ✔ phase 0 @done(26-06-30 18:34)
         ✔ Phase 1 @done(26-06-30 18:34)
         ✔ phase 2 @done(26-06-30 18:34)
-        ▷ phase 3  (state machine + cost curve + dev commands landed; in-world socket wiring in ForgeInteractionPatch stubbed pending live decompile)
+        ▷ phase 3  (state machine + cost curve + dev commands + in-world wiring landed; needs in-game test pass. Wiring: ForgeInteractable click targets on prefab anchors + CarryableInteract.StartInteraction prefix. Optional: add a CommitTarget anchor to the prefab for a dedicated commit button — falls back to empty-handed click on the module socket)
         [] phase 4
         [] phase 5
         [] phase 6
