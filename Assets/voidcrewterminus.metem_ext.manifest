@@ -1,15 +1,15 @@
 ManifestFileVersion: 0
-CRC: 214289990
+CRC: 2424891054
 Hashes:
   AssetFileHash:
     serializedVersion: 2
-    Hash: 3b2b166282cbc65bcd836ab3269c1c4e
+    Hash: dc8ed96c9121736d55a6c26778dc9dcb
   TypeTreeHash:
     serializedVersion: 2
-    Hash: d29377adefffe9eb5877a899de46a651
+    Hash: 00f9846e5d5ae84a51222d54e7f2d589
   IncrementalBuildHash:
     serializedVersion: 2
-    Hash: 3b2b166282cbc65bcd836ab3269c1c4e
+    Hash: dc8ed96c9121736d55a6c26778dc9dcb
 HashAppended: 0
 ClassTypes:
 - Class: 1
@@ -26,12 +26,20 @@ ClassTypes:
   Script: {instanceID: 0}
 - Class: 48
   Script: {instanceID: 0}
+- Class: 65
+  Script: {instanceID: 0}
+- Class: 114
+  Script: {fileID: -1283557461, guid: 689f8d4caec5d3a6c9ffa267e0de12b9, type: 3}
 - Class: 114
   Script: {fileID: 11500000, guid: 2c1366d1ab7cf3c40a4c8294e15a07ce, type: 3}
 - Class: 115
   Script: {instanceID: 0}
+- Class: 136
+  Script: {instanceID: 0}
 SerializeReferenceClassIdentifiers: []
 Assets:
+- Assets/Mods/VoidCrewTerminus/Forge_Filled.mat
 - Assets/Mods/VoidCrewTerminus/UpgradeForge.fbx
 - Assets/Mods/VoidCrewTerminus/UpgradeForgeModuleCell.prefab
+- Assets/Mods/VoidCrewTerminus/Forge_Highlight.mat
 Dependencies: []

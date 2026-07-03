@@ -1,3 +1,8 @@
+## 0.0.9
+- phase 3 forge mvp
+## 0.0.8
+- phase 0-2 forge
+- better lobby ship loading
 ## 0.0.7
 - use config to load lobby ship
 ## 0.0.6

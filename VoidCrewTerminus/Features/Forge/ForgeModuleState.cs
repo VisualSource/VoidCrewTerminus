@@ -83,6 +83,18 @@ public class ForgeModuleState : IModifierSource
             StatType.AttractorMaxRange, StatType.AttractorPullVelocity,
         });
 
+        // Module-level tag marker. TagsToAdd only lands in a collection's runtime
+        // tags when a carrying mod attaches to a stat registered on that collection,
+        // and the category groups above attach to stats living on child collections
+        // (weapon parts etc.) — so without this, the module's own LocalTags never
+        // gains Forge_Upgraded (breaking !dumptags and RequiredLocalTags gating).
+        // A zero-value addend on MaxHitPoints — registered by every OrbitObject —
+        // carries the tag onto the module collection itself without touching stats.
+        mods.Add(new StatMod(
+            new FloatModifier(0f, ModifierType.PrimaryAddend, this),
+            StatType.MaxHitPoints.Id,
+            new ModTagConfiguration { TagsToAdd = new[] { CsTagRegistry.ForgeUpgraded } }));
+
         return mods;
     }
 

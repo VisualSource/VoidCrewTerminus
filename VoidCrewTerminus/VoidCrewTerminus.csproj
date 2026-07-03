@@ -4,7 +4,7 @@
     <AssemblyName>VoidCrewTerminus</AssemblyName>
     <Description>
     </Description>
-    <Version>0.0.8</Version>
+    <Version>0.0.9</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
     <RestoreAdditionalProjectSources>
@@ -82,4 +82,19 @@
       <Private>False</Private>
     </Reference>
   </ItemGroup>
+  <!-- On Linux/macOS the pwsh shim routes postbuild to scripts/postbuild.py, which
+       already packs Assets/*.metem into the release zip. On Windows the DocBuilder
+       package's own ZipBuilder.ps1 runs instead and doesn't know about asset
+       bundles, so this target appends them to the produced zip afterwards. -->
+  <Target Name="AppendAssetBundlesToZip" AfterTargets="ExecPostBuild" Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+    <PropertyGroup>
+      <ReleaseZipPath>$(OutDir)Releases\$(AssemblyName)-$(Version).zip</ReleaseZipPath>
+    </PropertyGroup>
+    <ItemGroup>
+      <MetemBundles Include="$(ProjectDir)..\Assets\*.metem" />
+      <MetemBundles Include="$(ProjectDir)..\Assets\*.metem_ext" />
+    </ItemGroup>
+    <Exec Condition="Exists('$(ReleaseZipPath)') And '@(MetemBundles)' != ''"
+          Command="%25WINDIR%25\System32\WindowsPowerShell\v1.0\powershell.exe -NonInteractive -NoProfile -ExecutionPolicy Unrestricted -Command &quot;Compress-Archive -Path '%(MetemBundles.FullPath)' -DestinationPath '$(ReleaseZipPath)' -Update&quot;" />
+  </Target>
 </Project>

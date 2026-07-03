@@ -174,7 +174,12 @@ public class UpgradeForgeBehavior : MonoBehaviour
         _interactablesBuilt = true;
 
         var transforms = GetComponentsInChildren<Transform>(true);
-        _tubeAnchors = transforms.Where(t => t.name == RelicTubeAnchorName).ToArray();
+        // Tubes may be named "RelicTubeTarget" or numbered ("RelicTubeTarget_01" …);
+        // ordering by name makes numbered tubes fill deterministically.
+        _tubeAnchors = transforms
+            .Where(t => t.name.StartsWith(RelicTubeAnchorName, System.StringComparison.Ordinal))
+            .OrderBy(t => t.name, System.StringComparer.Ordinal)
+            .ToArray();
         _inputAnchor = transforms.FirstOrDefault(t => t.name == InputAnchorName);
         var commitAnchor = transforms.FirstOrDefault(t => t.name == CommitAnchorName);
 
@@ -188,11 +193,15 @@ public class UpgradeForgeBehavior : MonoBehaviour
         foreach (var tube in _tubeAnchors)
             CreateInteractable(tube, ForgeInteractableKind.RelicTube, new Vector3(0.35f, 0.35f, 0.35f), layer);
         if (_inputAnchor != null)
-            // Oversized relative to a docked BuildBox so its rim stays clickable
-            // for empty-handed commits even while a box occupies the socket.
+            // Oversized relative to a docked BuildBox so loading is forgiving to
+            // aim; while a box is docked and the player is empty-handed the
+            // interactable steps aside (ForgeInteractable.IsInteractive) so the
+            // box itself can be grabbed back out.
             CreateInteractable(_inputAnchor, ForgeInteractableKind.ModuleSocket, new Vector3(1.2f, 1.2f, 1.2f), layer);
         if (commitAnchor != null)
             CreateInteractable(commitAnchor, ForgeInteractableKind.CommitButton, new Vector3(0.3f, 0.3f, 0.3f), layer);
+        else
+            BepinPlugin.Log.LogWarning("[Forge] Prefab has no CommitTarget anchor — in-world commits unavailable (use !forgecommit).");
 
         if (_tubeAnchors.Length == 0 || _inputAnchor == null)
             BepinPlugin.Log.LogWarning(
@@ -212,10 +221,13 @@ public class UpgradeForgeBehavior : MonoBehaviour
         GameObject go;
         var authored = anchor.GetComponent<Collider>();
         if (authored == null)
-            authored = anchor.Find("ClickTarget")?.GetComponent<Collider>();
+            authored = FindDeep(anchor, "ClickTarget")?.GetComponent<Collider>();
 
         if (authored != null)
         {
+            // Click regions must not collide — enforce trigger regardless of how the
+            // collider was authored.
+            authored.isTrigger = true;
             go = authored.gameObject;
         }
         else
@@ -236,6 +248,12 @@ public class UpgradeForgeBehavior : MonoBehaviour
         // Layer is always forced at runtime — the editor project's layer table does
         // not match the game's, so authored layer indices can't be trusted.
         go.layer = layer;
+
+        // Highlight / Filled helpers are visual-only; primitives authored in the
+        // editor often keep their default colliders, which would collide with docked
+        // items and block the interact ray. Strip them.
+        StripHelperColliders(anchor, "Highlight");
+        StripHelperColliders(anchor, "Filled");
 
         var fi = go.GetComponent<ForgeInteractable>();
         if (fi == null) fi = go.AddComponent<ForgeInteractable>();
@@ -285,13 +303,17 @@ public class UpgradeForgeBehavior : MonoBehaviour
             return;
         }
 
-        // Empty-handed: commit via the module socket (or the dedicated commit button).
-        // Docked relics and the docked box are retrieved by grabbing them directly.
+        // Empty-handed: commit lives on the dedicated commit button. Docked relics
+        // and the docked box are retrieved by grabbing them directly — the module
+        // socket's IsInteractive steps aside while it holds a box, so an empty-hand
+        // click only reaches it when the socket is empty.
         switch (target.Kind)
         {
-            case ForgeInteractableKind.ModuleSocket:
             case ForgeInteractableKind.CommitButton:
                 DoCommit();
+                break;
+            case ForgeInteractableKind.ModuleSocket:
+                Messaging.Notification("Deconstruct a module and place its build box here to upgrade it.");
                 break;
             case ForgeInteractableKind.RelicTube:
                 Messaging.Notification(HasModule
@@ -343,8 +365,35 @@ public class UpgradeForgeBehavior : MonoBehaviour
     // the anchor is toggled while something is docked there.
     private static void SetAnchorFilled(Transform anchor, bool filled)
     {
-        var indicator = anchor != null ? anchor.Find("Filled") : null;
+        var indicator = FindDeep(anchor, "Filled");
         if (indicator != null) indicator.gameObject.SetActive(filled);
+    }
+
+    private static void StripHelperColliders(Transform anchor, string helperName)
+    {
+        var helper = FindDeep(anchor, helperName);
+        if (helper == null) return;
+        foreach (var col in helper.GetComponentsInChildren<Collider>(true))
+        {
+            BepinPlugin.Log.LogDebug($"[Forge] Removing stray collider from {helperName} helper under {anchor.name}.");
+            Destroy(col);
+        }
+    }
+
+    // Depth-first name search through an anchor's subtree, so authored helper objects
+    // (ClickTarget / Highlight / Filled) may sit anywhere below the anchor — e.g. a
+    // duplicated FBX node kept inside a wrapper to preserve its transform chain.
+    internal static Transform FindDeep(Transform root, string name)
+    {
+        if (root == null) return null;
+        var direct = root.Find(name);
+        if (direct != null) return direct;
+        foreach (Transform child in root)
+        {
+            var hit = FindDeep(child, name);
+            if (hit != null) return hit;
+        }
+        return null;
     }
 
     // Base-pivot alignment, mirroring CarryablesSocket.PlaceCarryableOnSocket.
@@ -355,6 +404,11 @@ public class UpgradeForgeBehavior : MonoBehaviour
         var final = anchor.localToWorldMatrix * rel.inverse;
         item.transform.SetPositionAndRotation(final.GetPosition(), final.rotation);
     }
+
+    // Whether something is physically docked on the given anchor. Used by
+    // ForgeInteractable to step aside so docked items can be grabbed directly.
+    public bool IsAnchorOccupied(Transform anchor) =>
+        anchor != null && _docked.ContainsValue(anchor);
 
     private Transform NextFreeTube()
     {

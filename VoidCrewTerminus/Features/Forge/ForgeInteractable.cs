@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using CG.Client.Player.Interactions;
 using CG.Client.Ship.Interactions;
+using CG.Game.Player;
 using Client.Player.Interactions;
 using HarmonyLib;
 using UnityEngine;
@@ -28,6 +29,34 @@ public class ForgeInteractable : AbstractInteractable
     private Transform _highlight;
     private bool _highlightResolved;
 
+    // Click colliders surround the items docked on their anchors, so they would
+    // swallow every click aimed at those items. When an anchor is occupied and the
+    // player's hands are empty, step aside: RaycastHandler then skips this trigger
+    // and the ray reaches the docked item's own Grabbable — retrieval of the
+    // BuildBox (before or after committing) and of relics is the vanilla grab.
+    public override bool IsInteractive
+    {
+        get
+        {
+            if (!base.IsInteractive) return false;
+            if (Forge == null) return true;
+
+            bool occupied = Kind switch
+            {
+                ForgeInteractableKind.ModuleSocket => Forge.HasModule,
+                ForgeInteractableKind.RelicTube => Forge.IsAnchorOccupied(Anchor),
+                _ => false,
+            };
+            if (occupied)
+            {
+                var player = LocalPlayer.Instance;
+                if (player != null && player.Payload == null) return false;
+            }
+            return true;
+        }
+        set => base.IsInteractive = value;
+    }
+
     // Optional prefab-authored hover feedback: a disabled child named "Highlight"
     // under the anchor is shown while the player's raycast targets this interactable.
     // Resolved lazily — Anchor is assigned after AddComponent runs Awake.
@@ -36,7 +65,7 @@ public class ForgeInteractable : AbstractInteractable
         base.Highlighted(isHighlighted);
         if (!_highlightResolved && Anchor != null)
         {
-            _highlight = Anchor.Find("Highlight");
+            _highlight = UpgradeForgeBehavior.FindDeep(Anchor, "Highlight");
             _highlightResolved = true;
         }
         if (_highlight != null) _highlight.gameObject.SetActive(isHighlighted);

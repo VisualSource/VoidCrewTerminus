@@ -82,6 +82,18 @@ def main():
                 if os.path.exists(path):
                     zf.write(path, os.path.basename(path))
 
+            # Asset bundles: ship them from the repo's Assets/ dir at the zip root,
+            # so mod managers install them next to the plugin DLL. ".terminus" is
+            # loaded by our AssetLoader; ".metem" would be auto-loaded by the game
+            # itself (kept in the glob in case we ever ship one). The .manifest
+            # sidecars are Unity-editor bookkeeping and deliberately excluded.
+            assets_dir = os.path.normpath(os.path.join(project_dir, "..", "Assets"))
+            if os.path.isdir(assets_dir):
+                for fn in sorted(os.listdir(assets_dir)):
+                    if fn.endswith((".metem", ".metem_ext")):
+                        zf.write(os.path.join(assets_dir, fn), fn)
+                        print(f"Added asset bundle to zip: {fn}")
+
             icon_out = os.path.join(output_dir, "icon.png")
             if os.path.exists(icon_out):
                 zf.write(icon_out, "icon.png")

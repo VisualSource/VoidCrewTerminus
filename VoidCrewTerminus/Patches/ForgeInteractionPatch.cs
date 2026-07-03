@@ -1,8 +1,12 @@
+using System.Collections.Generic;
 using CG.Client.Player.Interactions;
 using CG.Game.Player;
+using CG.Network;
+using CG.Ship.Hull;
 using CG.Ship.Modules;
 using CG.Ship.Object;
 using HarmonyLib;
+using ResourceAssets;
 using VoidCrewTerminus.Forge;
 
 namespace VoidCrewTerminus.Patches;
@@ -19,6 +23,34 @@ namespace VoidCrewTerminus.Patches;
 internal static class ForgeBuildBoxAttachBehavior
 {
     static void Postfix(CellModule __result) => ForgeAttachHelper.TryAttach(__result);
+}
+
+// Vanilla BuildBox.BuildModule resolves moduleRef through the CloneStarObjectContainer
+// and dereferences the resulting def — which is null for runtime-registered assets
+// like the Forge, so it would NRE right after instantiating. Runtime assets have
+// their own factory path (RuntimeAssetsRegister-backed); take it when the box's
+// moduleRef is runtime. The vanilla flow is untouched for every normal module, and
+// the BuildModule postfixes (level restore, behavior attach) still run.
+[HarmonyPatch(typeof(BuildBox), nameof(BuildBox.BuildModule))]
+internal static class ForgeBuildBoxRuntimeModulePatch
+{
+    static bool Prefix(BuildBox __instance, BuildSocket targetLocation, ref CellModule __result)
+    {
+        var moduleRef = __instance.moduleRef;
+        if (moduleRef == null || !moduleRef.IsRuntime) return true;
+
+        if (!RuntimeAssetsRegister.Instance.HasAsset(moduleRef.AssetGuid))
+        {
+            BepinPlugin.Log.LogError(
+                $"[Forge] BuildBox moduleRef is runtime but GUID {moduleRef.AssetGuid.AsHex()} is not in RuntimeAssetsRegister — falling through to vanilla (will likely fail).");
+            return true;
+        }
+
+        var instantiationData = new Dictionary<byte, object> { { 1, targetLocation.photonView.ViewID } };
+        __result = (CellModule)ObjectFactory.InstantiateRuntimeObject(
+            moduleRef.AssetGuid, targetLocation.WorldPosition, targetLocation.WorldRotation, instantiationData);
+        return false;
+    }
 }
 
 [HarmonyPatch(typeof(CompositeWeaponBuildBox), nameof(BuildBox.BuildModule))]
