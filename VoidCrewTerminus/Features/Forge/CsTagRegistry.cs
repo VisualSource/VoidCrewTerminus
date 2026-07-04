@@ -44,7 +44,7 @@ public static class CsTagRegistry
         {
             if (_forgeModule != null) return _forgeModule;
             _forgeModule = ScriptableObject.CreateInstance<CsTag>();
-            _forgeModule.name = "Tag_Forge_Module";
+            _forgeModule.name = "Tag_Module_Type_UpgradeForge";
             return _forgeModule;
         }
     }

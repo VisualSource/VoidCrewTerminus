@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using CG.Ship.Modules;
 using Gameplay.Tags;
 using Gameplay.Utilities;
+using HarmonyLib;
 
 namespace VoidCrewTerminus.Forge;
 
@@ -31,7 +32,10 @@ public class ForgeModuleState : IModifierSource
     public void Cleanup()
     {
         if (_module != null)
+        {
             _module.Stats.RemoveModifier(this);
+            SyncForgeTag(false);
+        }
         _module = null;
     }
 
@@ -39,6 +43,7 @@ public class ForgeModuleState : IModifierSource
     {
         if (_module == null) return;
         _module.Stats.RemoveModifier(this);
+        SyncForgeTag(false);
         if (Level > 3) ApplyMods();
     }
 
@@ -46,7 +51,35 @@ public class ForgeModuleState : IModifierSource
     {
         var mods = BuildMods();
         if (mods.Count > 0)
+        {
             _module.Stats.ApplyModifiers(mods, this);
+            SyncForgeTag(true);
+        }
+    }
+
+    private static readonly AccessTools.FieldRef<StatTagCollection, List<CsTag>> RuntimeTagsRef =
+        AccessTools.FieldRefAccess<StatTagCollection, List<CsTag>>("runtimeTags");
+
+    // The game only rebuilds a collection's runtimeTags inside UpdateMods, which
+    // runs solely when some mod transitions active↔inactive — a plain
+    // ApplyModifiers / RemoveModifier never triggers it, so TagsToAdd on its own
+    // never surfaces in LocalTags(). Mirror the Forge tag into runtimeTags
+    // directly; the zero-value marker mod (see BuildMods) keeps the tag alive if
+    // the game does rebuild the list from active modifiers later.
+    private void SyncForgeTag(bool present)
+    {
+        if (_module == null) return;
+        var tags = RuntimeTagsRef(_module.Stats);
+        if (tags == null) return;
+        var forgeTag = CsTagRegistry.ForgeUpgraded;
+        if (present)
+        {
+            if (!tags.Contains(forgeTag)) tags.Add(forgeTag);
+        }
+        else
+        {
+            tags.RemoveAll(t => t == forgeTag);
+        }
     }
 
     // Build AdditiveMultiplier boosts for each bonus level above vanilla L3.

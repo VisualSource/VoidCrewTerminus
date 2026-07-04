@@ -93,10 +93,15 @@ internal static class ForgeAttachHelper
         if (module == null) return;
         if (!IsForgeModule(module)) return;
 
-        // Stamp the mod's Forge tag so this instance (and anything else that wants
-        // to identify Forges) can tag-check instead of name-matching from here on.
-        if (!HasForgeTag(module))
-            module.AddTag(CsTagRegistry.ForgeModule);
+        // Stamp the mod's Forge identity tag (so Forges are tag-checkable instead
+        // of name-matched) and the vanilla Utility category tag (the Forge presents
+        // as a utility module to anything filtering by module category). The stat
+        // collection snapshots CsTags during Awake — before this postfix runs — so
+        // resync it through the game's own OverrideInitTags after stamping.
+        bool tagsChanged = EnsureTag(module, CsTagRegistry.ForgeModule);
+        tagsChanged |= EnsureTag(module, CsTagRegistry.Utility);
+        if (tagsChanged)
+            module.Stats.OverrideInitTags(module.CsTags);
 
         var behavior = module.GetComponent<UpgradeForgeBehavior>();
         if (behavior == null)
@@ -105,6 +110,14 @@ internal static class ForgeAttachHelper
             BepinPlugin.Log.LogInfo($"[Forge] Attached UpgradeForgeBehavior to {module.name}");
         }
         behavior.BuildInteractables();
+    }
+
+    private static bool EnsureTag(CellModule module, Gameplay.Tags.CsTag tag)
+    {
+        if (tag == null) return false;
+        if (module.CsTags != null && System.Array.IndexOf(module.CsTags, tag) >= 0) return false;
+        module.AddTag(tag);
+        return true;
     }
 
     private static bool HasForgeTag(CellModule module) =>
