@@ -5,6 +5,7 @@ using System.Reflection;
 using CG.Game.Configuration;
 using CG.Graphics;
 using CG.Ship.Modules;
+using HarmonyLib;
 using Gameplay.Power;
 using Gameplay.Utilities;
 using Photon.Pun;
@@ -148,17 +149,37 @@ public class AssetLoader
         }
         if (cell.PowerDrain == null) cell.PowerDrain = drain;
 
-        // Visual-culling parity with vanilla modules: an OcclusionNode enrolls the
-        // module's renderers in the ship's interior occlusion (hidden while EVA,
-        // in a turret, or in helm third-person). The component defaults are exactly
-        // right for an interior module — zone None self-resolves to the parent or
-        // nearest node after install, and both hide-flags start true. Note: its
-        // renderer cache skips anything under a CarryableObject, so docked relics
-        // and the BuildBox are unaffected.
-        if (prefab.GetComponent<OcclusionNode>() == null)
+        // Visual-culling parity with vanilla modules, mirroring their prefab layout:
+        // the "Interior" group gets an interior-flavored OcclusionNode (component
+        // defaults: zone None self-resolves after install; hidden while EVA / in a
+        // turret / helm third-person), and the "Exterior" group gets an
+        // Exterior-zone node that stays visible from space and turrets but is
+        // culled while walking the interior. Bundles without the split fall back
+        // to a single interior-flavored node on the root. The nodes' renderer
+        // caches skip anything under a CarryableObject, so docked relics and the
+        // BuildBox are unaffected.
+        if (prefab.GetComponentInChildren<OcclusionNode>(true) == null)
         {
-            prefab.AddComponent<OcclusionNode>();
-            BepinPlugin.Log.LogDebug($"[AssetLoader] Grafted OcclusionNode onto {prefab.name}");
+            var interior = prefab.transform.Find("Interior");
+            var exterior = prefab.transform.Find("Exterior");
+            if (interior == null && exterior == null)
+            {
+                prefab.AddComponent<OcclusionNode>();
+                BepinPlugin.Log.LogDebug($"[AssetLoader] Grafted root OcclusionNode onto {prefab.name} (no Interior/Exterior split)");
+            }
+            else
+            {
+                if (interior != null)
+                    interior.gameObject.AddComponent<OcclusionNode>();
+                if (exterior != null)
+                {
+                    var node = exterior.gameObject.AddComponent<OcclusionNode>();
+                    AccessTools.Field(typeof(OcclusionNode), "occlusionZone").SetValue(node, OcclusionZoneType.Exterior);
+                    AccessTools.Field(typeof(OcclusionNode), "hideOnLocalPlayerIsInSpace").SetValue(node, false);
+                    AccessTools.Field(typeof(OcclusionNode), "hideOnLocalPlayerIsInTurret").SetValue(node, false);
+                }
+                BepinPlugin.Log.LogDebug($"[AssetLoader] Grafted OcclusionNodes onto {prefab.name} (interior={(interior != null)}, exterior={(exterior != null)})");
+            }
         }
 
         var view = prefab.GetComponent<PhotonView>();

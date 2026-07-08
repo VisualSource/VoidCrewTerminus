@@ -285,15 +285,17 @@ public class UpgradeForgeBehavior : MonoBehaviour
             }
             else if (IsRelic(payload.gameObject))
             {
-                if (target.Kind == ForgeInteractableKind.ModuleSocket)
+                // Relics go into the specific tube the player clicked.
+                if (target.Kind != ForgeInteractableKind.RelicTube)
                 { Messaging.Notification("Insert relics into the relic tubes."); return; }
+                if (target.Anchor == null || IsAnchorOccupied(target.Anchor))
+                { Messaging.Notification("That tube is occupied — pick an empty one."); return; }
 
-                var tube = NextFreeTube();
                 if (!TryInsertRelic(payload.gameObject))
                 { Messaging.Notification($"The Forge is full ({RelicCount}/{Capacity} relics)."); return; }
 
                 player.Carrier.ReleaseCarryable();
-                Dock(payload.gameObject, tube);
+                Dock(payload.gameObject, target.Anchor);
                 Messaging.Notification($"Relic inserted ({RelicCount}/{Capacity}). Projected level: L{ProjectedTargetLevel}.");
             }
             else
@@ -396,27 +398,26 @@ public class UpgradeForgeBehavior : MonoBehaviour
         return null;
     }
 
-    // Base-pivot alignment, mirroring CarryablesSocket.PlaceCarryableOnSocket.
+    // Base-pivot alignment: the item's BasePivot lands on the anchor's origin with
+    // its axes matching the anchor's axes (anchor green/Y = item up, blue/Z = item
+    // facing). Same intent as CarryablesSocket.PlaceCarryableOnSocket, but computed
+    // with quaternions instead of the anchor's matrices — vanilla store transforms
+    // are unit-scale, while our anchors inherit rotated, non-uniformly scaled FBX
+    // nodes whose matrices skew a rotation extracted from them.
     private static void PlaceAtAnchor(GameObject item, CarryableObject co, Transform anchor)
     {
-        var pivot = co != null ? co.BasePivot : item.transform;
-        var rel = item.transform.worldToLocalMatrix * pivot.localToWorldMatrix;
-        var final = anchor.localToWorldMatrix * rel.inverse;
-        item.transform.SetPositionAndRotation(final.GetPosition(), final.rotation);
+        var itemTr = item.transform;
+        var pivot = co != null ? co.BasePivot : itemTr;
+        var finalRot = anchor.rotation * Quaternion.Inverse(pivot.rotation) * itemTr.rotation;
+        var delta = finalRot * Quaternion.Inverse(itemTr.rotation);
+        var finalPos = anchor.position - delta * (pivot.position - itemTr.position);
+        itemTr.SetPositionAndRotation(finalPos, finalRot);
     }
 
     // Whether something is physically docked on the given anchor. Used by
     // ForgeInteractable to step aside so docked items can be grabbed directly.
     public bool IsAnchorOccupied(Transform anchor) =>
         anchor != null && _docked.ContainsValue(anchor);
-
-    private Transform NextFreeTube()
-    {
-        foreach (var tube in _tubeAnchors)
-            if (tube != null && !_docked.ContainsValue(tube))
-                return tube;
-        return transform; // anchorless fallback — relic sits at the forge base
-    }
 
     // Reconcile forge state with the world: players grab docked items back out via
     // the vanilla Grabbable flow, and commits destroy consumed relics. Both surface
