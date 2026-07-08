@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using CG.Game.Configuration;
+using CG.Graphics;
 using CG.Ship.Modules;
 using Gameplay.Power;
 using Gameplay.Utilities;
@@ -146,6 +147,19 @@ public class AssetLoader
             BepinPlugin.Log.LogDebug($"[AssetLoader] Grafted PowerDrain onto {prefab.name}");
         }
         if (cell.PowerDrain == null) cell.PowerDrain = drain;
+
+        // Visual-culling parity with vanilla modules: an OcclusionNode enrolls the
+        // module's renderers in the ship's interior occlusion (hidden while EVA,
+        // in a turret, or in helm third-person). The component defaults are exactly
+        // right for an interior module — zone None self-resolves to the parent or
+        // nearest node after install, and both hide-flags start true. Note: its
+        // renderer cache skips anything under a CarryableObject, so docked relics
+        // and the BuildBox are unaffected.
+        if (prefab.GetComponent<OcclusionNode>() == null)
+        {
+            prefab.AddComponent<OcclusionNode>();
+            BepinPlugin.Log.LogDebug($"[AssetLoader] Grafted OcclusionNode onto {prefab.name}");
+        }
 
         var view = prefab.GetComponent<PhotonView>();
         if (view == null)

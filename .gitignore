@@ -8,6 +8,11 @@
 ## Get latest from https://github.com/github/gitignore/blob/main/Dotnet.gitignore
 
 # Build results
+
+.claude
+.recall
+
+
 [Dd]ebug/
 [Dd]ebugPublic/
 [Rr]elease/
