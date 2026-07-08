@@ -3,6 +3,7 @@ using System.Linq;
 using CG.Game.Player;
 using CG.Network;
 using CG.Objects;
+using CG.Ship.Modules;
 using CG.Ship.Object;
 using UnityEngine;
 using VoidManager.Utilities;
@@ -126,12 +127,15 @@ public class UpgradeForgeBehavior : MonoBehaviour
 
     // Attempts to upgrade the socketed box using as many inserted relics as the cost
     // curve permits. Consumes only the relics actually spent; leftovers stay in the
-    // Forge. On success the new pending level is written to ForgeOverlayTable so
-    // reconstruction picks it up automatically.
-    public CommitResult TryCommit(out int newLevel, out int relicsConsumed)
+    // Forge. On success the new pending state (level + any rolled perk) is written
+    // to ForgeOverlayTable so reconstruction picks it up automatically.
+    // perkResult carries the human-readable gamble outcome (null when no roll was
+    // attempted — e.g. every eligible slot already filled).
+    public CommitResult TryCommit(out int newLevel, out int relicsConsumed, out string perkResult)
     {
         newLevel = 0;
         relicsConsumed = 0;
+        perkResult = null;
 
         if (_moduleBox == null) return CommitResult.NoModule;
         if (_moduleBox.photonView == null) return CommitResult.MissingViewId;
@@ -147,7 +151,19 @@ public class UpgradeForgeBehavior : MonoBehaviour
         relicsConsumed = ForgeCostCurve.RelicsRequired(currentLevel, achievedLevel);
         newLevel = achievedLevel;
 
-        ForgeOverlayTable.SavePendingLevel(_moduleBox.photonView.ViewID, newLevel);
+        // Best tier among the relics actually consumed drives the perk gamble
+        // (multi-relic commits roll once, at the quality of their best relic).
+        var bestTier = RelicTier.Common;
+        for (int i = 0; i < relicsConsumed && i < _relics.Count; i++)
+        {
+            if (_relics[i] == null) continue;
+            var tier = RelicTierData.Get(_relics[i].name).Tier;
+            if (tier > bestTier) bestTier = tier;
+        }
+
+        var pending = ForgeOverlayTable.GetOrCreatePending(_moduleBox.photonView.ViewID);
+        pending.Level = newLevel;
+        perkResult = RollPerkInto(pending, bestTier);
 
         for (int i = 0; i < relicsConsumed && _relics.Count > 0; i++)
         {
@@ -158,9 +174,33 @@ public class UpgradeForgeBehavior : MonoBehaviour
 
         BepinPlugin.Log.LogInfo(
             $"[Forge] Committed L{currentLevel}→L{newLevel} on ViewID={_moduleBox.photonView.ViewID} " +
-            $"(consumed {relicsConsumed} relic{(relicsConsumed == 1 ? "" : "s")}, {_relics.Count} remain)");
+            $"(consumed {relicsConsumed} relic{(relicsConsumed == 1 ? "" : "s")}, {_relics.Count} remain, " +
+            $"tier={bestTier}, perk={(perkResult ?? "no roll")})");
 
         return CommitResult.Ok;
+    }
+
+    // The Phase 4 gamble: one roll per commit against the lowest empty slot the
+    // relic tier can fill. Local RNG for now — Phase 8 moves the roll host-side.
+    private string RollPerkInto(ForgeOverlayTable.PendingState pending, RelicTier tier)
+    {
+        int slot = PerkPool.TargetSlot(pending.PerkSlots, tier);
+        if (slot < 0) return null; // every eligible slot filled — roll skips silently
+
+        float chance = PerkPool.RollChance(tier);
+        if (UnityEngine.Random.value >= chance)
+            return $"No perk this time ({tier} · {chance:P0} chance).";
+
+        var category = PerkPool.CategoryOf(_moduleBox != null ? _moduleBox.moduleRef?.Asset as CellModule : null);
+        var perk = PerkPool.RollPerk(category, tier, slot);
+        if (perk == null)
+        {
+            BepinPlugin.Log.LogWarning($"[Forge] Perk roll succeeded but category '{category}' has no authored perks.");
+            return null;
+        }
+
+        pending.PerkSlots[slot] = perk.Id;
+        return $"Perk gained in slot {slot + 1}: {perk.Name} — {perk.Description}!";
     }
 
     // ---- In-world interactables ----------------------------------------
@@ -327,10 +367,11 @@ public class UpgradeForgeBehavior : MonoBehaviour
 
     private void DoCommit()
     {
-        switch (TryCommit(out int newLevel, out int consumed))
+        switch (TryCommit(out int newLevel, out int consumed, out string perkResult))
         {
             case CommitResult.Ok:
                 Messaging.Notification($"Upgrade committed: L{newLevel} (consumed {consumed} relic{(consumed == 1 ? "" : "s")}). Rebuild the module to apply.");
+                if (perkResult != null) Messaging.Notification(perkResult);
                 break;
             case CommitResult.NoModule:
                 Messaging.Notification("Load a deconstructed module box into the Forge first.");

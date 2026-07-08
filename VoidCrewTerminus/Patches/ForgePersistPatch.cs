@@ -24,8 +24,8 @@ internal static class DeconstructCreateBuildBoxPatch
     static void Postfix(CellModule module, BuildBox __result)
     {
         if (__result == null) return;
-        if (ForgeOverlayTable.TryGet(module, out var state) && state.Level > 3)
-            ForgeOverlayTable.SavePendingLevel(__result.photonView.ViewID, state.Level);
+        if (ForgeOverlayTable.TryGet(module, out var state))
+            ForgeOverlayTable.SavePendingState(__result.photonView.ViewID, state);
     }
 }
 
@@ -67,7 +67,9 @@ internal static class ForgePersistPatchHelper
     internal static void RestoreLevel(BuildBox box, CellModule module)
     {
         if (module == null) return;
-        if (!ForgeOverlayTable.TryRestoreLevel(box.photonView.ViewID, out int level)) return;
-        ForgeOverlayTable.GetOrCreate(module).SetLevel(level);
+        if (!ForgeOverlayTable.TryRestorePending(box.photonView.ViewID, out var pending)) return;
+        var state = ForgeOverlayTable.GetOrCreate(module);
+        state.SetLevel(pending.Level);
+        state.SetPerks(pending.PerkSlots);
     }
 }

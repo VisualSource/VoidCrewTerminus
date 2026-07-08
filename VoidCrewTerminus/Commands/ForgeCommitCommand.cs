@@ -223,11 +223,12 @@ internal class ForgeCommitCommand : PublicCommand
         var forge = ForgeCommandHelper.FindNearestForge();
         if (forge == null) { Messaging.Notification("No Upgrade Forge found."); return; }
 
-        var result = forge.TryCommit(out int newLevel, out int consumed);
+        var result = forge.TryCommit(out int newLevel, out int consumed, out string perkResult);
         switch (result)
         {
             case UpgradeForgeBehavior.CommitResult.Ok:
                 Messaging.Notification($"Committed: L{newLevel} (consumed {consumed} relics; {forge.RelicCount} remain).");
+                if (perkResult != null) Messaging.Notification(perkResult);
                 break;
             case UpgradeForgeBehavior.CommitResult.NoModule:
                 Messaging.Notification("Cannot commit: module socket is empty.");

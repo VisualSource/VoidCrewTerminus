@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using CG.Ship.Modules;
 using Gameplay.Tags;
 using Gameplay.Utilities;
@@ -12,19 +13,41 @@ public class ForgeModuleState : IModifierSource
 {
     public int Level { get; private set; } = 3;
 
-    // Perk slots and burden flags are added in later phases.
+    // Perk slots: [0] any tier, [1] Rare+, [2] Legendary (see PerkPool). Values are
+    // PerkDefinition ids; null = empty. Burden flags are added in Phase 7.
+    private readonly string[] _perkSlots = new string[PerkPool.SlotCount];
+
     // ForgeOverlayTable keeps a strong reference; this field is only for mod removal.
     private CellModule _module;
+
+    public IReadOnlyList<string> PerkSlots => _perkSlots;
 
     public void Attach(CellModule module)
     {
         _module = module;
-        if (Level > 3) ApplyMods();
+        if (HasAnyOverlay) ApplyMods();
     }
+
+    private bool HasAnyOverlay => Level > 3 || _perkSlots.Any(id => !string.IsNullOrEmpty(id));
 
     public void SetLevel(int level)
     {
         Level = System.Math.Max(3, System.Math.Min(10, level));
+        RefreshMods();
+    }
+
+    // Replace all perk slots at once (used when restoring from the pending bridge).
+    public void SetPerks(IReadOnlyList<string> slots)
+    {
+        for (int i = 0; i < _perkSlots.Length; i++)
+            _perkSlots[i] = slots != null && i < slots.Count ? slots[i] : null;
+        RefreshMods();
+    }
+
+    public void SetPerk(int slot, string perkId)
+    {
+        if (slot < 0 || slot >= _perkSlots.Length) return;
+        _perkSlots[slot] = perkId;
         RefreshMods();
     }
 
@@ -44,7 +67,7 @@ public class ForgeModuleState : IModifierSource
         if (_module == null) return;
         _module.Stats.RemoveModifier(this);
         SyncForgeTag(false);
-        if (Level > 3) ApplyMods();
+        if (HasAnyOverlay) ApplyMods();
     }
 
     private void ApplyMods()
@@ -92,29 +115,50 @@ public class ForgeModuleState : IModifierSource
         float amount = (Level - 3) * 0.08f;
         var mods = new List<StatMod>();
 
-        AddGroup(mods, amount, CsTagRegistry.Weapon, new[]
+        // Level groups only contribute above vanilla L3 — a module can still carry
+        // perks at L3 (restored state), in which case only the perk mods apply.
+        if (Level > 3)
         {
-            StatType.Damage, StatType.FireRate, StatType.Range,
-            StatType.ProjectileSpeed, StatType.Accuracy,
-        });
-        AddGroup(mods, amount, CsTagRegistry.Defense, new[]
+            AddGroup(mods, amount, CsTagRegistry.Weapon, new[]
+            {
+                StatType.Damage, StatType.FireRate, StatType.Range,
+                StatType.ProjectileSpeed, StatType.Accuracy,
+            });
+            AddGroup(mods, amount, CsTagRegistry.Defense, new[]
+            {
+                StatType.ShieldMaxHitPoints, StatType.ShieldRechargeSpeed, StatType.ShieldAbsorption,
+            });
+            AddGroup(mods, amount, CsTagRegistry.BuiltIn, new[]
+            {
+                StatType.ForwardPower, StatType.EnginePower, StatType.YawTorque,
+                StatType.ElevationPower, StatType.StrafePower, StatType.JumpChargeSpeed,
+            });
+            AddGroup(mods, amount, CsTagRegistry.PowerProvider, new[]
+            {
+                StatType.PowerProvided, StatType.BatteryRechargeAmount,
+            });
+            AddGroup(mods, amount, CsTagRegistry.Utility, new[]
+            {
+                StatType.ProcessingSpeed, StatType.HealingSpeed,
+                StatType.AttractorMaxRange, StatType.AttractorPullVelocity,
+            });
+        }
+
+        // Rolled perks: fresh StatMods per apply (mods bind their source), narrowed
+        // to the perk's own category tag as a safety net against wrong-category
+        // application.
+        foreach (var perkId in _perkSlots)
         {
-            StatType.ShieldMaxHitPoints, StatType.ShieldRechargeSpeed, StatType.ShieldAbsorption,
-        });
-        AddGroup(mods, amount, CsTagRegistry.BuiltIn, new[]
-        {
-            StatType.ForwardPower, StatType.EnginePower, StatType.YawTorque,
-            StatType.ElevationPower, StatType.StrafePower, StatType.JumpChargeSpeed,
-        });
-        AddGroup(mods, amount, CsTagRegistry.PowerProvider, new[]
-        {
-            StatType.PowerProvided, StatType.BatteryRechargeAmount,
-        });
-        AddGroup(mods, amount, CsTagRegistry.Utility, new[]
-        {
-            StatType.ProcessingSpeed, StatType.HealingSpeed,
-            StatType.AttractorMaxRange, StatType.AttractorPullVelocity,
-        });
+            if (string.IsNullOrEmpty(perkId) || !PerkPool.TryGet(perkId, out var perk)) continue;
+            var categoryTag = perk.Category.ToCsTag();
+            var tagCfg = new ModTagConfiguration
+            {
+                RequiredTags = categoryTag != null ? new[] { categoryTag } : null,
+                TagsToAdd = new[] { CsTagRegistry.ForgeUpgraded },
+            };
+            foreach (var (stat, perkAmount) in perk.Payload)
+                mods.Add(new StatMod(new FloatModifier(perkAmount, ModifierType.AdditiveMultiplier, this), stat.Id, tagCfg));
+        }
 
         // Module-level tag marker. TagsToAdd only lands in a collection's runtime
         // tags when a carrying mod attaches to a stat registered on that collection,
