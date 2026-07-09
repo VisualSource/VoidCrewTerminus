@@ -65,9 +65,11 @@ public class UpgradeForgeBehavior : MonoBehaviour
     {
         get
         {
-            if (_moduleBox == null || _moduleBox.photonView == null) return 1;
-
-            if(_moduleBox.CsTags == null || System.Array.IndexOf(_moduleBox.CsTags,"Module_Mark_3") <= 1) return 1;
+            if (_moduleBox == null || _moduleBox.CsTags == null || _moduleBox.photonView == null) return 1;
+            if (!_moduleBox.CsTags.Contains(CsTagRegistry.ModuleMkIII))
+            {
+                return _moduleBox.CsTags.Contains(CsTagRegistry.ModuleMkII) ? 1 : 2;
+            }
 
             return ForgeOverlayTable.TryPeekPendingLevel(_moduleBox.photonView.ViewID, out int level)
                 ? level
@@ -142,7 +144,7 @@ public class UpgradeForgeBehavior : MonoBehaviour
         if (_relics.Count == 0) return CommitResult.NoRelics;
 
         int currentLevel = CurrentBoxLevel;
-        if (currentLevel < 3) return CommitResult.InvalidModuleLevel;
+        if (currentLevel < ForgeCostCurve.MinLevel) return CommitResult.InvalidModuleLevel;
         if (currentLevel >= ForgeCostCurve.MaxLevel) return CommitResult.AlreadyAtMax;
 
         int nextStepCost = ForgeCostCurve.CostForNextLevel(currentLevel);

@@ -16,6 +16,14 @@ public static class CsTagRegistry
     private static CsTag _forgeModule;
     private static CsTag _relic;
 
+    private static CsTag _moduleMkIII;
+    private static CsTag _moduleMkII;
+    private static CsTag _moduleMkI;
+
+    public static CsTag ModuleMkIII => _moduleMkIII ??= Resolve("Module_Mark_3");
+    public static CsTag ModuleMkII => _moduleMkII ??= Resolve("Module_Mark_2");
+    public static CsTag ModuleMkI => _moduleMkI ??= Resolve("Module_Mark_1");
+
     public static CsTag Weapon => _weapon ??= Resolve("Module_Category_Weapon");
     public static CsTag Defense => _defense ??= Resolve("Module_Category_Defense");
     public static CsTag PowerProvider => _powerProvider ??= Resolve("Module_Category_PowerProvider");
