@@ -66,9 +66,12 @@ public class UpgradeForgeBehavior : MonoBehaviour
         get
         {
             if (_moduleBox == null || _moduleBox.photonView == null) return 1;
+
+            if(_moduleBox.CsTags == null || System.Array.IndexOf(_moduleBox.CsTags,"Module_Mark_3") <= 1) return 1;
+
             return ForgeOverlayTable.TryPeekPendingLevel(_moduleBox.photonView.ViewID, out int level)
                 ? level
-                : 1;
+                : ForgeCostCurve.MinLevel;
         }
     }
 
