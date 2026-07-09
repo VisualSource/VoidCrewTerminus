@@ -66,7 +66,12 @@ public class UpgradeForgeBehavior : MonoBehaviour
     {
         get
         {
-            if (_moduleBox == null || _moduleBox.photonView == null) return ForgeCostCurve.MinLevel;
+            if (_moduleBox == null || _moduleBox.CsTags == null || _moduleBox.photonView == null) return 0;
+            if (!_moduleBox.CsTags.Contains(CsTagRegistry.ModuleMkIII))
+            {
+                return _moduleBox.CsTags.Contains(CsTagRegistry.ModuleMkII) ? 1 : 2;
+            }
+
             return ForgeOverlayTable.TryPeekPendingLevel(_moduleBox.photonView.ViewID, out int level)
                 ? level
                 : ForgeCostCurve.MinLevel;
@@ -121,6 +126,7 @@ public class UpgradeForgeBehavior : MonoBehaviour
         NoModule,
         NoRelics,
         AlreadyAtMax,
+        InvalidModuleLevel,
         InsufficientRelics,
         MissingViewId,
     }
@@ -142,6 +148,7 @@ public class UpgradeForgeBehavior : MonoBehaviour
         if (_relics.Count == 0) return CommitResult.NoRelics;
 
         int currentLevel = CurrentBoxLevel;
+        if (currentLevel < ForgeCostCurve.MinLevel) return CommitResult.InvalidModuleLevel;
         if (currentLevel >= ForgeCostCurve.MaxLevel) return CommitResult.AlreadyAtMax;
 
         int nextStepCost = ForgeCostCurve.CostForNextLevel(currentLevel);
@@ -387,6 +394,9 @@ public class UpgradeForgeBehavior : MonoBehaviour
                 break;
             case CommitResult.MissingViewId:
                 Messaging.Notification("Forge error: module box has no network identity.");
+                break;
+            case CommitResult.InvalidModuleLevel:
+                Messaging.Notification("Module is not at the minimum level to upgrade");
                 break;
         }
     }

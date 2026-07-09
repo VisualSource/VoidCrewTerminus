@@ -94,7 +94,6 @@
       <MetemBundles Include="$(ProjectDir)..\Assets\*.metem" />
       <MetemBundles Include="$(ProjectDir)..\Assets\*.metem_ext" />
     </ItemGroup>
-    <Exec Condition="Exists('$(ReleaseZipPath)') And '@(MetemBundles)' != ''"
-          Command="%25WINDIR%25\System32\WindowsPowerShell\v1.0\powershell.exe -NonInteractive -NoProfile -ExecutionPolicy Unrestricted -Command &quot;Compress-Archive -Path '%(MetemBundles.FullPath)' -DestinationPath '$(ReleaseZipPath)' -Update&quot;" />
+    <Exec Condition="Exists('$(ReleaseZipPath)') And '@(MetemBundles)' != ''" Command="%25WINDIR%25\System32\WindowsPowerShell\v1.0\powershell.exe -NonInteractive -NoProfile -ExecutionPolicy Unrestricted -Command &quot;Compress-Archive -Path '%(MetemBundles.FullPath)' -DestinationPath '$(ReleaseZipPath)' -Update&quot;" />
   </Target>
 </Project>
