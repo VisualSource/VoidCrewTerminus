@@ -65,7 +65,7 @@ public class UpgradeForgeBehavior : MonoBehaviour
     {
         get
         {
-            if (_moduleBox == null || _moduleBox.CsTags == null || _moduleBox.photonView == null) return 1;
+            if (_moduleBox == null || _moduleBox.CsTags == null || _moduleBox.photonView == null) return 0;
             if (!_moduleBox.CsTags.Contains(CsTagRegistry.ModuleMkIII))
             {
                 return _moduleBox.CsTags.Contains(CsTagRegistry.ModuleMkII) ? 1 : 2;
