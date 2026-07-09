@@ -16,12 +16,13 @@ In Progress:
         [] phase 7
         [] phase 8
         Cleanup:
+                [] modal exterior for module
                 [] update caryable hover module to reflect mod level
                 [] upgrade hover module name to reflect mod level
                 [] update fab to display correct recyle value
                 [] reuse or create new BuildBox asset
-                [] only allow upgrading MKIII modules
-                [] relic and buildbox ord
+                ✔ only allow upgrading MKIII modules @done(26-07-09 13:16)
+                ✔ relic and buildbox ord @done(26-07-09 13:16)
    Leeach:
 
    Fab Relic:
