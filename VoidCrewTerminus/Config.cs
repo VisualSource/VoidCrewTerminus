@@ -39,7 +39,7 @@ internal static class TerminusConfig
     internal static ConfigEntry<float> ForgeMeterLevelMultiplier;
 
     // Upgrade Forge — perk roll chances (0–1)
-    [BindConfig("forge", 0.15f, "Perk roll chance when upgrading with a Common relic")]
+    [BindConfig("forge", 0.25f, "Perk roll chance when upgrading with a Common relic")]
     internal static ConfigEntry<float> PerkRollChanceCommon;
 
     [BindConfig("forge", 0.40f, "Perk roll chance when upgrading with a Rare relic")]

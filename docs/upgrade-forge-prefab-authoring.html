@@ -81,6 +81,7 @@
     <tr><td class="k">RelicTubeTarget</td><td>yes (any count; 6 currently)</td><td>Relic mount point. Gets a click target; inserted relics dock here (base pivot aligned to the anchor's position <em>and rotation</em>).</td></tr>
     <tr><td class="k">InputTarget</td><td>yes (one)</td><td>Module socket. A carried BuildBox is loaded here; empty-handed clicks commit the upgrade (when no CommitTarget exists).</td></tr>
     <tr><td class="k">CommitTarget</td><td>optional (one)</td><td>Dedicated commit button. Empty-handed click = commit. Strongly recommended — without it, committing means clicking the module-socket rim.</td></tr>
+    <tr><td class="k">Interior / Exterior</td><td>recommended (root children)</td><td>Visual-culling groups mirroring vanilla module layout. <code>Interior</code> gets an interior occlusion node grafted at load (hidden while EVA / in turret / helm third-person); <code>Exterior</code> gets an Exterior-zone node (visible from space/turrets, culled while walking the interior). The exterior mesh fills the hull opening the build socket reveals when a module installs. Without the split, one interior-flavored node goes on the root.</td></tr>
   </table>
   <p>Each of the anchors above also supports three <strong>optional child objects</strong>:</p>
   <table class="data">

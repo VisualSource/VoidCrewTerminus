@@ -102,7 +102,7 @@ public static class PerkPool
     {
         RelicTier.Legendary => TerminusConfig.PerkRollChanceLegendary?.Value ?? 0.75f,
         RelicTier.Rare => TerminusConfig.PerkRollChanceRare?.Value ?? 0.40f,
-        _ => TerminusConfig.PerkRollChanceCommon?.Value ?? 0.15f,
+        _ => TerminusConfig.PerkRollChanceCommon?.Value ?? 0.25f,
     };
 
     // Uniform draw from the category pool. Returns null when the category has no
