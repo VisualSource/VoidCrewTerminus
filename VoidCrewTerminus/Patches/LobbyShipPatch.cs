@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using CG.Graphics;
 using CG.Ship.Shield.Effects;
 using HarmonyLib;
 using ResourceAssets;
@@ -81,8 +82,7 @@ internal class HangarShipController : MonoBehaviour
         foreach (var (shipType, req) in pending)
         {
             yield return req;
-            BuildAndCacheLoaded(shipType, req.asset as GameObject);
-            yield return null; // one-frame breather between builds to avoid a single mega-hitch
+            yield return BuildAndCacheRoutine(shipType, req.asset as GameObject);
         }
         if (_currentShipType == null)
         {
@@ -92,19 +92,131 @@ internal class HangarShipController : MonoBehaviour
         }
     }
 
-    private void BuildAndCacheLoaded(string shipType, GameObject prefab)
+    // Builds the visual clone across as many frames as needed, yielding whenever the
+    // per-frame time budget is spent, so scene start doesn't hitch on three ship
+    // builds landing in single frames.
+    private IEnumerator BuildAndCacheRoutine(string shipType, GameObject prefab)
     {
-        if (prefab == null) { BepinPlugin.Log.LogWarning($"[HangarShip] Load failed for {shipType}"); return; }
+        if (prefab == null) { BepinPlugin.Log.LogWarning($"[HangarShip] Load failed for {shipType}"); yield break; }
 
+        float budgetMs = Mathf.Max(0.5f, TerminusConfig.LobbyShipBuildBudgetMs?.Value ?? 3f);
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        // Pass 1 — LOD sets (same rules as before).
+        HashSet<Renderer> lod0 = null;
+        HashSet<Renderer> allLod = null;
+        foreach (var lg in prefab.GetComponentsInChildren<LODGroup>(true))
+        {
+            var lods = lg.GetLODs();
+            for (int i = 0; i < lods.Length; i++)
+            {
+                foreach (var r in lods[i].renderers)
+                {
+                    if (r == null) continue;
+                    allLod ??= [];
+                    allLod.Add(r);
+                    if (i == 0) { lod0 ??= []; lod0.Add(r); }
+                }
+            }
+            if (stopwatch.ElapsedMilliseconds >= budgetMs) { yield return null; stopwatch.Restart(); }
+        }
+
+        // Pass 2 — decide which renderers to keep, and mark every transform on the
+        // path from each kept renderer up to the root. Subtrees with no kept
+        // renderer are never cloned at all (the old copy recreated every empty
+        // logic/collider node — typically the majority of a ship prefab).
+        var needed = new HashSet<Transform>();
+        int keptCount = 0;
+        foreach (var r in prefab.GetComponentsInChildren<Renderer>(true))
+        {
+            bool keep = r switch
+            {
+                MeshRenderer mr => mr.GetComponent<MeshFilter>()?.sharedMesh != null && ShouldInclude(mr, lod0, allLod),
+                SkinnedMeshRenderer smr => smr.sharedMesh != null && ShouldInclude(smr, lod0, allLod),
+                _ => false,
+            };
+            if (!keep) continue;
+            keptCount++;
+            for (var t = r.transform; t != null && t != prefab.transform && needed.Add(t); t = t.parent) { }
+            if (stopwatch.ElapsedMilliseconds >= budgetMs) { yield return null; stopwatch.Restart(); }
+        }
+
+        if (keptCount == 0) { BepinPlugin.Log.LogWarning($"[HangarShip] No mesh for {shipType}"); yield break; }
+
+        // Pass 3 — clone the pruned hierarchy iteratively, converting materials to
+        // transparent/alpha-0 as they're first seen (deduped per source material, so
+        // the repeated hull materials are cloned and converted exactly once; this
+        // also warms the transparent shader variants during preload).
         var (offset, rot) = GetPositionRot(shipType);
         var parked = new Vector3(transform.position.x + offset.x, ParkY, transform.position.z + offset.z);
-        var go = BuildVisualMesh(prefab, parked, rot);
-        if (go == null) { BepinPlugin.Log.LogWarning($"[HangarShip] No mesh for {shipType}"); return; }
+        var root = new GameObject("ShipVisual");
+        root.transform.SetPositionAndRotation(parked, rot);
+        root.transform.localScale = Vector3.one * HangarScale;
 
-        go.transform.localScale = Vector3.one * HangarScale;
-        MakeTransparentAndSetAlpha(go, 0f); // warms transparent shader variant during preload
-        _cache[shipType] = go;
-        BepinPlugin.Log.LogDebug($"[HangarShip] Cached {shipType}");
+        var matCache = new Dictionary<Material, Material>();
+        var stack = new Stack<(Transform src, Transform dstParent)>();
+        for (int i = prefab.transform.childCount - 1; i >= 0; i--)
+            stack.Push((prefab.transform.GetChild(i), root.transform));
+
+        while (stack.Count > 0)
+        {
+            var (src, dstParent) = stack.Pop();
+            if (!needed.Contains(src)) continue;
+
+            var go = new GameObject(src.name);
+            go.transform.SetParent(dstParent, false);
+            go.transform.localPosition = src.localPosition;
+            go.transform.localRotation = src.localRotation;
+            go.transform.localScale = src.localScale;
+
+            Mesh mesh = null;
+            Material[] mats = null;
+            var mr = src.GetComponent<MeshRenderer>();
+            var mf = src.GetComponent<MeshFilter>();
+            if (mr != null && mf?.sharedMesh != null && ShouldInclude(mr, lod0, allLod))
+            {
+                mesh = mf.sharedMesh;
+                mats = mr.sharedMaterials;
+            }
+            else
+            {
+                var smr = src.GetComponent<SkinnedMeshRenderer>();
+                if (smr?.sharedMesh != null && ShouldInclude(smr, lod0, allLod))
+                {
+                    mesh = smr.sharedMesh;
+                    mats = smr.sharedMaterials;
+                }
+            }
+            if (mesh != null)
+            {
+                go.AddComponent<MeshFilter>().sharedMesh = mesh;
+                var converted = new Material[mats.Length];
+                for (int i = 0; i < mats.Length; i++)
+                    converted[i] = ConvertMaterial(mats[i], matCache);
+                go.AddComponent<MeshRenderer>().sharedMaterials = converted;
+            }
+
+            for (int i = src.childCount - 1; i >= 0; i--)
+                stack.Push((src.GetChild(i), go.transform));
+
+            if (stopwatch.ElapsedMilliseconds >= budgetMs) { yield return null; stopwatch.Restart(); }
+        }
+
+        _cache[shipType] = root;
+        BepinPlugin.Log.LogDebug($"[HangarShip] Cached {shipType} ({keptCount} renderers, {matCache.Count} materials)");
+    }
+
+    // Clone-once-per-source-material: shader remap + transparent + alpha 0.
+    private static Material ConvertMaterial(Material src, Dictionary<Material, Material> cache)
+    {
+        if (src == null) return null;
+        if (cache.TryGetValue(src, out var converted)) return converted;
+        var mat = new Material(src);
+        mat.shader = ResolveShader(mat.shader.name);
+        MakeTransparent(mat);
+        SetMaterialAlpha(mat, 0f);
+        cache[src] = mat;
+        return mat;
     }
 
     private IEnumerator SwapRoutine(string newType)
@@ -141,48 +253,20 @@ internal class HangarShipController : MonoBehaviour
         _ => (TerminusConfig.DestroyerLobbyHangerPosition.Value, Quaternion.Euler(TerminusConfig.DestroyerLobbyHangerRot.Value))
     };
 
-    private static GameObject BuildVisualMesh(GameObject prefab, Vector3 position, Quaternion rotation)
-    {
-        // Build two sets from every LODGroup in the prefab:
-        //   lod0    — renderers at LOD0 (highest detail hull mesh) → always include
-        //   allLod  — renderers at any LOD level → used to detect LOD-managed objects
-        // Renderers NOT in allLod are "non-LOD" (glass, details, effects, shields).
-        // We include those only when they are active in the prefab (activeSelf),
-        // which filters out shields and effects that are off by default.
-        HashSet<Renderer> lod0 = null;
-        HashSet<Renderer> allLod = null;
-        foreach (var lg in prefab.GetComponentsInChildren<LODGroup>(true))
-        {
-            var lods = lg.GetLODs();
-            for (int i = 0; i < lods.Length; i++)
-            {
-                foreach (var r in lods[i].renderers)
-                {
-                    if (r == null) continue;
-                    allLod ??= [];
-                    allLod.Add(r);
-                    if (i == 0) { lod0 ??= []; lod0.Add(r); }
-                }
-            }
-        }
-
-        var root = new GameObject("ShipVisual");
-        root.transform.SetPositionAndRotation(position, rotation);
-        if (CopyHierarchy(prefab.transform, root.transform, lod0, allLod) == 0)
-        {
-            Destroy(root);
-            return null;
-        }
-
-        return root;
-    }
-
     private static bool IsAdditive(Material m) =>
         m != null && m.HasProperty("_SrcBlend") && m.HasProperty("_DstBlend") &&
         (int)m.GetFloat("_SrcBlend") == 1 && (int)m.GetFloat("_DstBlend") == 1;
 
     private static bool ShouldInclude(Renderer r, HashSet<Renderer> lod0, HashSet<Renderer> allLod)
     {
+        // Interior geometry is invisible from the hangar camera. The game's own
+        // marker: interior groups sit under OcclusionNodes that hide when the local
+        // player is in space; exterior hull nodes keep that flag false so they stay
+        // visible from EVA. Checked before the LOD0 shortcut — interior props are
+        // LOD-managed too.
+        var occlusion = r.GetComponentInParent<OcclusionNode>(true);
+        if (occlusion != null && occlusion.HideOnLocalPlayerIsInSpace) return false;
+
         if (lod0 == null) return true;                          // no LODGroups → include everything
         if (lod0.Contains(r)) return true;                      // hull mesh LOD0
         if (allLod != null && allLod.Contains(r)) return false; // lower-quality LOD level
@@ -194,55 +278,6 @@ internal class HangarShipController : MonoBehaviour
         var mats = r.sharedMaterials;
         if (mats.Length > 0 && mats.All(IsAdditive)) return false;
         return true;
-    }
-
-    // Possible optimization: convert to a coroutine and yield every N nodes (or after each renderer copy)
-    // to spread the per-ship build cost across multiple frames. Only worth doing if a single ship's build
-    // shows up as a visible hitch in the profiler — the parallel preload already absorbs most of the cost.
-    private static int CopyHierarchy(Transform src, Transform dst, HashSet<Renderer> lod0, HashSet<Renderer> allLod)
-    {
-        int count = 0;
-        foreach (Transform child in src)
-        {
-            var go = new GameObject(child.name);
-            go.transform.SetParent(dst, false);
-            go.transform.localPosition = child.localPosition;
-            go.transform.localRotation = child.localRotation;
-            go.transform.localScale = child.localScale;
-
-            var mr = child.GetComponent<MeshRenderer>();
-            var mf = child.GetComponent<MeshFilter>();
-            if (mr != null && mf?.sharedMesh != null && ShouldInclude(mr, lod0, allLod))
-            {
-                go.AddComponent<MeshFilter>().sharedMesh = mf.sharedMesh;
-                CopyMaterials(go.AddComponent<MeshRenderer>(), mr.sharedMaterials);
-                count++;
-            }
-
-            var smr = child.GetComponent<SkinnedMeshRenderer>();
-            if (smr?.sharedMesh != null && ShouldInclude(smr, lod0, allLod))
-            {
-                go.AddComponent<MeshFilter>().sharedMesh = smr.sharedMesh;
-                CopyMaterials(go.AddComponent<MeshRenderer>(), smr.sharedMaterials);
-                count++;
-            }
-
-            count += CopyHierarchy(child, go.transform, lod0, allLod);
-        }
-        return count;
-    }
-
-    private static void CopyMaterials(MeshRenderer dst, Material[] src)
-    {
-        var mats = new Material[src.Length];
-        for (int i = 0; i < src.Length; i++)
-        {
-            if (src[i] == null) continue;
-            var mat = new Material(src[i]);
-            mat.shader = ResolveShader(mat.shader.name);
-            mats[i] = mat;
-        }
-        dst.sharedMaterials = mats;
     }
 
     private static void MakeTransparent(Material mat)
@@ -290,17 +325,6 @@ internal class HangarShipController : MonoBehaviour
         foreach (var r in go.GetComponentsInChildren<Renderer>(true))
             foreach (var mat in r.sharedMaterials)
                 if (mat != null) fn(mat);
-    }
-
-    private static void MakeTransparentAndSetAlpha(GameObject go, float alpha)
-    {
-        foreach (var r in go.GetComponentsInChildren<Renderer>(true))
-            foreach (var mat in r.sharedMaterials)
-            {
-                if (mat == null) continue;
-                MakeTransparent(mat);
-                SetMaterialAlpha(mat, alpha);
-            }
     }
 
     private static void SetMaterialAlpha(Material mat, float alpha)

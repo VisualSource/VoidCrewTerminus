@@ -21,6 +21,9 @@ internal static class TerminusConfig
     [BindConfig("lobby", 0.6f, "Duration fade affect between ship when after ship selection")]
     internal static ConfigEntry<float> LobbyShipFadeDuration;
 
+    [BindConfig("lobby", 3f, "Per-frame time budget (ms) for building hangar ship visuals during preload; lower = smoother scene start, slower build")]
+    internal static ConfigEntry<float> LobbyShipBuildBudgetMs;
+
     // Upgrade Forge — cost curve
     [BindConfig("forge", "1,1,2,2,3,3,4", "Comma-separated relic cost per module level step L4..L10 (default: 1,1,2,2,3,3,4 = 16 total to hit L10)")]
     internal static ConfigEntry<string> ForgeCostCurve;
