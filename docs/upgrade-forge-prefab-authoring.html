@@ -78,9 +78,10 @@
   </p>
   <table class="data">
     <tr><th>Name</th><th>Required</th><th>What the runtime does with it</th></tr>
-    <tr><td class="k">RelicTubeTarget</td><td>yes (any count; 6 currently)</td><td>Relic mount point. Gets a click target; inserted relics dock here (base pivot aligned to the anchor's position <em>and rotation</em>).</td></tr>
+    <tr><td class="k">RelicTubeTarget</td><td>yes (any count; 6 currently)</td><td>Relic mount point. Gets a click target; inserted relics dock here (base pivot aligned to the anchor's position <em>and rotation</em>). Numbered suffixes fill in name order (<code>RelicTubeTarget_01</code>…). <strong>Tube anchors are level-gated:</strong> only the first <em>Forge level</em> anchors stay active; the rest are deactivated (invisible + unclickable). Parent each tube's mesh under its anchor so the visual appears with the Forge's progression.</td></tr>
     <tr><td class="k">InputTarget</td><td>yes (one)</td><td>Module socket. A carried BuildBox is loaded here; empty-handed clicks commit the upgrade (when no CommitTarget exists).</td></tr>
     <tr><td class="k">CommitTarget</td><td>optional (one)</td><td>Dedicated commit button. Empty-handed click = commit. Strongly recommended — without it, committing means clicking the module-socket rim.</td></tr>
+    <tr><td class="k">AlloyTarget</td><td>optional (one)</td><td>Alloy Terminal: empty-handed click spends alloys (config <code>AlloyTerminalSpendPerUse</code>, default 10) to fill the Forge Meter and level the Forge (capacity = level). Without it, meter progression is jumps-only (+ dev commands). Host-only until the multiplayer phase.</td></tr>
     <tr><td class="k">Interior / Exterior</td><td>recommended (root children)</td><td>Visual-culling groups mirroring vanilla module layout. <code>Interior</code> gets an interior occlusion node grafted at load (hidden while EVA / in turret / helm third-person); <code>Exterior</code> gets an Exterior-zone node (visible from space/turrets, culled while walking the interior). The exterior mesh fills the hull opening the build socket reveals when a module installs. Without the split, one interior-flavored node goes on the root.</td></tr>
   </table>
   <p>Each of the anchors above also supports three <strong>optional child objects</strong>:</p>

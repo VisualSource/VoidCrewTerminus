@@ -31,19 +31,21 @@ namespace VoidCrewTerminus.Forge;
 //     docked item back out or a commit destroys consumed relics.
 public class UpgradeForgeBehavior : MonoBehaviour
 {
-    // Hardcoded per the Phase 3 plan. Phase 5 replaces this with a value driven by
-    // ForgeMeterController (capacity == current Forge level).
-    public const int Capacity = 4;
+    // Phase 5: relic capacity is the Forge's progression level (1..4). Filling the
+    // meter — sector jumps + alloys — is what unlocks the bigger upgrade steps.
+    public static int Capacity => ForgeMeterController.Capacity;
 
     // Name of the shipped prefab inside voidcrewterminus.metem — used by
     // ForgeInteractionPatch to identify Forge modules as they build.
     public const string PrefabName = "UpgradeForgeModuleCell";
 
-    // Anchor names baked into the shipped prefab. CommitTarget is optional — when
-    // absent, an empty-handed click on the module socket commits instead.
+    // Anchor names baked into the shipped prefab. CommitTarget is required for
+    // in-world commits; AlloyTarget is the Phase 5 meter terminal (optional — the
+    // !setmeter dev command covers testing until the prefab gains the anchor).
     public const string RelicTubeAnchorName = "RelicTubeTarget";
     public const string InputAnchorName = "InputTarget";
     public const string CommitAnchorName = "CommitTarget";
+    public const string AlloyAnchorName = "AlloyTarget";
 
     private BuildBox _moduleBox;
     private readonly List<GameObject> _relics = new();
@@ -229,6 +231,7 @@ public class UpgradeForgeBehavior : MonoBehaviour
             .ToArray();
         _inputAnchor = transforms.FirstOrDefault(t => t.name == InputAnchorName);
         var commitAnchor = transforms.FirstOrDefault(t => t.name == CommitAnchorName);
+        var alloyAnchor = transforms.FirstOrDefault(t => t.name == AlloyAnchorName);
 
         int layer = LayerMask.NameToLayer("InteractiveObjects");
         if (layer < 0)
@@ -249,6 +252,10 @@ public class UpgradeForgeBehavior : MonoBehaviour
             CreateInteractable(commitAnchor, ForgeInteractableKind.CommitButton, new Vector3(0.3f, 0.3f, 0.3f), layer);
         else
             BepinPlugin.Log.LogWarning("[Forge] Prefab has no CommitTarget anchor — in-world commits unavailable (use !forgecommit).");
+        if (alloyAnchor != null)
+            CreateInteractable(alloyAnchor, ForgeInteractableKind.AlloyTerminal, new Vector3(0.3f, 0.3f, 0.3f), layer);
+        else
+            BepinPlugin.Log.LogInfo("[Forge] Prefab has no AlloyTarget anchor — alloy feeding unavailable in-world (use !setmeter for testing).");
 
         if (_tubeAnchors.Length == 0 || _inputAnchor == null)
             BepinPlugin.Log.LogWarning(
@@ -256,6 +263,30 @@ public class UpgradeForgeBehavior : MonoBehaviour
                 "check the metem bundle matches UpgradeForgeModuleCell.prefab.");
         else
             BepinPlugin.Log.LogInfo($"[Forge] Built interactables: {_tubeAnchors.Length} relic tubes, module socket{(commitAnchor != null ? ", commit button" : "")}.");
+
+        RefreshTubeVisibility();
+    }
+
+    private void OnEnable() => ForgeMeterController.LevelChanged += OnForgeLevelChanged;
+    private void OnDisable() => ForgeMeterController.LevelChanged -= OnForgeLevelChanged;
+    private void OnForgeLevelChanged(int _) => RefreshTubeVisibility();
+
+    // The model reflects Forge progression: only the first Capacity tubes are
+    // active. Deactivating a tube anchor hides everything under it — the click
+    // target (inactive collider = unclickable), Highlight/Filled helpers, and the
+    // tube's mesh when the prefab parents it under the anchor — so locked tubes
+    // are enforced physically as well as by the insertion count check. A tube
+    // holding a docked relic never hides (level can drop via dev/reset).
+    private void RefreshTubeVisibility()
+    {
+        for (int i = 0; i < _tubeAnchors.Length; i++)
+        {
+            var tube = _tubeAnchors[i];
+            if (tube == null) continue;
+            bool active = i < Capacity || IsAnchorOccupied(tube);
+            if (tube.gameObject.activeSelf != active)
+                tube.gameObject.SetActive(active);
+        }
     }
 
     // Prefab authoring contract (all optional, plain Unity components so they survive
@@ -360,6 +391,12 @@ public class UpgradeForgeBehavior : MonoBehaviour
         {
             case ForgeInteractableKind.CommitButton:
                 DoCommit();
+                break;
+            case ForgeInteractableKind.AlloyTerminal:
+                if (ForgeMeterController.TrySpendAlloys(out var alloyError))
+                    Messaging.Notification(ForgeMeterController.Describe());
+                else
+                    Messaging.Notification(alloyError);
                 break;
             case ForgeInteractableKind.ModuleSocket:
                 Messaging.Notification("Deconstruct a module and place its build box here to upgrade it.");

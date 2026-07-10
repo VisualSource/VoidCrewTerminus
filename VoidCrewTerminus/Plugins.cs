@@ -19,7 +19,12 @@ namespace VoidCrewTerminus
             TerminusConfig.Init(Config);
             Harmony.CreateAndPatchAll(Assembly.GetExecutingAssembly());
             AssetLoader.TryLoadAssetBundlesNextToDLL();
-            VoidManager.Events.Instance.HostStartSession += (_, _) => VoidCrewTerminus.Forge.ForgeOverlayTable.ClearAll();
+            Patches.ForgeSectorHook.Init();
+            VoidManager.Events.Instance.HostStartSession += (_, _) =>
+            {
+                VoidCrewTerminus.Forge.ForgeOverlayTable.ClearAll();
+                VoidCrewTerminus.Forge.ForgeMeterController.ResetForRun();
+            };
             Logger.LogInfo($"Plugin {MyPluginInfo.PLUGIN_GUID} is loaded!");
         }
     }

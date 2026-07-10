@@ -10,9 +10,10 @@ namespace VoidCrewTerminus.Forge;
 
 public enum ForgeInteractableKind
 {
-    RelicTube,    // insert a held relic / status when empty-handed
-    ModuleSocket, // load a held BuildBox / commit when empty-handed
-    CommitButton, // commit when empty-handed (optional CommitTarget anchor)
+    RelicTube,     // insert a held relic / status when empty-handed
+    ModuleSocket,  // load a held BuildBox / commit when empty-handed
+    CommitButton,  // commit when empty-handed (CommitTarget anchor)
+    AlloyTerminal, // feed alloys into the Forge Meter (AlloyTarget anchor)
 }
 
 // Raycast target for the player's interaction system. AbstractInteractable instances

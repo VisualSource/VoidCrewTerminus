@@ -35,6 +35,9 @@ internal static class TerminusConfig
     [BindConfig("forge", 1f, "Forge Meter fill per alloy spent at the Alloy Terminal")]
     internal static ConfigEntry<float> ForgeMeterPerAlloy;
 
+    [BindConfig("forge", 10, "Alloys consumed per Alloy Terminal use")]
+    internal static ConfigEntry<int> AlloyTerminalSpendPerUse;
+
     [BindConfig("forge", 100f, "Forge Meter threshold for L1→L2; multiplied by ForgeMeterLevelMultiplier each subsequent level")]
     internal static ConfigEntry<float> ForgeMeterBaseThreshold;
 
