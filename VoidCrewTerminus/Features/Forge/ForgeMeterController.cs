@@ -27,9 +27,6 @@ public static class ForgeMeterController
     public static float Meter { get; private set; }
     public static float DifficultyScalar { get; private set; } // Phase 6
 
-    // The first OnSectorEntered of a run is the starting sector, not a jump.
-    private static bool _skipNextSectorAward = true;
-
     public static int Capacity => Level;
 
     public static bool IsMaxed => Level >= MaxLevel;
@@ -48,16 +45,7 @@ public static class ForgeMeterController
         Level = MinLevel;
         Meter = 0f;
         DifficultyScalar = 0f;
-        _skipNextSectorAward = true;
         LevelChanged?.Invoke(Level);
-    }
-
-    // Consumed by ForgeSectorHook exactly once per run.
-    public static bool ConsumeInitialSectorSkip()
-    {
-        if (!_skipNextSectorAward) return false;
-        _skipNextSectorAward = false;
-        return true;
     }
 
     public static void AddMeter(float amount, string source)
