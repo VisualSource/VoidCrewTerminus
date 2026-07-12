@@ -209,6 +209,26 @@ internal class ForgeEjectRelicCommand : PublicCommand
     }
 }
 
+internal class ForgeMarkCommand : PublicCommand
+{
+    public override string[] CommandAliases() => new[] { "forgemark" };
+    public override string Description() => "[DevMode] Dump how the docked box's vanilla mark resolves (upgrade-chain lookup)";
+    public override List<Argument> Arguments() => [];
+    public override string[] UsageExamples() => ["!forgemark"];
+
+    public override void Execute(string arguments, int sender)
+    {
+        if (!TerminusConfig.EnableDevMode.Value) return;
+
+        var forge = ForgeCommandHelper.FindNearestForge();
+        if (forge == null) { Messaging.Notification("No Upgrade Forge found."); return; }
+
+        var dump = forge.DescribeBoxMark();
+        Messaging.Notification(dump);
+        BepinPlugin.Log.LogInfo($"[Forge] {dump}");
+    }
+}
+
 internal class ForgeCommitCommand : PublicCommand
 {
     public override string[] CommandAliases() => new[] { "forgecommit" };

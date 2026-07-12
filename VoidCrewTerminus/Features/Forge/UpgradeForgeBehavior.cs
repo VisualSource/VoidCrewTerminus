@@ -5,6 +5,7 @@ using CG.Network;
 using CG.Objects;
 using CG.Ship.Modules;
 using CG.Ship.Object;
+using Gameplay.Tags;
 using UnityEngine;
 using VoidManager.Utilities;
 
@@ -68,16 +69,106 @@ public class UpgradeForgeBehavior : MonoBehaviour
     {
         get
         {
-            if (_moduleBox == null || _moduleBox.CsTags == null || _moduleBox.photonView == null) return 0;
-            if (!_moduleBox.CsTags.Contains(CsTagRegistry.ModuleMkIII))
-            {
-                return _moduleBox.CsTags.Contains(CsTagRegistry.ModuleMkII) ? 1 : 2;
-            }
+            if (_moduleBox == null || _moduleBox.photonView == null) return 0;
+
+            // Only a module at its final vanilla mark may be forged; below that the
+            // vanilla upgrade-chip path still applies. The mark comes from the
+            // game's UpgradableAssetDataTable chain (the same data the vanilla
+            // chips walk) — NOT from tags: the BuildBox carryable carries no mark
+            // CsTags, and Component.CompareTag compares Unity GameObject tags,
+            // never CsTags.
+            int mark = GetBoxMark(out bool isFinalMark);
+            if (!isFinalMark) return mark; // 1 or 2 → below MinLevel → InvalidModuleLevel on commit
 
             return ForgeOverlayTable.TryPeekPendingLevel(_moduleBox.photonView.ViewID, out int level)
                 ? level
                 : ForgeCostCurve.MinLevel;
         }
+    }
+
+    // Vanilla mark (1-based position in the module's upgrade chain) of the module
+    // this box builds. STRICT policy: only modules provably at the END of an
+    // upgrade chain are forgeable — anything we can't resolve (no identity, table
+    // missing, guid in no chain) is refused. The permissive alternative ("unknown
+    // = final") let MkI/MkII modules with unresolvable identities slip through.
+    //
+    // Identity differs by box type: composite weapon boxes are GENERIC prefabs —
+    // their moduleRef is unset and the weapon identity is a CompositeWeaponDataRef
+    // delivered via instantiation data — and their upgrade chains are keyed by
+    // that CompositeData guid (see ModuleUpgraderEffects). Plain module boxes
+    // chain by their moduleRef guid.
+    private int GetBoxMark(out bool isFinalMark)
+    {
+        isFinalMark = false;
+        if (!TryGetBoxIdentity(out var guid)) return 1;
+
+        var table = DataTable<UpgradableAssetDataTable>.Instance;
+        if (table?.UpgradableAssets == null)
+        {
+            BepinPlugin.Log.LogWarning("[Forge] UpgradableAssetDataTable unavailable — refusing to forge.");
+            return 1;
+        }
+
+        foreach (var chain in table.UpgradableAssets)
+        {
+            var assets = chain.Assets;
+            if (assets == null) continue;
+            for (int j = 0; j < assets.Length; j++)
+            {
+                if (assets[j].AssetGuid == guid)
+                {
+                    isFinalMark = j == assets.Length - 1;
+                    return j + 1;
+                }
+            }
+        }
+
+        // Not in any chain. If a legitimately single-form module ever needs to
+        // forge, this log line names the guid to whitelist.
+        BepinPlugin.Log.LogInfo($"[Forge] Module {guid.AsHex()} not in any upgrade chain — refusing to forge (strict Mark III policy).");
+        return 1;
+    }
+
+    // The guid the upgrade chains key this box's module by.
+    private bool TryGetBoxIdentity(out GUIDUnion guid)
+    {
+        guid = GUIDUnion.Empty();
+        if (_moduleBox == null) return false;
+
+        if (_moduleBox is CompositeWeaponBuildBox weaponBox)
+        {
+            if (weaponBox.WeaponDataRef == null || weaponBox.WeaponDataRef.IsNull) return false;
+            guid = weaponBox.WeaponDataRef.AssetGuid;
+            return true;
+        }
+
+        var moduleRef = _moduleBox.moduleRef;
+        if (moduleRef == null || moduleRef.IsNull) return false;
+        guid = moduleRef.AssetGuid;
+        return true;
+    }
+
+    // Dev diagnostic (!forgemark): full dump of how the docked box's mark resolves.
+    public string DescribeBoxMark()
+    {
+        if (_moduleBox == null) return "No box docked in the Forge.";
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"box={_moduleBox.name} ({_moduleBox.GetType().Name})");
+        sb.Append(TryGetBoxIdentity(out var guid)
+            ? $", identity={guid.AsHex()}"
+            : ", identity=NONE (no moduleRef / WeaponDataRef)");
+
+        var table = DataTable<UpgradableAssetDataTable>.Instance;
+        if (table == null) sb.Append(" | table=NULL");
+        else if (table.UpgradableAssets == null) sb.Append(" | table.chains=NULL");
+        else
+        {
+            sb.Append($" | table.chains={table.UpgradableAssets.Length}");
+            int mark = GetBoxMark(out bool isFinal);
+            sb.Append($" | resolved mark={mark}, final={isFinal}");
+        }
+        return sb.ToString();
     }
 
     // How far the currently-loaded relics would push the socketed module if committed now.
@@ -433,7 +524,7 @@ public class UpgradeForgeBehavior : MonoBehaviour
                 Messaging.Notification("Forge error: module box has no network identity.");
                 break;
             case CommitResult.InvalidModuleLevel:
-                Messaging.Notification("Module is not at the minimum level to upgrade");
+                Messaging.Notification("Only Mark III modules can be forged — upgrade it with module chips first.");
                 break;
         }
     }
