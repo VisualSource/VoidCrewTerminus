@@ -15,7 +15,11 @@ internal class HubShipManagerPatch
 {
     static void Postfix(HubShipManager __instance)
     {
-        __instance.gameObject.AddComponent<HangarShipController>();
+        // Start can run repeatedly across hub loads — without this guard every
+        // pass stacked another controller, each redoing the full ship preload
+        // (observed 19 duplicate loads per ship in the wild).
+        if (__instance.gameObject.GetComponent<HangarShipController>() == null)
+            __instance.gameObject.AddComponent<HangarShipController>();
     }
 }
 
