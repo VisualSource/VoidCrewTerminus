@@ -529,6 +529,27 @@ public class UpgradeForgeBehavior : MonoBehaviour
         }
     }
 
+    // Hot-reload teardown (ScriptEngine): a reloaded assembly brings its OWN
+    // UpgradeForgeBehavior type, so this instance must leave cleanly — undocking
+    // held items (restoring their physics so nothing is left frozen mid-air) and
+    // removing itself. The reloaded assembly re-attaches on its own patch pass.
+    public void TeardownForReload()
+    {
+        foreach (var kv in _docked)
+        {
+            var go = kv.Key;
+            if (go == null) continue;
+            SetAnchorFilled(kv.Value, false);
+            var co = go.GetComponent<CarryableObject>();
+            var rb = co != null ? co.MainRigidbody : go.GetComponent<Rigidbody>();
+            if (rb != null) rb.isKinematic = false;
+        }
+        _docked.Clear();
+        _relics.Clear();
+        _moduleBox = null;
+        Destroy(this);
+    }
+
     // ---- Physical docking ------------------------------------------------
 
     private void Dock(GameObject item, Transform anchor)

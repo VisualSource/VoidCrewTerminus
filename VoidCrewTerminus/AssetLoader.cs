@@ -37,8 +37,26 @@ public class AssetLoader
     // prefabs are kept mod-side and instantiated by our own code instead.
     private static readonly Dictionary<string, GameObject> _modulePrefabs = new();
 
+    // Bundles this assembly loaded, for hot-reload teardown.
+    private static readonly List<AssetBundle> _loadedBundles = new();
+
     public static GameObject GetModulePrefab(string name) =>
         _modulePrefabs.TryGetValue(name, out var prefab) ? prefab : null;
+
+    // Hot-reload teardown (ScriptEngine): release the bundle file handles so the
+    // reloaded assembly can LoadFromFile again. Unload(false) keeps already-created
+    // assets alive — live modules, registered prefabs and materials keep working;
+    // only the bundle handle is freed. RuntimeAssetsRegister entries are left in
+    // place: re-registration is skipped by the HasAsset guard on reload.
+    public static void UnloadBundles()
+    {
+        foreach (var bundle in _loadedBundles)
+        {
+            if (bundle != null) bundle.Unload(false);
+        }
+        _loadedBundles.Clear();
+        _modulePrefabs.Clear();
+    }
 
     public static void TryLoadAssetBundlesNextToDLL()
     {
@@ -85,9 +103,20 @@ public class AssetLoader
         var bundle = AssetBundle.LoadFromFile(filepath);
         if (!(bool)bundle)
         {
+            // A previous (hot-reloaded) copy of this plugin may still hold the
+            // bundle; reuse the in-memory instance rather than failing.
+            var name = Path.GetFileName(filepath);
+            foreach (var loaded in AssetBundle.GetAllLoadedAssetBundles())
+            {
+                if (loaded.name == name) { bundle = loaded; break; }
+            }
+        }
+        if (!(bool)bundle)
+        {
             BepinPlugin.Log.LogError($"[AssetLoader] Failed to load AssetBundle at {filepath}");
             return;
         }
+        _loadedBundles.Add(bundle);
 
         foreach (var asset in bundle.LoadAllAssets())
         {

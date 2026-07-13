@@ -33,6 +33,16 @@ internal static class ForgeSectorHook
         BepinPlugin.Log.LogInfo("[Forge] Sector hook armed (award on sector exit).");
     }
 
+    // Hot-reload teardown (ScriptEngine): the game events are static, so a leaked
+    // subscription from the old assembly would double-award the meter after F6.
+    internal static void Shutdown()
+    {
+        if (!_initialized) return;
+        _initialized = false;
+        GameSessionSectorManager.OnSectorExited -= OnSectorExited;
+        GameSessionSectorManager.OnSectorEntered -= OnSectorEnteredDiagnostic;
+    }
+
     // Diagnostic only — confirms enter events flow while we award on exits.
     private static void OnSectorEnteredDiagnostic(GameSessionSector sector) =>
         BepinPlugin.Log.LogInfo($"[Forge] SectorEntered: id={(sector == null ? "null" : sector.Id.ToString())}");
