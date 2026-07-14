@@ -213,59 +213,36 @@ public class UpgradeForgeBehavior : MonoBehaviour
 
     // ---- Commit -------------------------------------------------------
 
-    public enum CommitResult
-    {
-        Ok,
-        NoModule,
-        NoRelics,
-        AlreadyAtMax,
-        InvalidModuleLevel,
-        InsufficientRelics,
-        MissingViewId,
-    }
-
     // Attempts to upgrade the socketed box using as many inserted relics as the cost
     // curve permits. Consumes only the relics actually spent; leftovers stay in the
     // Forge. On success the new pending state (level + any rolled perk) is written
     // to ForgeOverlayTable so reconstruction picks it up automatically.
-    // perkResult carries the human-readable gamble outcome (null when no roll was
-    // attempted — e.g. every eligible slot already filled).
-    public CommitResult TryCommit(out int newLevel, out int relicsConsumed, out string perkResult)
+    //
+    // The pure algorithm (cost walk, tie-break, perk roll) lives in
+    // UpgradeCommitCalculator; this method builds the request from scene state,
+    // guards the Unity-entangled cases, and applies the outcome.
+    public CommitOutcome TryCommit()
     {
-        newLevel = 0;
-        relicsConsumed = 0;
-        perkResult = null;
+        if (_moduleBox == null) return CommitOutcome.Failure(CommitStatus.NoModule);
+        if (_moduleBox.photonView == null) return CommitOutcome.Failure(CommitStatus.MissingViewId);
 
-        if (_moduleBox == null) return CommitResult.NoModule;
-        if (_moduleBox.photonView == null) return CommitResult.MissingViewId;
-        if (_relics.Count == 0) return CommitResult.NoRelics;
+        var relicTiers = new RelicTier[_relics.Count];
+        for (int i = 0; i < _relics.Count; i++)
+            relicTiers[i] = _relics[i] != null ? RelicTierData.Get(_relics[i].name).Tier : RelicTier.Common;
 
-        int currentLevel = CurrentBoxLevel;
-        if (currentLevel < ForgeCostCurve.MinLevel) return CommitResult.InvalidModuleLevel;
-        if (currentLevel >= ForgeCostCurve.MaxLevel) return CommitResult.AlreadyAtMax;
-
-        int nextStepCost = ForgeCostCurve.CostForNextLevel(currentLevel);
-        if (_relics.Count < nextStepCost) return CommitResult.InsufficientRelics;
-
-        int achievedLevel = ForgeCostCurve.MaxReachable(currentLevel, _relics.Count);
-        relicsConsumed = ForgeCostCurve.RelicsRequired(currentLevel, achievedLevel);
-        newLevel = achievedLevel;
-
-        // Best tier among the relics actually consumed drives the perk gamble
-        // (multi-relic commits roll once, at the quality of their best relic).
-        var bestTier = RelicTier.Common;
-        for (int i = 0; i < relicsConsumed && i < _relics.Count; i++)
-        {
-            if (_relics[i] == null) continue;
-            var tier = RelicTierData.Get(_relics[i].name).Tier;
-            if (tier > bestTier) bestTier = tier;
-        }
-
+        var category = PerkPool.CategoryOf(_moduleBox.moduleRef?.Asset as CellModule);
         var pending = ForgeOverlayTable.GetOrCreatePending(_moduleBox.photonView.ViewID);
-        pending.Level = newLevel;
-        perkResult = RollPerkInto(pending, bestTier);
+        int currentLevel = CurrentBoxLevel;
 
-        for (int i = 0; i < relicsConsumed && _relics.Count > 0; i++)
+        var request = new CommitRequest(currentLevel, relicTiers, category, pending.PerkSlots);
+        var outcome = UpgradeCommitCalculator.Calculate(request);
+        if (outcome.Status != CommitStatus.Ok) return outcome;
+
+        pending.Level = outcome.NewLevel;
+        if (outcome.RolledPerk != null)
+            pending.PerkSlots[outcome.TargetSlot] = outcome.RolledPerk.Id;
+
+        for (int i = 0; i < outcome.RelicsConsumed && _relics.Count > 0; i++)
         {
             var relic = _relics[0];
             _relics.RemoveAt(0);
@@ -273,34 +250,21 @@ public class UpgradeForgeBehavior : MonoBehaviour
         }
 
         BepinPlugin.Log.LogInfo(
-            $"[Forge] Committed L{currentLevel}→L{newLevel} on ViewID={_moduleBox.photonView.ViewID} " +
-            $"(consumed {relicsConsumed} relic{(relicsConsumed == 1 ? "" : "s")}, {_relics.Count} remain, " +
-            $"tier={bestTier}, perk={(perkResult ?? "no roll")})");
+            $"[Forge] Committed L{currentLevel}→L{outcome.NewLevel} on ViewID={_moduleBox.photonView.ViewID} " +
+            $"(consumed {outcome.RelicsConsumed} relic{(outcome.RelicsConsumed == 1 ? "" : "s")}, {_relics.Count} remain, " +
+            $"tier={outcome.BestTier}, perk={DescribePerkResult(outcome)})");
 
-        return CommitResult.Ok;
+        return outcome;
     }
 
-    // The Phase 4 gamble: one roll per commit against the lowest empty slot the
-    // relic tier can fill. Local RNG for now — Phase 8 moves the roll host-side.
-    private string RollPerkInto(ForgeOverlayTable.PendingState pending, RelicTier tier)
+    // Human-readable perk-roll summary used by DoCommit for the notification line.
+    public static string DescribePerkResult(CommitOutcome outcome)
     {
-        int slot = PerkPool.TargetSlot(pending.PerkSlots, tier);
-        if (slot < 0) return null; // every eligible slot filled — roll skips silently
-
-        float chance = PerkPool.RollChance(tier);
-        if (UnityEngine.Random.value >= chance)
-            return $"No perk this time ({tier} · {chance:P0} chance).";
-
-        var category = PerkPool.CategoryOf(_moduleBox != null ? _moduleBox.moduleRef?.Asset as CellModule : null);
-        var perk = PerkPool.RollPerk(category, tier, slot);
-        if (perk == null)
-        {
-            BepinPlugin.Log.LogWarning($"[Forge] Perk roll succeeded but category '{category}' has no authored perks.");
-            return null;
-        }
-
-        pending.PerkSlots[slot] = perk.Id;
-        return $"Perk gained in slot {slot + 1}: {perk.Name} — {perk.Description}!";
+        if (outcome.RolledPerk != null)
+            return $"Perk gained in slot {outcome.TargetSlot + 1}: {outcome.RolledPerk.Name} — {outcome.RolledPerk.Description}!";
+        if (outcome.RollAttempted)
+            return $"No perk this time ({outcome.BestTier} · {outcome.RollChance:P0} chance).";
+        return "no roll";
     }
 
     // ---- In-world interactables ----------------------------------------
@@ -502,28 +466,30 @@ public class UpgradeForgeBehavior : MonoBehaviour
 
     private void DoCommit()
     {
-        switch (TryCommit(out int newLevel, out int consumed, out string perkResult))
+        var outcome = TryCommit();
+        switch (outcome.Status)
         {
-            case CommitResult.Ok:
-                Messaging.Notification($"Upgrade committed: L{newLevel} (consumed {consumed} relic{(consumed == 1 ? "" : "s")}). Rebuild the module to apply.");
-                if (perkResult != null) Messaging.Notification(perkResult);
+            case CommitStatus.Ok:
+                Messaging.Notification($"Upgrade committed: L{outcome.NewLevel} (consumed {outcome.RelicsConsumed} relic{(outcome.RelicsConsumed == 1 ? "" : "s")}). Rebuild the module to apply.");
+                if (outcome.RolledPerk != null || outcome.RollAttempted)
+                    Messaging.Notification(DescribePerkResult(outcome));
                 break;
-            case CommitResult.NoModule:
+            case CommitStatus.NoModule:
                 Messaging.Notification("Load a deconstructed module box into the Forge first.");
                 break;
-            case CommitResult.NoRelics:
+            case CommitStatus.NoRelics:
                 Messaging.Notification("Insert relics into the tubes before committing.");
                 break;
-            case CommitResult.AlreadyAtMax:
+            case CommitStatus.AlreadyAtMax:
                 Messaging.Notification("This module is already at L10.");
                 break;
-            case CommitResult.InsufficientRelics:
+            case CommitStatus.InsufficientRelics:
                 Messaging.Notification($"Next level requires {ForgeCostCurve.CostForNextLevel(CurrentBoxLevel)} relics; the Forge holds {RelicCount}.");
                 break;
-            case CommitResult.MissingViewId:
+            case CommitStatus.MissingViewId:
                 Messaging.Notification("Forge error: module box has no network identity.");
                 break;
-            case CommitResult.InvalidModuleLevel:
+            case CommitStatus.InvalidModuleLevel:
                 Messaging.Notification("Only Mark III modules can be forged — upgrade it with module chips first.");
                 break;
         }

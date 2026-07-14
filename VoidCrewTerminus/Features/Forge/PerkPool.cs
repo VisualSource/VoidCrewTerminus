@@ -74,8 +74,14 @@ public static class PerkPool
         return _byId.TryGetValue(perkId ?? "", out perk);
     }
 
-    public static IReadOnlyList<PerkDefinition> PoolFor(ForgeCategory category) =>
-        _pools.TryGetValue(category, out var pool) ? pool : System.Array.Empty<PerkDefinition>();
+    public static IReadOnlyList<PerkDefinition> PoolFor(ForgeCategory category)
+    {
+        // Short-circuit before touching _pools so callers can query the Unknown case
+        // without triggering the dictionary's static initializer (which references
+        // StatType and other game types).
+        if (category == ForgeCategory.Unknown) return System.Array.Empty<PerkDefinition>();
+        return _pools.TryGetValue(category, out var pool) ? pool : System.Array.Empty<PerkDefinition>();
+    }
 
     public static IEnumerable<PerkDefinition> AllPerks() => _pools.Values.SelectMany(p => p);
 
@@ -104,16 +110,6 @@ public static class PerkPool
         RelicTier.Rare => TerminusConfig.PerkRollChanceRare?.Value ?? 0.40f,
         _ => TerminusConfig.PerkRollChanceCommon?.Value ?? 0.25f,
     };
-
-    // Uniform draw from the category pool. Returns null when the category has no
-    // authored perks (roll silently skips). Slot index is accepted for parity with
-    // the design signature — Phase 7 signature/cursed pools will branch on it.
-    public static PerkDefinition RollPerk(ForgeCategory category, RelicTier relicTier, int emptySlotIndex)
-    {
-        var pool = PoolFor(category);
-        if (pool.Count == 0) return null;
-        return pool[UnityEngine.Random.Range(0, pool.Count)];
-    }
 
     // Resolve a module's Forge category from its CsTags (checked against the
     // built-in category tags by reference).

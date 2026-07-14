@@ -243,28 +243,32 @@ internal class ForgeCommitCommand : PublicCommand
         var forge = ForgeCommandHelper.FindNearestForge();
         if (forge == null) { Messaging.Notification("No Upgrade Forge found."); return; }
 
-        var result = forge.TryCommit(out int newLevel, out int consumed, out string perkResult);
-        switch (result)
+        var outcome = forge.TryCommit();
+        switch (outcome.Status)
         {
-            case UpgradeForgeBehavior.CommitResult.Ok:
-                Messaging.Notification($"Committed: L{newLevel} (consumed {consumed} relics; {forge.RelicCount} remain).");
-                if (perkResult != null) Messaging.Notification(perkResult);
+            case CommitStatus.Ok:
+                Messaging.Notification($"Committed: L{outcome.NewLevel} (consumed {outcome.RelicsConsumed} relics; {forge.RelicCount} remain).");
+                if (outcome.RolledPerk != null || outcome.RollAttempted)
+                    Messaging.Notification(UpgradeForgeBehavior.DescribePerkResult(outcome));
                 break;
-            case UpgradeForgeBehavior.CommitResult.NoModule:
+            case CommitStatus.NoModule:
                 Messaging.Notification("Cannot commit: module socket is empty.");
                 break;
-            case UpgradeForgeBehavior.CommitResult.NoRelics:
+            case CommitStatus.NoRelics:
                 Messaging.Notification("Cannot commit: no relics inserted.");
                 break;
-            case UpgradeForgeBehavior.CommitResult.AlreadyAtMax:
+            case CommitStatus.AlreadyAtMax:
                 Messaging.Notification("Cannot commit: module already at L10.");
                 break;
-            case UpgradeForgeBehavior.CommitResult.InsufficientRelics:
+            case CommitStatus.InsufficientRelics:
                 var cost = ForgeCostCurve.CostForNextLevel(forge.CurrentBoxLevel);
                 Messaging.Notification($"Cannot commit: next level requires {cost} relics, have {forge.RelicCount}.");
                 break;
-            case UpgradeForgeBehavior.CommitResult.MissingViewId:
+            case CommitStatus.MissingViewId:
                 Messaging.Notification("Cannot commit: BuildBox has no PhotonView.");
+                break;
+            case CommitStatus.InvalidModuleLevel:
+                Messaging.Notification("Cannot commit: only Mark III modules can be forged.");
                 break;
         }
     }
