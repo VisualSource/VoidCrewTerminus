@@ -248,6 +248,8 @@ public class UpgradeForgeBehavior : MonoBehaviour
         var updated = current.WithLevel(outcome.NewLevel);
         if (outcome.RolledPerk != null)
             updated = updated.WithPerk(outcome.TargetSlot, outcome.RolledPerk.Id);
+        if (outcome.AppliedBurden != BurdenType.None)
+            updated = updated.WithBurdenAdded(outcome.AppliedBurden); // idempotent
         ForgeStateStore.SaveSnapshot(viewId, updated);
 
         for (int i = 0; i < outcome.RelicsConsumed && _relics.Count > 0; i++)

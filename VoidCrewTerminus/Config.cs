@@ -70,6 +70,24 @@ internal static class TerminusConfig
     [BindConfig("forge", 0.03f, "Additional cursed chance per DifficultyScalar tick — deeper sectors produce more cursed relics. Only applied when escalation is active.")]
     internal static ConfigEntry<float> EscalationCurseChancePerScalar;
 
+    // Maintenance Burden (Phase 7-C) — when a cursed relic is consumed in a
+    // successful commit, an independent roll decides whether the module also
+    // takes on a burden. Perk roll is unaffected.
+    [BindConfig("forge", 0.50f, "Chance a successful commit consuming ≥1 cursed relic also attaches a Maintenance Burden to the target module")]
+    internal static ConfigEntry<float> BurdenApplicationChance;
+
+    [BindConfig("forge", 2f, "RandomShutoff burden — minimum seconds the module stays powered off during a shutoff event")]
+    internal static ConfigEntry<float> BurdenShutoffMinSeconds;
+
+    [BindConfig("forge", 4f, "RandomShutoff burden — maximum seconds the module stays powered off during a shutoff event")]
+    internal static ConfigEntry<float> BurdenShutoffMaxSeconds;
+
+    [BindConfig("forge", 30f, "RandomShutoff burden — minimum seconds between shutoff events")]
+    internal static ConfigEntry<float> BurdenIntervalMinSeconds;
+
+    [BindConfig("forge", 90f, "RandomShutoff burden — maximum seconds between shutoff events")]
+    internal static ConfigEntry<float> BurdenIntervalMaxSeconds;
+
     [BindConfig("forge", 3, "DifficultyScalar at which Rare relics start dropping (below this, Rares in the loot pool are downgraded to Common)")]
     internal static ConfigEntry<int> EscalationRareUnlockScalar;
 

@@ -59,9 +59,16 @@ public readonly struct CommitOutcome
     public float RollChance { get; }
     public bool RollAttempted { get; }
 
+    // Burden roll (Phase 7-C). Independent of the perk roll. When any consumed
+    // relic is cursed, an independent chance decides whether the module also
+    // gets a burden. AppliedBurden = None means no burden was rolled or the roll
+    // failed; anything else is the specific burden to add to the snapshot.
+    public BurdenType AppliedBurden { get; }
+
     private CommitOutcome(
         CommitStatus status, int newLevel, int relicsConsumed, Loot.RelicTier bestTier,
-        PerkDefinition rolledPerk, int targetSlot, float rollChance, bool rollAttempted)
+        PerkDefinition rolledPerk, int targetSlot, float rollChance, bool rollAttempted,
+        BurdenType appliedBurden)
     {
         Status = status;
         NewLevel = newLevel;
@@ -71,16 +78,18 @@ public readonly struct CommitOutcome
         TargetSlot = targetSlot;
         RollChance = rollChance;
         RollAttempted = rollAttempted;
+        AppliedBurden = appliedBurden;
     }
 
     public static CommitOutcome Failure(CommitStatus status) =>
-        new(status, 0, 0, Loot.RelicTier.Common, null, -1, 0f, false);
+        new(status, 0, 0, Loot.RelicTier.Common, null, -1, 0f, false, BurdenType.None);
 
     public static CommitOutcome Success(
         int newLevel, int relicsConsumed, Loot.RelicTier bestTier,
-        PerkDefinition rolledPerk, int targetSlot, float rollChance, bool rollAttempted) =>
+        PerkDefinition rolledPerk, int targetSlot, float rollChance, bool rollAttempted,
+        BurdenType appliedBurden = BurdenType.None) =>
         new(CommitStatus.Ok, newLevel, relicsConsumed, bestTier,
-            rolledPerk, targetSlot, rollChance, rollAttempted);
+            rolledPerk, targetSlot, rollChance, rollAttempted, appliedBurden);
 }
 
 // Pure commit algorithm — cost curve walk, best-tier tie-break, perk roll.
@@ -116,8 +125,36 @@ public static class UpgradeCommitCalculator
         for (int i = 0; i < scanUpTo; i++)
             if (request.RelicTiers[i] > bestTier) bestTier = request.RelicTiers[i];
 
-        return RollPerk(newLevel, relicsConsumed, bestTier, request, nextRandom);
+        var perkOutcome = RollPerk(newLevel, relicsConsumed, bestTier, request, nextRandom);
+
+        // Independent burden roll: if any consumed relic is cursed, decide
+        // whether the module gets a burden. Perk outcome and burden outcome
+        // are orthogonal — a commit can land a perk with no burden, fire a
+        // burden with no perk, both, or neither.
+        var burden = RollBurden(relicsConsumed, request, nextRandom);
+        return WithBurden(perkOutcome, burden);
     }
+
+    private static BurdenType RollBurden(int relicsConsumed, CommitRequest request, Func<float> nextRandom)
+    {
+        int scanUpTo = Math.Min(relicsConsumed, request.RelicIsCursed.Count);
+        bool anyCursed = false;
+        for (int i = 0; i < scanUpTo; i++)
+            if (request.RelicIsCursed[i]) { anyCursed = true; break; }
+        if (!anyCursed) return BurdenType.None;
+
+        float chance = TerminusConfig.BurdenApplicationChance?.Value ?? 0.5f;
+        if (nextRandom() >= chance) return BurdenType.None;
+
+        // Only one burden type in Phase 7-C. When more land, weighted-pick here.
+        return BurdenType.RandomShutoff;
+    }
+
+    private static CommitOutcome WithBurden(CommitOutcome perkOutcome, BurdenType burden) =>
+        CommitOutcome.Success(
+            perkOutcome.NewLevel, perkOutcome.RelicsConsumed, perkOutcome.BestTier,
+            perkOutcome.RolledPerk, perkOutcome.TargetSlot, perkOutcome.RollChance,
+            perkOutcome.RollAttempted, appliedBurden: burden);
 
     private static CommitOutcome RollPerk(
         int newLevel, int relicsConsumed, Loot.RelicTier bestTier,

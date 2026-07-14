@@ -1,5 +1,6 @@
 using Gameplay.Tags;
 using UnityEngine;
+using VoidCrewTerminus.Forge;
 
 namespace VoidCrewTerminus.Utils;
 
@@ -15,6 +16,7 @@ public static class CsTagRegistry
     private static CsTag _forgeUpgraded;
     private static CsTag _forgeModule;
     private static CsTag _relic;
+    private static CsTag _burdenRandomShutoff;
 
     private static CsTag _moduleMkIII;
     private static CsTag _moduleMkII;
@@ -72,6 +74,28 @@ public static class CsTagRegistry
             return _relic;
         }
     }
+
+    // Mod-authored burden tag: stamped on modules that carry a RandomShutoff burden
+    // (Phase 7-C). Following the ForgeUpgraded pattern — a zero-value marker
+    // StatMod in BuildMods projects this tag onto the module for game-visible
+    // queries ("is this module burdened?" as a one-liner).
+    public static CsTag BurdenRandomShutoff
+    {
+        get
+        {
+            if (_burdenRandomShutoff != null) return _burdenRandomShutoff;
+            _burdenRandomShutoff = ScriptableObject.CreateInstance<CsTag>();
+            _burdenRandomShutoff.name = "Tag_Burden_RandomShutoff";
+            return _burdenRandomShutoff;
+        }
+    }
+
+    // Map a BurdenType enum to its CsTag. Returns null for None.
+    public static CsTag BurdenTagFor(BurdenType burden) => burden switch
+    {
+        BurdenType.RandomShutoff => BurdenRandomShutoff,
+        _ => null,
+    };
 
     private static CsTag Resolve(string name)
     {

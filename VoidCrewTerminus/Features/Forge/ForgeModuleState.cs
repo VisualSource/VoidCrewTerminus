@@ -14,21 +14,28 @@ public class ForgeModuleState : IModifierSource
     public int Level { get; private set; } = 3;
 
     // Perk slots: [0] any tier, [1] Rare+, [2] Legendary (see PerkPool). Values are
-    // PerkDefinition ids; null = empty. Burden flags are added in Phase 7.
+    // PerkDefinition ids; null = empty.
     private readonly string[] _perkSlots = new string[PerkPool.SlotCount];
+
+    // Maintenance Burdens (Phase 7-C). Set of BurdenType — multiple distinct
+    // types can accumulate on one module, but never duplicates.
+    private readonly List<BurdenType> _burdens = new();
 
     // ForgeStateStore keeps a strong reference; this field is only for mod removal.
     private CellModule _module;
 
     public IReadOnlyList<string> PerkSlots => _perkSlots;
+    public IReadOnlyList<BurdenType> Burdens => _burdens;
 
     public void Attach(CellModule module)
     {
         _module = module;
         if (HasAnyOverlay) ApplyMods();
+        SyncBurdenBehaviors();
     }
 
-    private bool HasAnyOverlay => Level > 3 || _perkSlots.Any(id => !string.IsNullOrEmpty(id));
+    private bool HasAnyOverlay =>
+        Level > 3 || _perkSlots.Any(id => !string.IsNullOrEmpty(id)) || _burdens.Count > 0;
 
     public void SetLevel(int level)
     {
@@ -46,7 +53,7 @@ public class ForgeModuleState : IModifierSource
     // Produce an opaque snapshot for the deconstruct→reconstruct bridge. Any
     // change to the snapshot shape forces this method (and ApplySnapshot below)
     // to be updated in lock-step — the compiler is the forcing function.
-    public ForgeSnapshot Snapshot() => ForgeSnapshot.Create(Level, _perkSlots);
+    public ForgeSnapshot Snapshot() => ForgeSnapshot.Create(Level, _perkSlots, _burdens);
 
     // Restore full overlay in one call. Replaces the old SetLevel + SetPerks pair
     // and RefreshMods() once at the end.
@@ -56,7 +63,24 @@ public class ForgeModuleState : IModifierSource
         Level = System.Math.Max(3, System.Math.Min(10, snapshot.Level));
         for (int i = 0; i < _perkSlots.Length; i++)
             _perkSlots[i] = i < snapshot.PerkSlots.Count ? snapshot.PerkSlots[i] : null;
+        _burdens.Clear();
+        for (int i = 0; i < snapshot.Burdens.Count; i++)
+            if (snapshot.Burdens[i] != BurdenType.None && !_burdens.Contains(snapshot.Burdens[i]))
+                _burdens.Add(snapshot.Burdens[i]);
         RefreshMods();
+        SyncBurdenBehaviors();
+    }
+
+    // Add a burden to the module (Phase 7-C). Idempotent — no-op if the type
+    // is already present. Reapplies stat mods so the tag marker for the new
+    // burden is stamped.
+    public void AddBurden(BurdenType burden)
+    {
+        if (burden == BurdenType.None) return;
+        if (_burdens.Contains(burden)) return;
+        _burdens.Add(burden);
+        RefreshMods();
+        SyncBurdenBehaviors();
     }
 
     // Remove all applied mods and detach from the module.
@@ -66,6 +90,7 @@ public class ForgeModuleState : IModifierSource
         {
             _module.Stats.RemoveModifier(this);
             SyncForgeTag(false);
+            DetachBurdenBehaviors();
         }
         _module = null;
     }
@@ -75,7 +100,64 @@ public class ForgeModuleState : IModifierSource
         if (_module == null) return;
         _module.Stats.RemoveModifier(this);
         SyncForgeTag(false);
+        SyncBurdenTags(false);
         if (HasAnyOverlay) ApplyMods();
+    }
+
+    private void SyncBurdenTags(bool present)
+    {
+        if (_module == null) return;
+        var tags = RuntimeTagsRef(_module.Stats);
+        if (tags == null) return;
+        foreach (var burden in _burdens)
+        {
+            var tag = Utils.CsTagRegistry.BurdenTagFor(burden);
+            if (tag == null) continue;
+            if (present)
+            {
+                if (!tags.Contains(tag)) tags.Add(tag);
+            }
+            else
+            {
+                tags.RemoveAll(t => t == tag);
+            }
+        }
+    }
+
+    // Attach one MonoBehaviour per burden type on the module GameObject.
+    // Idempotent — checking for an existing component before adding. Removes
+    // components for burden types no longer in the set (defensive; today's
+    // "no removal" invariant makes this a no-op in practice).
+    private void SyncBurdenBehaviors()
+    {
+        if (_module == null) return;
+        var go = _module.gameObject;
+
+        // Attach missing.
+        foreach (var burden in _burdens)
+        {
+            switch (burden)
+            {
+                case BurdenType.RandomShutoff:
+                    if (go.GetComponent<Burdens.RandomShutoffBehavior>() == null)
+                        go.AddComponent<Burdens.RandomShutoffBehavior>();
+                    break;
+            }
+        }
+
+        // Detach stragglers not in the set.
+        foreach (var existing in go.GetComponents<Burdens.MaintenanceBurdenBehavior>())
+        {
+            if (!_burdens.Contains(existing.BurdenType))
+                UnityEngine.Object.Destroy(existing);
+        }
+    }
+
+    private void DetachBurdenBehaviors()
+    {
+        if (_module == null) return;
+        foreach (var existing in _module.gameObject.GetComponents<Burdens.MaintenanceBurdenBehavior>())
+            UnityEngine.Object.Destroy(existing);
     }
 
     private void ApplyMods()
@@ -85,6 +167,7 @@ public class ForgeModuleState : IModifierSource
         {
             _module.Stats.ApplyModifiers(mods, this);
             SyncForgeTag(true);
+            SyncBurdenTags(true);
         }
     }
 
@@ -179,6 +262,19 @@ public class ForgeModuleState : IModifierSource
             new FloatModifier(0f, ModifierType.PrimaryAddend, this),
             StatType.MaxHitPoints.Id,
             new ModTagConfiguration { TagsToAdd = new[] { Utils.CsTagRegistry.ForgeUpgraded } }));
+
+        // Burden tag markers (Phase 7-C). Same zero-value-addend pattern — one
+        // marker per active burden so the module's LocalTags carry
+        // Burden_RandomShutoff etc. for game/mod-side queries.
+        foreach (var burden in _burdens)
+        {
+            var burdenTag = Utils.CsTagRegistry.BurdenTagFor(burden);
+            if (burdenTag == null) continue;
+            mods.Add(new StatMod(
+                new FloatModifier(0f, ModifierType.PrimaryAddend, this),
+                StatType.MaxHitPoints.Id,
+                new ModTagConfiguration { TagsToAdd = new[] { burdenTag } }));
+        }
 
         return mods;
     }
