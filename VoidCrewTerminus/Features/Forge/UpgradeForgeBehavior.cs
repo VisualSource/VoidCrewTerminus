@@ -508,9 +508,7 @@ public class UpgradeForgeBehavior : MonoBehaviour
             var go = kv.Key;
             if (go == null) continue;
             SetAnchorFilled(kv.Value, false);
-            var co = go.GetComponent<CarryableObject>();
-            var rb = co != null ? co.MainRigidbody : go.GetComponent<Rigidbody>();
-            if (rb != null) rb.isKinematic = false;
+            ReleaseRigidbody(go);
         }
         _docked.Clear();
         _relics.Clear();
@@ -611,9 +609,7 @@ public class UpgradeForgeBehavior : MonoBehaviour
             SetAnchorFilled(kv.Value, false);
             if (go == null) continue;
 
-            var co = go.GetComponent<CarryableObject>();
-            var rb = co != null ? co.MainRigidbody : null;
-            if (rb != null) rb.isKinematic = false;
+            ReleaseRigidbody(go);
 
             var box = go.GetComponent<BuildBox>();
             if (box != null && box == _moduleBox)
@@ -636,8 +632,31 @@ public class UpgradeForgeBehavior : MonoBehaviour
         foreach (var kv in _docked)
         {
             if (kv.Key == null || kv.Value == null) continue;
-            PlaceAtAnchor(kv.Key, kv.Key.GetComponent<CarryableObject>(), kv.Value);
+            var co = kv.Key.GetComponent<CarryableObject>();
+            // Skip pinning once a player has grabbed the item — Update() next
+            // frame will undock. Otherwise the pin snaps a carried box back to
+            // the anchor, and the accumulated teleport delta produces a visible
+            // drift when the rigidbody wakes.
+            if (co != null && co.Carrier != null) continue;
+            PlaceAtAnchor(kv.Key, co, kv.Value);
         }
+    }
+
+    // Return a docked item to the physics simulation. Zero velocity + angular
+    // velocity because the per-frame LateUpdate pin against a moving-ship anchor
+    // accumulates an implicit velocity estimate on the kinematic body; without
+    // this, the item inherits roughly the ship's velocity the instant kinematic
+    // goes false and drifts through the ship in the ship's travel direction —
+    // the "BuildBox floats away" bug.
+    private static void ReleaseRigidbody(GameObject go)
+    {
+        if (go == null) return;
+        var co = go.GetComponent<CarryableObject>();
+        var rb = co != null ? co.MainRigidbody : go.GetComponent<Rigidbody>();
+        if (rb == null) return;
+        rb.isKinematic = false;
+        rb.velocity = Vector3.zero;
+        rb.angularVelocity = Vector3.zero;
     }
 
     // Consumed relics are networked objects — destroy through the game's factory
