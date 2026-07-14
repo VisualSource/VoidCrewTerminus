@@ -17,7 +17,7 @@ public class ForgeModuleState : IModifierSource
     // PerkDefinition ids; null = empty. Burden flags are added in Phase 7.
     private readonly string[] _perkSlots = new string[PerkPool.SlotCount];
 
-    // ForgeOverlayTable keeps a strong reference; this field is only for mod removal.
+    // ForgeStateStore keeps a strong reference; this field is only for mod removal.
     private CellModule _module;
 
     public IReadOnlyList<string> PerkSlots => _perkSlots;
@@ -36,18 +36,26 @@ public class ForgeModuleState : IModifierSource
         RefreshMods();
     }
 
-    // Replace all perk slots at once (used when restoring from the pending bridge).
-    public void SetPerks(IReadOnlyList<string> slots)
-    {
-        for (int i = 0; i < _perkSlots.Length; i++)
-            _perkSlots[i] = slots != null && i < slots.Count ? slots[i] : null;
-        RefreshMods();
-    }
-
     public void SetPerk(int slot, string perkId)
     {
         if (slot < 0 || slot >= _perkSlots.Length) return;
         _perkSlots[slot] = perkId;
+        RefreshMods();
+    }
+
+    // Produce an opaque snapshot for the deconstruct→reconstruct bridge. Any
+    // change to the snapshot shape forces this method (and ApplySnapshot below)
+    // to be updated in lock-step — the compiler is the forcing function.
+    public ForgeSnapshot Snapshot() => ForgeSnapshot.Create(Level, _perkSlots);
+
+    // Restore full overlay in one call. Replaces the old SetLevel + SetPerks pair
+    // and RefreshMods() once at the end.
+    public void ApplySnapshot(ForgeSnapshot snapshot)
+    {
+        if (snapshot == null) return;
+        Level = System.Math.Max(3, System.Math.Min(10, snapshot.Level));
+        for (int i = 0; i < _perkSlots.Length; i++)
+            _perkSlots[i] = i < snapshot.PerkSlots.Count ? snapshot.PerkSlots[i] : null;
         RefreshMods();
     }
 

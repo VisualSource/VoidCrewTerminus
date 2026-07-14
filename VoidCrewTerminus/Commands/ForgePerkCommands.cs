@@ -21,7 +21,7 @@ internal class PerksCommand : PublicCommand
         if (!TerminusConfig.EnableDevMode.Value) return;
 
         var module = ModuleFinder.NearestToPlayer();
-        if (module != null && ForgeOverlayTable.TryGet(module, out var state))
+        if (module != null && ForgeStateStore.TryGet(module, out var state))
             Messaging.Notification($"{module.name} L{state.Level} — {DescribeSlots(state.PerkSlots)}");
         else if (module != null)
             Messaging.Notification($"{module.name}: no forge overlay (vanilla).");
@@ -29,8 +29,8 @@ internal class PerksCommand : PublicCommand
         var forge = ForgeCommandHelper.FindNearestForge();
         var box = forge != null ? forge.ModuleBox : null;
         if (box != null && box.photonView != null &&
-            ForgeOverlayTable.TryPeekPending(box.photonView.ViewID, out var pending))
-            Messaging.Notification($"[Forge socket] {box.name} L{pending.Level} — {DescribeSlots(pending.PerkSlots)}");
+            ForgeStateStore.TryPeekSnapshot(box.photonView.ViewID, out var snap))
+            Messaging.Notification($"[Forge socket] {box.name} L{snap.Level} — {DescribeSlots(snap.PerkSlots)}");
     }
 
     internal static string DescribeSlots(IReadOnlyList<string> slots)
@@ -81,7 +81,7 @@ internal class ForcePerkCommand : PublicCommand
         var module = ModuleFinder.NearestToPlayer();
         if (module == null) { Messaging.Notification("No module found nearby."); return; }
 
-        ForgeOverlayTable.GetOrCreate(module).SetPerk(slot - 1, perk.Id);
+        ForgeStateStore.GetOrCreate(module).SetPerk(slot - 1, perk.Id);
         Messaging.Notification($"{module.name}: slot {slot} ← {perk.Name} ({perk.Description})");
     }
 }

@@ -24,8 +24,8 @@ internal static class DeconstructCreateBuildBoxPatch
     static void Postfix(CellModule module, BuildBox __result)
     {
         if (__result == null) return;
-        if (ForgeOverlayTable.TryGet(module, out var state))
-            ForgeOverlayTable.SavePendingState(__result.photonView.ViewID, state);
+        if (ForgeStateStore.TryGet(module, out var state))
+            ForgeStateStore.SaveSnapshot(__result.photonView.ViewID, state.Snapshot());
     }
 }
 
@@ -35,14 +35,14 @@ internal static class DeconstructCreateBuildBoxPatch
 internal static class BuildBoxBuildModulePatch
 {
     static void Postfix(BuildBox __instance, CellModule __result) =>
-        ForgePersistPatchHelper.RestoreLevel(__instance, __result);
+        ForgePersistPatchHelper.RestoreSnapshot(__instance, __result);
 }
 
 [HarmonyPatch(typeof(CompositeWeaponBuildBox), nameof(BuildBox.BuildModule))]
 internal static class CompositeWeaponBuildBoxBuildModulePatch
 {
     static void Postfix(CompositeWeaponBuildBox __instance, CellModule __result) =>
-        ForgePersistPatchHelper.RestoreLevel(__instance, __result);
+        ForgePersistPatchHelper.RestoreSnapshot(__instance, __result);
 }
 
 // --- Recycle: scale alloy payout by forge level ---
@@ -54,8 +54,8 @@ internal static class FabricatorRecyclePatch
     {
         var box = __instance.RecycleSocket?.Payload as BuildBox;
         if (box == null) return;
-        if (!ForgeOverlayTable.TryPeekPendingLevel(box.photonView.ViewID, out int level)) return;
-        float multiplier = 1f + (level - 3) * ForgeConstants.RecycleAlloysPerLevel;
+        if (!ForgeStateStore.TryPeekSnapshot(box.photonView.ViewID, out var snap)) return;
+        float multiplier = 1f + (snap.Level - 3) * ForgeConstants.RecycleAlloysPerLevel;
         amount = Mathf.RoundToInt(amount * multiplier);
     }
 }
@@ -64,12 +64,10 @@ internal static class FabricatorRecyclePatch
 
 internal static class ForgePersistPatchHelper
 {
-    internal static void RestoreLevel(BuildBox box, CellModule module)
+    internal static void RestoreSnapshot(BuildBox box, CellModule module)
     {
         if (module == null) return;
-        if (!ForgeOverlayTable.TryRestorePending(box.photonView.ViewID, out var pending)) return;
-        var state = ForgeOverlayTable.GetOrCreate(module);
-        state.SetLevel(pending.Level);
-        state.SetPerks(pending.PerkSlots);
+        if (!ForgeStateStore.TryTakeSnapshot(box.photonView.ViewID, out var snap)) return;
+        ForgeStateStore.GetOrCreate(module).ApplySnapshot(snap);
     }
 }

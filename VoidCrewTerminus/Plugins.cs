@@ -50,7 +50,7 @@ namespace VoidCrewTerminus
 
             _onHostStartSession = (_, _) =>
             {
-                VoidCrewTerminus.Forge.ForgeOverlayTable.ClearAll();
+                VoidCrewTerminus.Forge.ForgeStateStore.ClearAll();
                 VoidCrewTerminus.Forge.ForgeMeterController.ResetForRun();
             };
             VoidManager.Events.Instance.HostStartSession += _onHostStartSession;

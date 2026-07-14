@@ -47,7 +47,7 @@ internal class SetLevelCommand : PublicCommand
             return;
         }
 
-        var state = ForgeOverlayTable.GetOrCreate(module);
+        var state = ForgeStateStore.GetOrCreate(module);
         state.SetLevel(level);
         Messaging.Notification($"{module.name}: level set to {level}");
     }
@@ -71,7 +71,7 @@ internal class GetLevelCommand : PublicCommand
             return;
         }
 
-        if (ForgeOverlayTable.TryGet(module, out var state))
+        if (ForgeStateStore.TryGet(module, out var state))
             Messaging.Notification($"{module.name}: L{state.Level}");
         else
             Messaging.Notification($"{module.name}: L3 (vanilla, no overlay)");
@@ -122,7 +122,7 @@ internal class ResetOverlayCommand : PublicCommand
     public override void Execute(string arguments, int sender)
     {
         if (!TerminusConfig.EnableDevMode.Value) return;
-        ForgeOverlayTable.ClearAll();
+        ForgeStateStore.ClearAll();
         Messaging.Notification("All forge overlays cleared — modules restored to vanilla L3.");
     }
 }

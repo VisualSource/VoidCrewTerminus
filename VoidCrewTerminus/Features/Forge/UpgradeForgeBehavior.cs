@@ -19,7 +19,7 @@ namespace VoidCrewTerminus.Forge;
 //   - Hold up to Capacity relics in the relic slots (Capacity = 4 hardcoded; Phase 5
 //     ties this to the Forge Meter).
 //   - Enforce the cost curve on commit.
-//   - Persist the new level via ForgeOverlayTable.SavePendingLevel so the level rides
+//   - Persist the new level via ForgeStateStore.SaveSnapshot so the level rides
 //     the BuildBox through reconstruction — ForgePersistPatch does the restoration.
 //
 // In-world interaction model (see also ForgeInteractionPatch):
@@ -80,8 +80,8 @@ public class UpgradeForgeBehavior : MonoBehaviour
             int mark = GetBoxMark(out bool isFinalMark);
             if (!isFinalMark) return mark; // 1 or 2 → below MinLevel → InvalidModuleLevel on commit
 
-            return ForgeOverlayTable.TryPeekPendingLevel(_moduleBox.photonView.ViewID, out int level)
-                ? level
+            return ForgeStateStore.TryPeekSnapshot(_moduleBox.photonView.ViewID, out var snap)
+                ? snap.Level
                 : ForgeCostCurve.MinLevel;
         }
     }
@@ -216,7 +216,7 @@ public class UpgradeForgeBehavior : MonoBehaviour
     // Attempts to upgrade the socketed box using as many inserted relics as the cost
     // curve permits. Consumes only the relics actually spent; leftovers stay in the
     // Forge. On success the new pending state (level + any rolled perk) is written
-    // to ForgeOverlayTable so reconstruction picks it up automatically.
+    // to ForgeStateStore so reconstruction picks it up automatically.
     //
     // The pure algorithm (cost walk, tie-break, perk roll) lives in
     // UpgradeCommitCalculator; this method builds the request from scene state,
@@ -231,16 +231,18 @@ public class UpgradeForgeBehavior : MonoBehaviour
             relicTiers[i] = _relics[i] != null ? RelicTierData.Get(_relics[i].name).Tier : RelicTier.Common;
 
         var category = PerkPool.CategoryOf(_moduleBox.moduleRef?.Asset as CellModule);
-        var pending = ForgeOverlayTable.GetOrCreatePending(_moduleBox.photonView.ViewID);
+        int viewId = _moduleBox.photonView.ViewID;
+        var current = ForgeStateStore.TryPeekSnapshot(viewId, out var s) ? s : ForgeSnapshot.Empty;
         int currentLevel = CurrentBoxLevel;
 
-        var request = new CommitRequest(currentLevel, relicTiers, category, pending.PerkSlots);
+        var request = new CommitRequest(currentLevel, relicTiers, category, current.PerkSlots);
         var outcome = UpgradeCommitCalculator.Calculate(request);
         if (outcome.Status != CommitStatus.Ok) return outcome;
 
-        pending.Level = outcome.NewLevel;
+        var updated = current.WithLevel(outcome.NewLevel);
         if (outcome.RolledPerk != null)
-            pending.PerkSlots[outcome.TargetSlot] = outcome.RolledPerk.Id;
+            updated = updated.WithPerk(outcome.TargetSlot, outcome.RolledPerk.Id);
+        ForgeStateStore.SaveSnapshot(viewId, updated);
 
         for (int i = 0; i < outcome.RelicsConsumed && _relics.Count > 0; i++)
         {
