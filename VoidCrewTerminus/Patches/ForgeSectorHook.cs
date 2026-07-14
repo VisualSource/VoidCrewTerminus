@@ -111,6 +111,11 @@ internal static class ForgeSectorHook
             // completely silent until enough bosses have fallen. Meter fill
             // (Forge Level progression) is unaffected — that's Forge state,
             // not escalation state.
+            //
+            // Note: this deliberately does NOT check for Forge presence (unlike
+            // the meter award above). Escalation state can accumulate in the
+            // background even without a Forge installed, so if a Forge is
+            // installed mid-run it applies with the current accumulated scalar.
             if (SectorEscalation.IsScalingActive)
                 ForgeMeterController.IncrementDifficultyScalar();
         }

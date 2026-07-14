@@ -81,6 +81,9 @@ internal static class BossDefeatHook
 
             SectorEscalation.IncrementBossesDefeated();
             int bump = System.Math.Max(1, TerminusConfig.EscalationBossScalarBonus?.Value ?? 1);
+            // Deliberately not gated on Forge presence — escalation state
+            // accumulates in the background even without a Forge installed, so
+            // installing one mid-run picks up whatever scalar has built up.
             if (wasActive)
                 ForgeMeterController.IncrementDifficultyScalarBy(bump);
 
