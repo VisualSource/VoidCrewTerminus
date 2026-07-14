@@ -23,6 +23,14 @@ namespace VoidCrewTerminus.Forge;
 // Escalation state (BossesDefeated) lives here rather than on the Forge —
 // bosses don't affect the Forge module itself (level, capacity, meter);
 // they affect what tier of relics the loot table can drop.
+//
+// Activation gate: all escalation systems (density, HP, damage, loot bias)
+// stay dormant until BossesDefeated reaches EscalationBossActivationThreshold
+// (default 2). The player has to demonstrate combat capability with the
+// vanilla difficulty before the mod starts turning up the pressure. Scalar
+// and boss count still accumulate during the warm-up period, so the moment
+// the threshold is crossed, scaling activates at whatever intensity has
+// piled up.
 public static class SectorEscalation
 {
     // Independent of DifficultyScalar. Each boss defeat unlocks the next relic
@@ -30,18 +38,23 @@ public static class SectorEscalation
     // Plugins.cs; incremented by BossDefeatHook.
     public static int BossesDefeated { get; private set; }
 
+    // Whether any escalation should apply right now. Read by every escalation
+    // patch/hook before it does anything.
+    public static bool IsScalingActive =>
+        BossesDefeated >= (TerminusConfig.EscalationBossActivationThreshold?.Value ?? 2);
+
     public static void ResetForRun() => BossesDefeated = 0;
 
     public static void IncrementBossesDefeated()
     {
         BossesDefeated++;
-        BepinPlugin.Log.LogDebug($"[Escalation] BossesDefeated → {BossesDefeated}");
+        BepinPlugin.Log?.LogDebug($"[Escalation] BossesDefeated → {BossesDefeated}");
     }
 
     public static void SetBossesDefeated(int value)
     {
         BossesDefeated = System.Math.Max(0, value);
-        BepinPlugin.Log.LogDebug($"[Escalation] BossesDefeated set to {BossesDefeated} (dev)");
+        BepinPlugin.Log?.LogDebug($"[Escalation] BossesDefeated set to {BossesDefeated} (dev)");
     }
 
     // Reshape `entries` in place. Generic over the item ref type so tests can

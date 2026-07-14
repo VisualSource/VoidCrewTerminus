@@ -29,11 +29,15 @@ internal class DifficultyCommand : PublicCommand
         int bosses = SectorEscalation.BossesDefeated;
         int rareUnlock = TerminusConfig.EscalationRareUnlockScalar?.Value ?? 3;
         int legendaryUnlock = TerminusConfig.EscalationLegendaryUnlockScalar?.Value ?? 6;
+        int threshold = TerminusConfig.EscalationBossActivationThreshold?.Value ?? 2;
         var maxTier = SectorEscalation.MaxAllowedTier(scalar, bosses, rareUnlock, legendaryUnlock);
+        string status = SectorEscalation.IsScalingActive
+            ? "ACTIVE"
+            : $"DORMANT (needs {threshold - bosses} more boss defeat{(threshold - bosses == 1 ? "" : "s")})";
 
         Messaging.Notification(
-            $"DifficultyScalar={scalar}, BossesDefeated={bosses} — max relic tier this sector: {maxTier} " +
-            $"(rare@scalar{rareUnlock}, legendary@scalar{legendaryUnlock}; boss1→Rare, boss2→Legendary)");
+            $"Escalation {status} — DifficultyScalar={scalar}, BossesDefeated={bosses}/{threshold}, " +
+            $"max relic tier: {maxTier} (rare@scalar{rareUnlock}, legendary@scalar{legendaryUnlock}; boss1→Rare, boss2→Legendary)");
     }
 }
 

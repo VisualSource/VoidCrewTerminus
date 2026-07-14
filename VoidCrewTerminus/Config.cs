@@ -55,8 +55,14 @@ internal static class TerminusConfig
     internal static ConfigEntry<float> PerkRollChanceLegendary;
 
     // Upgrade Forge — sector escalation
-    [BindConfig("forge", 0.15f, "Fractional stat multiplier added to enemy HP and damage per DifficultyScalar tick")]
+    [BindConfig("forge", 0.05f, "Fractional multiplier added to enemy HP and damage per DifficultyScalar tick (minor boost — density is the primary axis)")]
     internal static ConfigEntry<float> EscalationStatScalarPerJump;
+
+    [BindConfig("forge", 0.20f, "Fractional multiplier added to enemy spawner intensity per DifficultyScalar tick (primary escalation axis — deeper sectors bring more enemies)")]
+    internal static ConfigEntry<float> EscalationDensityScalarPerJump;
+
+    [BindConfig("forge", 2, "Number of boss objectives that must be defeated in a run before any escalation (density, HP, damage, loot tier biasing) takes effect. DifficultyScalar and BossesDefeated still accumulate during the warm-up so scaling kicks in with full accumulated intensity once the threshold is crossed.")]
+    internal static ConfigEntry<int> EscalationBossActivationThreshold;
 
     [BindConfig("forge", 3, "DifficultyScalar at which Rare relics start dropping (below this, Rares in the loot pool are downgraded to Common)")]
     internal static ConfigEntry<int> EscalationRareUnlockScalar;

@@ -72,14 +72,23 @@ internal static class BossDefeatHook
             // which tier just became available.
             string unlockMessage = DescribeUnlock(SectorEscalation.BossesDefeated);
 
+            // Capture activation state BEFORE the boss-count bump. Boss defeats
+            // during warm-up (including the one that CROSSES the threshold) do
+            // not contribute to DifficultyScalar — only boss defeats where
+            // escalation was already active count. This preserves the
+            // "scalar accumulates only after escalation activates" rule.
+            bool wasActive = SectorEscalation.IsScalingActive;
+
             SectorEscalation.IncrementBossesDefeated();
             int bump = System.Math.Max(1, TerminusConfig.EscalationBossScalarBonus?.Value ?? 1);
-            ForgeMeterController.IncrementDifficultyScalarBy(bump);
+            if (wasActive)
+                ForgeMeterController.IncrementDifficultyScalarBy(bump);
 
             if (unlockMessage != null)
                 Messaging.Notification(unlockMessage);
             BepinPlugin.Log.LogInfo(
-                $"[Escalation] Boss defeated ({objective.Asset}) — scalar +{bump}, bosses → {SectorEscalation.BossesDefeated}.");
+                $"[Escalation] Boss defeated ({objective.Asset}) — scalar {(wasActive ? "+" + bump : "gated")}, " +
+                $"bosses → {SectorEscalation.BossesDefeated}.");
         }
         catch (System.Exception e)
         {
@@ -89,9 +98,21 @@ internal static class BossDefeatHook
 
     private static string DescribeUnlock(int bossesBeforeThisOne)
     {
-        // First boss unlocks Rare (was 0 → now 1).
-        // Second boss unlocks Legendary (was 1 → now 2).
-        // Third+ bosses have no further tier to unlock.
+        int threshold = TerminusConfig.EscalationBossActivationThreshold?.Value ?? 2;
+        int bossesAfterThisOne = bossesBeforeThisOne + 1;
+
+        // The activation threshold gates all escalation systems. Boss defeats
+        // BEFORE the threshold accumulate silently (state ticks up, no player
+        // notification). The defeat that CROSSES the threshold gets a distinct
+        // "escalation now active" message. Boss defeats AFTER the threshold
+        // just report whichever tier ceiling they unlock, if any.
+        if (bossesAfterThisOne < threshold)
+            return null; // warm-up — silent
+
+        if (bossesAfterThisOne == threshold)
+            return "Boss defeated — the Forge stirs to life. Escalation is now active.";
+
+        // Post-activation ceiling unlock messages (matches SectorEscalation.MaxAllowedTier).
         if (bossesBeforeThisOne == 0)
             return "Boss defeated — the Forge unlocks Rare-tier relics.";
         if (bossesBeforeThisOne == 1)

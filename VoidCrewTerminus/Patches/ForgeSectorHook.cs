@@ -104,9 +104,15 @@ internal static class ForgeSectorHook
 
             ForgeMeterController.AddMeter(
                 TerminusConfig.ForgeMeterPerSectorJump?.Value ?? 20f, "sector jump");
-            // Phase 6: same gates as the meter award — DifficultyScalar tracks
-            // "sectors successfully completed this run", not raw exit events.
-            ForgeMeterController.IncrementDifficultyScalar();
+
+            // Phase 6: sector-jump scalar bumps only start counting AFTER the
+            // escalation activation threshold has been crossed. Sector exits
+            // during the warm-up don't accumulate scalar — the mod stays
+            // completely silent until enough bosses have fallen. Meter fill
+            // (Forge Level progression) is unaffected — that's Forge state,
+            // not escalation state.
+            if (SectorEscalation.IsScalingActive)
+                ForgeMeterController.IncrementDifficultyScalar();
         }
         catch (System.Exception e)
         {

@@ -25,6 +25,10 @@ internal static class LootTableEscalationPatch
             var lists = LootListsRef(__instance);
             if (lists == null) return;
 
+            // Escalation warm-up gate: no reshaping until the player has cleared
+            // the configured number of boss objectives this run.
+            if (!SectorEscalation.IsScalingActive) return;
+
             int scalar = ForgeMeterController.DifficultyScalar;
             int bosses = SectorEscalation.BossesDefeated;
             int seed = ResolveSeed();

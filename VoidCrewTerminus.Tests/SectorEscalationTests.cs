@@ -212,4 +212,41 @@ public class SectorEscalationTests
 
         Assert.Equal(new[] { CommonRelic1, RareRelic1 }, entries);
     }
+
+    // ---- activation gate --------------------------------------------------
+    // IsScalingActive reads TerminusConfig.EscalationBossActivationThreshold,
+    // which is null in the test host — the ?? 2 fallback kicks in, so the
+    // default threshold is 2 (matches the shipped config default).
+
+    [Fact]
+    public void IsScalingActive_FalseWhenBossCountBelowThreshold()
+    {
+        SectorEscalation.SetBossesDefeated(0);
+        Assert.False(SectorEscalation.IsScalingActive);
+
+        SectorEscalation.SetBossesDefeated(1);
+        Assert.False(SectorEscalation.IsScalingActive);
+    }
+
+    [Fact]
+    public void IsScalingActive_TrueWhenBossCountReachesThreshold()
+    {
+        SectorEscalation.SetBossesDefeated(2);
+        Assert.True(SectorEscalation.IsScalingActive);
+
+        SectorEscalation.SetBossesDefeated(5);
+        Assert.True(SectorEscalation.IsScalingActive);
+    }
+
+    [Fact]
+    public void ResetForRun_ClearsBossesAndDeactivatesScaling()
+    {
+        SectorEscalation.SetBossesDefeated(3);
+        Assert.True(SectorEscalation.IsScalingActive);
+
+        SectorEscalation.ResetForRun();
+
+        Assert.Equal(0, SectorEscalation.BossesDefeated);
+        Assert.False(SectorEscalation.IsScalingActive);
+    }
 }
