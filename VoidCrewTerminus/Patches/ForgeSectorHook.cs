@@ -104,6 +104,9 @@ internal static class ForgeSectorHook
 
             ForgeMeterController.AddMeter(
                 TerminusConfig.ForgeMeterPerSectorJump?.Value ?? 20f, "sector jump");
+            // Phase 6: same gates as the meter award — DifficultyScalar tracks
+            // "sectors successfully completed this run", not raw exit events.
+            ForgeMeterController.IncrementDifficultyScalar();
         }
         catch (System.Exception e)
         {

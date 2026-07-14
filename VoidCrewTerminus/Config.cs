@@ -58,6 +58,12 @@ internal static class TerminusConfig
     [BindConfig("forge", 0.15f, "Fractional stat multiplier added to enemy HP and damage per DifficultyScalar tick")]
     internal static ConfigEntry<float> EscalationStatScalarPerJump;
 
+    [BindConfig("forge", 3, "DifficultyScalar at which Rare relics start dropping (below this, Rares in the loot pool are downgraded to Common)")]
+    internal static ConfigEntry<int> EscalationRareUnlockScalar;
+
+    [BindConfig("forge", 6, "DifficultyScalar at which Legendary relics start dropping (below this, Legendaries in the loot pool are downgraded to Rare)")]
+    internal static ConfigEntry<int> EscalationLegendaryUnlockScalar;
+
 #pragma warning restore CS0649
 
     internal static ConfigEntry<Vector3> FrigateLobbyHangerPosition;

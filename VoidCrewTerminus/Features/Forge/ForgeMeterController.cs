@@ -9,7 +9,9 @@ namespace VoidCrewTerminus.Forge;
 // level is its relic capacity, which is what gates how big an upgrade step a
 // single commit can afford (L9→L10 costs 4 relics → needs Forge L4).
 //
-// DifficultyScalar is tracked here but unused until Phase 6 (sector escalation).
+// DifficultyScalar drives Phase 6 sector escalation (relic tier biasing today,
+// enemy stat scaling later). Incremented once per successful sector jump by
+// ForgeSectorHook, alongside the meter award and gated by the same conditions.
 // State is local/host-side; Phase 8 adds multiplayer sync.
 public static class ForgeMeterController
 {
@@ -25,7 +27,7 @@ public static class ForgeMeterController
 
     public static int Level { get; private set; } = MinLevel;
     public static float Meter { get; private set; }
-    public static float DifficultyScalar { get; private set; } // Phase 6
+    public static int DifficultyScalar { get; private set; }
 
     public static int Capacity => Level;
 
@@ -44,8 +46,23 @@ public static class ForgeMeterController
     {
         Level = MinLevel;
         Meter = 0f;
-        DifficultyScalar = 0f;
+        DifficultyScalar = 0;
         LevelChanged?.Invoke(Level);
+    }
+
+    // Called by ForgeSectorHook on each successful (non-starting, non-failed) sector
+    // exit — same de-dup gate as the meter award, so bouncing between sectors can't
+    // farm the scalar. Also exposed for the !setdifficulty dev command.
+    public static void IncrementDifficultyScalar()
+    {
+        DifficultyScalar++;
+        BepinPlugin.Log.LogInfo($"[Forge] DifficultyScalar → {DifficultyScalar}");
+    }
+
+    public static void SetDifficultyScalar(int value)
+    {
+        DifficultyScalar = Math.Max(0, value);
+        BepinPlugin.Log.LogInfo($"[Forge] DifficultyScalar set to {DifficultyScalar} (dev)");
     }
 
     public static void AddMeter(float amount, string source)
