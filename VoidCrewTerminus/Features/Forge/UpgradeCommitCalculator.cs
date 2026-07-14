@@ -14,23 +14,29 @@ public enum CommitStatus
     MissingViewId,
 }
 
-// Inputs to a commit. Built by UpgradeForgeBehavior from its scene state so the
+// Inputs to a commit. Built by UpgradedForgeBehavior from its scene state so the
 // calculator stays free of Unity types.
 public readonly struct CommitRequest
 {
     public int CurrentLevel { get; }
     public IReadOnlyList<Loot.RelicTier> RelicTiers { get; }   // FIFO — position 0 is consumed first
+    public IReadOnlyList<string> RelicNames { get; }           // FIFO, parallel to RelicTiers — used for signature lookup
+    public IReadOnlyList<bool> RelicIsCursed { get; }          // FIFO, parallel to RelicTiers — Phase 7-B; consumed by Phase 7-C
     public ForgeCategory Category { get; }
-    public IReadOnlyList<string> PerkSlots { get; }       // current slot contents; null/empty = free
+    public IReadOnlyList<string> PerkSlots { get; }            // current slot contents; null/empty = free
 
     public CommitRequest(
         int currentLevel,
         IReadOnlyList<Loot.RelicTier> relicTiers,
+        IReadOnlyList<string> relicNames,
+        IReadOnlyList<bool> relicIsCursed,
         ForgeCategory category,
         IReadOnlyList<string> perkSlots)
     {
         CurrentLevel = currentLevel;
         RelicTiers = relicTiers ?? Array.Empty<Loot.RelicTier>();
+        RelicNames = relicNames ?? Array.Empty<string>();
+        RelicIsCursed = relicIsCursed ?? Array.Empty<bool>();
         Category = category;
         PerkSlots = perkSlots ?? Array.Empty<string>();
     }
@@ -127,6 +133,15 @@ public static class UpgradeCommitCalculator
             return CommitOutcome.Success(newLevel, relicsConsumed, bestTier,
                 rolledPerk: null, targetSlot: -1, rollChance: chance, rollAttempted: true);
 
+        // Signature priority: walk consumed relics in FIFO order, return the first
+        // signature perk we find. Multi-relic commits use the earliest flagship
+        // relic's signature — matches the FIFO consumption order and keeps the
+        // rule simple to reason about.
+        var signaturePerk = PickSignature(relicsConsumed, request, nextRandom);
+        if (signaturePerk != null)
+            return CommitOutcome.Success(newLevel, relicsConsumed, bestTier,
+                rolledPerk: signaturePerk, targetSlot: slot, rollChance: chance, rollAttempted: true);
+
         var pool = PerkPool.PoolFor(request.Category);
         if (pool.Count == 0)
             return CommitOutcome.Success(newLevel, relicsConsumed, bestTier,
@@ -138,5 +153,24 @@ public static class UpgradeCommitCalculator
 
         return CommitOutcome.Success(newLevel, relicsConsumed, bestTier,
             rolledPerk: perk, targetSlot: slot, rollChance: chance, rollAttempted: true);
+    }
+
+    // Signature lookup: for each consumed relic in FIFO order, check if it has
+    // authored signature perks. First flagship wins. Returns null if no signatures
+    // exist for any consumed relic, in which case the caller falls back to the
+    // category pool.
+    private static PerkDefinition PickSignature(
+        int relicsConsumed, CommitRequest request, Func<float> nextRandom)
+    {
+        int scanUpTo = Math.Min(relicsConsumed, request.RelicNames.Count);
+        for (int i = 0; i < scanUpTo; i++)
+        {
+            var sigs = PerkPool.SignaturesFor(request.RelicNames[i]);
+            if (sigs.Count == 0) continue;
+            int idx = (int)(nextRandom() * sigs.Count);
+            if (idx >= sigs.Count) idx = sigs.Count - 1;
+            return sigs[idx];
+        }
+        return null;
     }
 }

@@ -227,15 +227,21 @@ public class UpgradeForgeBehavior : MonoBehaviour
         if (_moduleBox.photonView == null) return CommitOutcome.Failure(CommitStatus.MissingViewId);
 
         var relicTiers = new Loot.RelicTier[_relics.Count];
+        var relicNames = new string[_relics.Count];
+        var relicIsCursed = new bool[_relics.Count];
         for (int i = 0; i < _relics.Count; i++)
+        {
             relicTiers[i] = _relics[i] != null ? Loot.RelicTierData.Get(_relics[i].name).Tier : Loot.RelicTier.Common;
+            relicNames[i] = _relics[i] != null ? _relics[i].name : null;
+            relicIsCursed[i] = _relics[i] != null && Loot.CursedRelicMarker.IsCursed(_relics[i]);
+        }
 
         var category = PerkPool.CategoryOf(_moduleBox.moduleRef?.Asset as CellModule);
         int viewId = _moduleBox.photonView.ViewID;
         var current = ForgeStateStore.TryPeekSnapshot(viewId, out var s) ? s : ForgeSnapshot.Empty;
         int currentLevel = CurrentBoxLevel;
 
-        var request = new CommitRequest(currentLevel, relicTiers, category, current.PerkSlots);
+        var request = new CommitRequest(currentLevel, relicTiers, relicNames, relicIsCursed, category, current.PerkSlots);
         var outcome = UpgradeCommitCalculator.Calculate(request);
         if (outcome.Status != CommitStatus.Ok) return outcome;
 

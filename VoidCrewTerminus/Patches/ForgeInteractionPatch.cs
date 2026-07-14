@@ -8,6 +8,7 @@ using CG.Ship.Object;
 using HarmonyLib;
 using ResourceAssets;
 using VoidCrewTerminus.Forge;
+using VoidCrewTerminus.Utils;
 
 namespace VoidCrewTerminus.Patches;
 

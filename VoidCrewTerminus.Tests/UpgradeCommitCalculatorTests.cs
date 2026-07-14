@@ -16,8 +16,13 @@ public class UpgradeCommitCalculatorTests
         int currentLevel,
         RelicTier[] relicTiers,
         ForgeCategory category = ForgeCategory.Weapon,
-        string[] perkSlots = null) =>
-        new(currentLevel, relicTiers, category, perkSlots ?? EmptySlots);
+        string[] perkSlots = null,
+        string[] relicNames = null,
+        bool[] relicIsCursed = null) =>
+        new(currentLevel, relicTiers,
+            relicNames ?? new string[relicTiers.Length],
+            relicIsCursed ?? new bool[relicTiers.Length],
+            category, perkSlots ?? EmptySlots);
 
     // Rig: force the perk-roll gate to always fail so tests that only care about
     // level/consumption aren't sensitive to which perk lands.
@@ -212,5 +217,55 @@ public class UpgradeCommitCalculatorTests
     {
         var slots = new string[] { "common_perk", null, null };
         Assert.Equal(-1, PerkPool.TargetSlot(slots, RelicTier.Common));
+    }
+
+    // ---- signature perks (Phase 7-A) ----------------------------------------
+    //
+    // Signature behaviour tests (SignaturesFor / TryGet on real signatures / the
+    // calculator picking a signature over a category perk) all touch
+    // PerkPool._signatures whose static init evaluates StatType values — same
+    // NRE limitation as the existing skipped tests. Left skipped with a clear
+    // reason so the intent is documented in-source.
+    //
+    // PerkDefinition shape assertions (IsSignature true/false) also drag StatType
+    // into the tuple type reference of the params payload, which the test project
+    // doesn't currently link against. Playtest verifies via !forceperk.
+
+    [Fact(Skip = "PerkPool._signatures static init evaluates StatType values which " +
+        "require the game runtime; same limitation as PerkRoll_UsesInjectedRng.")]
+    public void SignaturesFor_FlagshipRelic_ReturnsAtLeastOne()
+    {
+        Assert.NotEmpty(PerkPool.SignaturesFor("Relic_15_BiomassForThrustersAndDamage"));
+    }
+
+    [Fact(Skip = "See SignaturesFor_FlagshipRelic_ReturnsAtLeastOne.")]
+    public void SignaturesFor_HandlesCloneSuffix()
+    {
+        var withClone = PerkPool.SignaturesFor("Relic_15_BiomassForThrustersAndDamage(Clone)");
+        var withoutClone = PerkPool.SignaturesFor("Relic_15_BiomassForThrustersAndDamage");
+        Assert.Equal(withoutClone.Count, withClone.Count);
+    }
+
+    [Fact(Skip = "See SignaturesFor_FlagshipRelic_ReturnsAtLeastOne.")]
+    public void TryGet_ResolvesSignaturePerkIds()
+    {
+        Assert.True(PerkPool.TryGet("sig_biomass_ram", out var perk));
+        Assert.True(perk.IsSignature);
+        Assert.Equal("Relic_15_BiomassForThrustersAndDamage", perk.SignatureRelicId);
+    }
+
+    [Fact(Skip = "See SignaturesFor_FlagshipRelic_ReturnsAtLeastOne.")]
+    public void PerkRoll_FlagshipRelic_PicksSignatureOverCategoryPool()
+    {
+        var outcome = UpgradeCommitCalculator.Calculate(
+            Request(3, new[] { RelicTier.Legendary },
+                category: ForgeCategory.BuiltIn,
+                relicNames: new[] { "Relic_15_BiomassForThrustersAndDamage" }),
+            nextRandom: () => 0f);
+
+        Assert.True(outcome.RollAttempted);
+        Assert.NotNull(outcome.RolledPerk);
+        Assert.True(outcome.RolledPerk.IsSignature);
+        Assert.Equal("Relic_15_BiomassForThrustersAndDamage", outcome.RolledPerk.SignatureRelicId);
     }
 }

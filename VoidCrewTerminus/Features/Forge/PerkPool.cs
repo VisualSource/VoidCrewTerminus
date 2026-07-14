@@ -66,11 +66,76 @@ public static class PerkPool
         },
     };
 
+    // Signature perks — tied to specific relic identities. Roll only when that
+    // exact relic is consumed in a commit; take priority over category pool draws.
+    // Grouped by SignatureRelicId at first-touch (see EnsureSignatureIndex).
+    private static readonly PerkDefinition[] _signatures = new[]
+    {
+        // Legendary tier — flagship relics get flavourful, larger-bonus perks.
+        new PerkDefinition("sig_biomass_ram", "Biomass Ram", ForgeCategory.BuiltIn,
+            "+20% forward power, +15% ram damage",
+            signatureRelicId: "Relic_15_BiomassForThrustersAndDamage",
+            payload: new[] { (StatType.ForwardPower, 0.20f), (StatType.Damage, 0.15f) }),
+        new PerkDefinition("sig_sustained_payload", "Sustained Payload", ForgeCategory.Weapon,
+            "+25% fire rate, +10% damage",
+            signatureRelicId: "Relic_28_PayloadRecharge",
+            payload: new[] { (StatType.FireRate, 0.25f), (StatType.Damage, 0.10f) }),
+
+        // Rare tier — a handful of weapon-specific / mechanic-flavoured signatures.
+        new PerkDefinition("sig_overcharged_grid", "Overcharged Grid", ForgeCategory.PowerProvider,
+            "+15% power provided, +20% battery recharge",
+            signatureRelicId: "Relic_02_PowerForBreakers",
+            payload: new[] { (StatType.PowerProvided, 0.15f), (StatType.BatteryRechargeAmount, 0.20f) }),
+        new PerkDefinition("sig_holy_purpose", "Holy Purpose", ForgeCategory.Weapon,
+            "+20% damage, +10% accuracy",
+            signatureRelicId: "Relic_12_BenedictionDamageForAccuracy",
+            payload: new[] { (StatType.Damage, 0.20f), (StatType.Accuracy, 0.10f) }),
+        new PerkDefinition("sig_confessor_cadence", "Confessor Cadence", ForgeCategory.Weapon,
+            "+30% fire rate, +10% projectile speed",
+            signatureRelicId: "Relic_13_ConfessorFireRateForPower",
+            payload: new[] { (StatType.FireRate, 0.30f), (StatType.ProjectileSpeed, 0.10f) }),
+    };
+
+    // Signature lookup: relic id → list of eligible signature perks. Built lazily
+    // on first access to keep the static ctor cheap and avoid StatType touches
+    // during test-host init.
+    private static Dictionary<string, List<PerkDefinition>> _signaturesByRelic;
+
+    private static void EnsureSignatureIndex()
+    {
+        if (_signaturesByRelic != null) return;
+        var idx = new Dictionary<string, List<PerkDefinition>>();
+        foreach (var sig in _signatures)
+        {
+            if (!idx.TryGetValue(sig.SignatureRelicId, out var list))
+            {
+                list = new List<PerkDefinition>();
+                idx[sig.SignatureRelicId] = list;
+            }
+            list.Add(sig);
+        }
+        _signaturesByRelic = idx;
+    }
+
+    // Look up the signature perks that only roll when this specific relic is
+    // consumed. Returns empty if the relic has no authored signatures.
+    public static IReadOnlyList<PerkDefinition> SignaturesFor(string relicName)
+    {
+        if (string.IsNullOrEmpty(relicName)) return System.Array.Empty<PerkDefinition>();
+        var normalized = Loot.RelicTierData.NormalizeName(relicName);
+        EnsureSignatureIndex();
+        return _signaturesByRelic.TryGetValue(normalized, out var list)
+            ? list
+            : System.Array.Empty<PerkDefinition>();
+    }
+
     private static Dictionary<string, PerkDefinition> _byId;
 
     public static bool TryGet(string perkId, out PerkDefinition perk)
     {
-        _byId ??= _pools.Values.SelectMany(p => p).ToDictionary(p => p.Id);
+        _byId ??= _pools.Values.SelectMany(p => p)
+            .Concat(_signatures)
+            .ToDictionary(p => p.Id);
         return _byId.TryGetValue(perkId ?? "", out perk);
     }
 
@@ -83,7 +148,8 @@ public static class PerkPool
         return _pools.TryGetValue(category, out var pool) ? pool : System.Array.Empty<PerkDefinition>();
     }
 
-    public static IEnumerable<PerkDefinition> AllPerks() => _pools.Values.SelectMany(p => p);
+    public static IEnumerable<PerkDefinition> AllPerks() =>
+        _pools.Values.SelectMany(p => p).Concat(_signatures);
 
     // Highest slot index a relic tier may fill (inclusive).
     public static int MaxSlotForTier(Loot.RelicTier tier) => tier switch

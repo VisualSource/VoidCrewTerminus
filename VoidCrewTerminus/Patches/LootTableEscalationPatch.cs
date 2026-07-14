@@ -4,6 +4,7 @@ using Gameplay.Loot;
 using HarmonyLib;
 using ResourceAssets;
 using VC.Common.CoreData;
+using VoidCrewTerminus.Escalation;
 using VoidCrewTerminus.Forge;
 
 namespace VoidCrewTerminus.Patches;

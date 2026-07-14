@@ -64,6 +64,12 @@ internal static class TerminusConfig
     [BindConfig("forge", 2, "Number of boss objectives that must be defeated in a run before any escalation (density, HP, damage, loot tier biasing) takes effect. DifficultyScalar and BossesDefeated still accumulate during the warm-up so scaling kicks in with full accumulated intensity once the threshold is crossed.")]
     internal static ConfigEntry<int> EscalationBossActivationThreshold;
 
+    [BindConfig("forge", 0.15f, "Base chance (0-1) that a spawned relic is flagged as Cursed. Per-relic modifiers in RelicTierData.BaseCurseChanceModifier are added on top; scalar bonus is added when escalation is active. Final chance clamped to [0, 1].")]
+    internal static ConfigEntry<float> RelicBaseCurseChance;
+
+    [BindConfig("forge", 0.03f, "Additional cursed chance per DifficultyScalar tick — deeper sectors produce more cursed relics. Only applied when escalation is active.")]
+    internal static ConfigEntry<float> EscalationCurseChancePerScalar;
+
     [BindConfig("forge", 3, "DifficultyScalar at which Rare relics start dropping (below this, Rares in the loot pool are downgraded to Common)")]
     internal static ConfigEntry<int> EscalationRareUnlockScalar;
 
