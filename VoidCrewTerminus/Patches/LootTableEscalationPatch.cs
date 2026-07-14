@@ -5,6 +5,7 @@ using HarmonyLib;
 using ResourceAssets;
 using VC.Common.CoreData;
 using VoidCrewTerminus.Forge;
+using VoidCrewTerminus.Escalation;
 
 namespace VoidCrewTerminus.Patches;
 

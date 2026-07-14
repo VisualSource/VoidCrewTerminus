@@ -1,7 +1,7 @@
 using Gameplay.NPC.AI;
 using HarmonyLib;
 using ResourceAssets;
-using VoidCrewTerminus.EnemyScaling;
+using VoidCrewTerminus.Escalation;
 using VoidCrewTerminus.Forge;
 
 namespace VoidCrewTerminus.Patches;

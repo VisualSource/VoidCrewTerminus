@@ -4,6 +4,7 @@ using CG.Game.Scenarios;
 using Gameplay.Quests;
 using VoidCrewTerminus.Forge;
 using VoidManager.Utilities;
+using VoidCrewTerminus.Escalation;
 
 namespace VoidCrewTerminus.Patches;
 

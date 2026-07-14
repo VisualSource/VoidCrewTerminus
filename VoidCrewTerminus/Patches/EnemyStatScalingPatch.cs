@@ -5,7 +5,7 @@ using Gameplay.Tags;
 using Gameplay.Utilities;
 using HarmonyLib;
 using UnityEngine;
-using VoidCrewTerminus.EnemyScaling;
+using VoidCrewTerminus.Escalation;
 using VoidCrewTerminus.Forge;
 
 namespace VoidCrewTerminus.Patches;
