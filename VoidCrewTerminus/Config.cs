@@ -64,6 +64,9 @@ internal static class TerminusConfig
     [BindConfig("forge", 6, "DifficultyScalar at which Legendary relics start dropping (below this, Legendaries in the loot pool are downgraded to Rare)")]
     internal static ConfigEntry<int> EscalationLegendaryUnlockScalar;
 
+    [BindConfig("forge", 1, "DifficultyScalar bump applied when a boss objective is defeated (in addition to the boss's tier-ceiling unlock)")]
+    internal static ConfigEntry<int> EscalationBossScalarBonus;
+
 #pragma warning restore CS0649
 
     internal static ConfigEntry<Vector3> FrigateLobbyHangerPosition;

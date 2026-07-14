@@ -31,7 +31,8 @@ public class SectorEscalationTests
     [InlineData(100, RelicTier.Legendary)]
     public void MaxAllowedTier_MapsScalarBands(int scalar, RelicTier expected)
     {
-        Assert.Equal(expected, SectorEscalation.MaxAllowedTier(scalar, rareUnlockScalar: 3, legendaryUnlockScalar: 6));
+        Assert.Equal(expected,
+            SectorEscalation.MaxAllowedTier(scalar, bossesDefeated: 0, rareUnlockScalar: 3, legendaryUnlockScalar: 6));
     }
 
     // ---- downgrade behaviour ----------------------------------------------
@@ -40,7 +41,7 @@ public class SectorEscalationTests
     public void Downgrade_AtScalarZero_RareBecomesCommon()
     {
         var entries = MakeEntries(CommonRelic1, RareRelic1);
-        SectorEscalation.DowngradeRelics(entries, s => s, scalar: 0, seed: 42);
+        SectorEscalation.DowngradeRelics(entries, s => s, scalar: 0, bossesDefeated: 0, seed: 42);
 
         Assert.Equal(2, entries.Count);
         Assert.All(entries, e => Assert.Equal(RelicTier.Common, RelicTierData.Get(e).Tier));
@@ -50,7 +51,7 @@ public class SectorEscalationTests
     public void Downgrade_AtScalarZero_LegendaryBecomesCommon()
     {
         var entries = MakeEntries(CommonRelic1, LegendaryRelic1);
-        SectorEscalation.DowngradeRelics(entries, s => s, scalar: 0, seed: 42);
+        SectorEscalation.DowngradeRelics(entries, s => s, scalar: 0, bossesDefeated: 0, seed: 42);
 
         Assert.Equal(2, entries.Count);
         Assert.All(entries, e => Assert.Equal(RelicTier.Common, RelicTierData.Get(e).Tier));
@@ -60,7 +61,7 @@ public class SectorEscalationTests
     public void Downgrade_AtScalarThree_LegendaryBecomesRare()
     {
         var entries = MakeEntries(RareRelic1, LegendaryRelic1);
-        SectorEscalation.DowngradeRelics(entries, s => s, scalar: 3, seed: 42);
+        SectorEscalation.DowngradeRelics(entries, s => s, scalar: 3, bossesDefeated: 0, seed: 42);
 
         Assert.Equal(2, entries.Count);
         Assert.All(entries, e => Assert.Equal(RelicTier.Rare, RelicTierData.Get(e).Tier));
@@ -70,7 +71,7 @@ public class SectorEscalationTests
     public void Downgrade_AtScalarThree_RareUnchanged()
     {
         var entries = MakeEntries(RareRelic1, RareRelic2);
-        SectorEscalation.DowngradeRelics(entries, s => s, scalar: 3, seed: 42);
+        SectorEscalation.DowngradeRelics(entries, s => s, scalar: 3, bossesDefeated: 0, seed: 42);
 
         Assert.Equal(new[] { RareRelic1, RareRelic2 }, entries);
     }
@@ -81,7 +82,7 @@ public class SectorEscalationTests
         var entries = MakeEntries(CommonRelic1, RareRelic1, LegendaryRelic1);
         var expected = entries.ToList();
 
-        SectorEscalation.DowngradeRelics(entries, s => s, scalar: 6, seed: 42);
+        SectorEscalation.DowngradeRelics(entries, s => s, scalar: 6, bossesDefeated: 0, seed: 42);
 
         Assert.Equal(expected, entries);
     }
@@ -91,7 +92,7 @@ public class SectorEscalationTests
     {
         // Rare + two candidate Commons — the Rare must be replaced by one of them.
         var entries = MakeEntries(CommonRelic1, CommonRelic2, RareRelic1);
-        SectorEscalation.DowngradeRelics(entries, s => s, scalar: 0, seed: 42);
+        SectorEscalation.DowngradeRelics(entries, s => s, scalar: 0, bossesDefeated: 0, seed: 42);
 
         // Third slot (originally Rare) is now one of the two Commons.
         Assert.Contains(entries[2], new[] { CommonRelic1, CommonRelic2 });
@@ -102,7 +103,7 @@ public class SectorEscalationTests
     {
         // Only Rare + Legendary at scalar 0 — no Common candidate. Both drop.
         var entries = MakeEntries(RareRelic1, LegendaryRelic1);
-        SectorEscalation.DowngradeRelics(entries, s => s, scalar: 0, seed: 42);
+        SectorEscalation.DowngradeRelics(entries, s => s, scalar: 0, bossesDefeated: 0, seed: 42);
 
         Assert.Empty(entries);
     }
@@ -111,7 +112,7 @@ public class SectorEscalationTests
     public void Downgrade_LeavesNonRelicEntriesUntouched()
     {
         var entries = MakeEntries(NonRelic, LegendaryRelic1, NonRelic);
-        SectorEscalation.DowngradeRelics(entries, s => s, scalar: 0, seed: 42);
+        SectorEscalation.DowngradeRelics(entries, s => s, scalar: 0, bossesDefeated: 0, seed: 42);
 
         // Non-relic entries stay in place, Legendary got dropped (no Common candidate).
         Assert.Equal(new[] { NonRelic, NonRelic }, entries);
@@ -123,7 +124,7 @@ public class SectorEscalationTests
         // "Relic_XX_Unknown" fall through to the Common fallback in RelicTierData,
         // so it counts as Common — unchanged at any scalar.
         var entries = MakeEntries("Relic_XX_Unknown");
-        SectorEscalation.DowngradeRelics(entries, s => s, scalar: 6, seed: 42);
+        SectorEscalation.DowngradeRelics(entries, s => s, scalar: 6, bossesDefeated: 0, seed: 42);
 
         Assert.Equal(new[] { "Relic_XX_Unknown" }, entries);
     }
@@ -135,8 +136,8 @@ public class SectorEscalationTests
         var a = MakeEntries(CommonRelic1, CommonRelic2, RareRelic1, RareRelic2, LegendaryRelic1);
         var b = MakeEntries(CommonRelic1, CommonRelic2, RareRelic1, RareRelic2, LegendaryRelic1);
 
-        SectorEscalation.DowngradeRelics(a, s => s, scalar: 0, seed: 12345);
-        SectorEscalation.DowngradeRelics(b, s => s, scalar: 0, seed: 12345);
+        SectorEscalation.DowngradeRelics(a, s => s, scalar: 0, bossesDefeated: 0, seed: 12345);
+        SectorEscalation.DowngradeRelics(b, s => s, scalar: 0, bossesDefeated: 0, seed: 12345);
 
         Assert.Equal(a, b);
     }
@@ -145,7 +146,7 @@ public class SectorEscalationTests
     public void Downgrade_EmptyList_NoOp()
     {
         var entries = new List<string>();
-        SectorEscalation.DowngradeRelics(entries, s => s, scalar: 0, seed: 42);
+        SectorEscalation.DowngradeRelics(entries, s => s, scalar: 0, bossesDefeated: 0, seed: 42);
         Assert.Empty(entries);
     }
 
@@ -153,6 +154,62 @@ public class SectorEscalationTests
     public void Downgrade_NullList_NoOp()
     {
         // Should not throw.
-        SectorEscalation.DowngradeRelics<string>(null, s => s, scalar: 0, seed: 42);
+        SectorEscalation.DowngradeRelics<string>(null, s => s, scalar: 0, bossesDefeated: 0, seed: 42);
+    }
+
+    // ---- boss unlock ceiling ----------------------------------------------
+
+    [Fact]
+    public void MaxAllowedTier_WithZeroBosses_UsesScalarThresholds()
+    {
+        Assert.Equal(RelicTier.Common,
+            SectorEscalation.MaxAllowedTier(scalar: 0, bossesDefeated: 0, rareUnlockScalar: 3, legendaryUnlockScalar: 6));
+        Assert.Equal(RelicTier.Rare,
+            SectorEscalation.MaxAllowedTier(scalar: 4, bossesDefeated: 0, rareUnlockScalar: 3, legendaryUnlockScalar: 6));
+    }
+
+    [Fact]
+    public void MaxAllowedTier_WithOneBoss_UnlocksRare_EvenAtScalarZero()
+    {
+        Assert.Equal(RelicTier.Rare,
+            SectorEscalation.MaxAllowedTier(scalar: 0, bossesDefeated: 1, rareUnlockScalar: 3, legendaryUnlockScalar: 6));
+    }
+
+    [Fact]
+    public void MaxAllowedTier_WithTwoBosses_UnlocksLegendary_EvenAtScalarZero()
+    {
+        Assert.Equal(RelicTier.Legendary,
+            SectorEscalation.MaxAllowedTier(scalar: 0, bossesDefeated: 2, rareUnlockScalar: 3, legendaryUnlockScalar: 6));
+    }
+
+    [Fact]
+    public void MaxAllowedTier_TakesMaxOfScalarAndBossCeilings()
+    {
+        // Scalar-only gives Legendary; bosses give Rare — max is Legendary.
+        Assert.Equal(RelicTier.Legendary,
+            SectorEscalation.MaxAllowedTier(scalar: 6, bossesDefeated: 1, rareUnlockScalar: 3, legendaryUnlockScalar: 6));
+
+        // Scalar-only gives Common; bosses give Legendary — max is Legendary.
+        Assert.Equal(RelicTier.Legendary,
+            SectorEscalation.MaxAllowedTier(scalar: 0, bossesDefeated: 2, rareUnlockScalar: 3, legendaryUnlockScalar: 6));
+    }
+
+    [Fact]
+    public void MaxAllowedTier_ExtraBossesBeyondTwo_NoAdditionalCeiling()
+    {
+        // Legendary is the cap; 3+ bosses can't unlock anything higher.
+        Assert.Equal(RelicTier.Legendary,
+            SectorEscalation.MaxAllowedTier(scalar: 0, bossesDefeated: 5, rareUnlockScalar: 3, legendaryUnlockScalar: 6));
+    }
+
+    [Fact]
+    public void Downgrade_WithOneBoss_LetsRareThroughEvenAtScalarZero()
+    {
+        // Without the boss, this Rare would be downgraded to Common at scalar 0.
+        // With one boss defeated, Rare is the ceiling and the entry passes through.
+        var entries = MakeEntries(CommonRelic1, RareRelic1);
+        SectorEscalation.DowngradeRelics(entries, s => s, scalar: 0, bossesDefeated: 1, seed: 42);
+
+        Assert.Equal(new[] { CommonRelic1, RareRelic1 }, entries);
     }
 }

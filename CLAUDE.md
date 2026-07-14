@@ -71,8 +71,8 @@ jq '."CG.Ship"' .voidcrew/namespace-index.json
 The key assemblies are `Assembly-CSharp` (main game logic, 3 312 files), `VoidCrewCommon`, `Assembly-CSharp-firstpass`, `PhotonUnityNetworking`, and `Opsive.UltimateCharacterController`.
 
 
-lookup api http://0.0.0.0:3157/ 
-ask for token
+feedback-logging
+Prefer BepInEx `LogDebug` over `LogInfo` for routine diagnostics in VoidCrewTerminus; reserve `LogInfo` for player-visible or genuinely important events.
 
 ## References
 

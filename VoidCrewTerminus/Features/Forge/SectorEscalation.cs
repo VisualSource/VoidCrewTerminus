@@ -7,16 +7,43 @@ namespace VoidCrewTerminus.Forge;
 // vanilla loot pool so early sectors flood Common relics and later sectors admit
 // Rare/Legendary. Non-relic entries pass through untouched.
 //
-// Rule (Z-shape: "soft downgrade filter" — no upgrades):
-//   scalar < RareUnlock       → max allowed tier = Common
-//   scalar < LegendaryUnlock  → max allowed tier = Rare
-//   scalar ≥ LegendaryUnlock  → max allowed tier = Legendary (nothing changes)
+// The max allowed tier is the higher of two independent signals:
+//   * Scalar-based ceiling (natural progression through sector jumps):
+//       scalar < RareUnlock       → Common ceiling
+//       scalar < LegendaryUnlock  → Rare ceiling
+//       scalar ≥ LegendaryUnlock  → Legendary ceiling
+//   * Boss-based ceiling (rare event unlock, guaranteed):
+//       bossesDefeated ≥ 1        → at least Rare
+//       bossesDefeated ≥ 2        → at least Legendary
 //
 // When a relic's tier exceeds the max, we swap its reference for a random
 // same-list relic of the max tier (seeded from quest+sector for MP determinism).
 // If the list has no candidate at the target tier, the entry is dropped.
+//
+// Escalation state (BossesDefeated) lives here rather than on the Forge —
+// bosses don't affect the Forge module itself (level, capacity, meter);
+// they affect what tier of relics the loot table can drop.
 public static class SectorEscalation
 {
+    // Independent of DifficultyScalar. Each boss defeat unlocks the next relic
+    // tier ceiling regardless of scalar progression. Reset per-run from
+    // Plugins.cs; incremented by BossDefeatHook.
+    public static int BossesDefeated { get; private set; }
+
+    public static void ResetForRun() => BossesDefeated = 0;
+
+    public static void IncrementBossesDefeated()
+    {
+        BossesDefeated++;
+        BepinPlugin.Log.LogDebug($"[Escalation] BossesDefeated → {BossesDefeated}");
+    }
+
+    public static void SetBossesDefeated(int value)
+    {
+        BossesDefeated = System.Math.Max(0, value);
+        BepinPlugin.Log.LogDebug($"[Escalation] BossesDefeated set to {BossesDefeated} (dev)");
+    }
+
     // Reshape `entries` in place. Generic over the item ref type so tests can
     // pass plain strings; production callers pass CraftableItemRef and a name
     // extractor that reads .Filename.
@@ -24,13 +51,14 @@ public static class SectorEscalation
         List<T> entries,
         Func<T, string> getName,
         int scalar,
+        int bossesDefeated,
         int seed)
     {
         if (entries == null || entries.Count == 0) return;
 
         int rareUnlock = TerminusConfig.EscalationRareUnlockScalar?.Value ?? 3;
         int legendaryUnlock = TerminusConfig.EscalationLegendaryUnlockScalar?.Value ?? 6;
-        var maxAllowed = MaxAllowedTier(scalar, rareUnlock, legendaryUnlock);
+        var maxAllowed = MaxAllowedTier(scalar, bossesDefeated, rareUnlock, legendaryUnlock);
 
         // Optimisation and correctness: at max scalar nothing is ever downgraded,
         // so skip the walk (and skip triggering any RelicTierData lookups) entirely.
@@ -72,10 +100,26 @@ public static class SectorEscalation
         }
     }
 
-    public static RelicTier MaxAllowedTier(int scalar, int rareUnlockScalar, int legendaryUnlockScalar)
+    public static RelicTier MaxAllowedTier(int scalar, int bossesDefeated, int rareUnlockScalar, int legendaryUnlockScalar)
+    {
+        var fromScalar = TierFromScalar(scalar, rareUnlockScalar, legendaryUnlockScalar);
+        var fromBosses = TierFromBossCount(bossesDefeated);
+        return fromScalar > fromBosses ? fromScalar : fromBosses;
+    }
+
+    private static RelicTier TierFromScalar(int scalar, int rareUnlockScalar, int legendaryUnlockScalar)
     {
         if (scalar < rareUnlockScalar) return RelicTier.Common;
         if (scalar < legendaryUnlockScalar) return RelicTier.Rare;
+        return RelicTier.Legendary;
+    }
+
+    // First boss unlocks Rare; second boss unlocks Legendary. Third+ bosses have
+    // no further tier to unlock (Legendary is the ceiling).
+    private static RelicTier TierFromBossCount(int bossesDefeated)
+    {
+        if (bossesDefeated <= 0) return RelicTier.Common;
+        if (bossesDefeated == 1) return RelicTier.Rare;
         return RelicTier.Legendary;
     }
 }

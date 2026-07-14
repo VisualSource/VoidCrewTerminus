@@ -26,13 +26,14 @@ internal class DifficultyCommand : PublicCommand
         if (!TerminusConfig.EnableDevMode.Value) return;
 
         int scalar = ForgeMeterController.DifficultyScalar;
+        int bosses = SectorEscalation.BossesDefeated;
         int rareUnlock = TerminusConfig.EscalationRareUnlockScalar?.Value ?? 3;
         int legendaryUnlock = TerminusConfig.EscalationLegendaryUnlockScalar?.Value ?? 6;
-        var maxTier = SectorEscalation.MaxAllowedTier(scalar, rareUnlock, legendaryUnlock);
+        var maxTier = SectorEscalation.MaxAllowedTier(scalar, bosses, rareUnlock, legendaryUnlock);
 
         Messaging.Notification(
-            $"DifficultyScalar={scalar} — max relic tier this sector: {maxTier} " +
-            $"(rare@{rareUnlock}, legendary@{legendaryUnlock})");
+            $"DifficultyScalar={scalar}, BossesDefeated={bosses} — max relic tier this sector: {maxTier} " +
+            $"(rare@scalar{rareUnlock}, legendary@scalar{legendaryUnlock}; boss1→Rare, boss2→Legendary)");
     }
 }
 
@@ -53,6 +54,26 @@ internal class SetDifficultyCommand : PublicCommand
         }
         ForgeMeterController.SetDifficultyScalar(value);
         Messaging.Notification($"DifficultyScalar set to {value}. Next sector's loot table will reshape on entry.");
+    }
+}
+
+internal class SetBossesCommand : PublicCommand
+{
+    public override string[] CommandAliases() => new[] { "setbosses" };
+    public override string Description() => "[DevMode] Force BossesDefeated to a value (0=no unlock, 1=Rare unlock, 2+=Legendary unlock)";
+    public override List<Argument> Arguments() => [new("%value")];
+    public override string[] UsageExamples() => ["!setbosses 0", "!setbosses 2"];
+
+    public override void Execute(string arguments, int sender)
+    {
+        if (!TerminusConfig.EnableDevMode.Value) return;
+        if (!int.TryParse((arguments ?? "").Trim(), out int value) || value < 0)
+        {
+            Messaging.Notification("Usage: !setbosses <n>  (n >= 0)");
+            return;
+        }
+        SectorEscalation.SetBossesDefeated(value);
+        Messaging.Notification($"BossesDefeated set to {value}. Next sector's loot table will reshape on entry.");
     }
 }
 

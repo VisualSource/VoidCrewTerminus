@@ -26,6 +26,7 @@ internal static class LootTableEscalationPatch
             if (lists == null) return;
 
             int scalar = ForgeMeterController.DifficultyScalar;
+            int bosses = SectorEscalation.BossesDefeated;
             int seed = ResolveSeed();
 
             foreach (var kv in lists)
@@ -36,11 +37,12 @@ internal static class LootTableEscalationPatch
                     kv.Value,
                     r => r?.Filename,
                     scalar,
+                    bosses,
                     unchecked(seed * 397 ^ (int)kv.Key));
             }
 
-            BepinPlugin.Log.LogInfo(
-                $"[Forge] Sector loot reshaped for scalar {scalar} (seed {seed}).");
+            BepinPlugin.Log.LogDebug(
+                $"[Forge] Sector loot reshaped (scalar {scalar}, bosses {bosses}, seed {seed}).");
         }
         catch (System.Exception e)
         {

@@ -55,14 +55,20 @@ public static class ForgeMeterController
     // farm the scalar. Also exposed for the !setdifficulty dev command.
     public static void IncrementDifficultyScalar()
     {
-        DifficultyScalar++;
-        BepinPlugin.Log.LogInfo($"[Forge] DifficultyScalar → {DifficultyScalar}");
+        IncrementDifficultyScalarBy(1);
+    }
+
+    public static void IncrementDifficultyScalarBy(int amount)
+    {
+        if (amount <= 0) return;
+        DifficultyScalar += amount;
+        BepinPlugin.Log.LogDebug($"[Forge] DifficultyScalar +{amount} → {DifficultyScalar}");
     }
 
     public static void SetDifficultyScalar(int value)
     {
         DifficultyScalar = Math.Max(0, value);
-        BepinPlugin.Log.LogInfo($"[Forge] DifficultyScalar set to {DifficultyScalar} (dev)");
+        BepinPlugin.Log.LogDebug($"[Forge] DifficultyScalar set to {DifficultyScalar} (dev)");
     }
 
     public static void AddMeter(float amount, string source)
