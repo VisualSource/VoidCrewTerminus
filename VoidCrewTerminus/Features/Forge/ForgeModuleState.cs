@@ -102,7 +102,7 @@ public class ForgeModuleState : IModifierSource
         if (_module == null) return;
         var tags = RuntimeTagsRef(_module.Stats);
         if (tags == null) return;
-        var forgeTag = CsTagRegistry.ForgeUpgraded;
+        var forgeTag = Utils.CsTagRegistry.ForgeUpgraded;
         if (present)
         {
             if (!tags.Contains(forgeTag)) tags.Add(forgeTag);
@@ -127,25 +127,25 @@ public class ForgeModuleState : IModifierSource
         // perks at L3 (restored state), in which case only the perk mods apply.
         if (Level > 3)
         {
-            AddGroup(mods, amount, CsTagRegistry.Weapon, new[]
+            AddGroup(mods, amount, Utils.CsTagRegistry.Weapon, new[]
             {
                 StatType.Damage, StatType.FireRate, StatType.Range,
                 StatType.ProjectileSpeed, StatType.Accuracy,
             });
-            AddGroup(mods, amount, CsTagRegistry.Defense, new[]
+            AddGroup(mods, amount, Utils.CsTagRegistry.Defense, new[]
             {
                 StatType.ShieldMaxHitPoints, StatType.ShieldRechargeSpeed, StatType.ShieldAbsorption,
             });
-            AddGroup(mods, amount, CsTagRegistry.BuiltIn, new[]
+            AddGroup(mods, amount, Utils.CsTagRegistry.BuiltIn, new[]
             {
                 StatType.ForwardPower, StatType.EnginePower, StatType.YawTorque,
                 StatType.ElevationPower, StatType.StrafePower, StatType.JumpChargeSpeed,
             });
-            AddGroup(mods, amount, CsTagRegistry.PowerProvider, new[]
+            AddGroup(mods, amount, Utils.CsTagRegistry.PowerProvider, new[]
             {
                 StatType.PowerProvided, StatType.BatteryRechargeAmount,
             });
-            AddGroup(mods, amount, CsTagRegistry.Utility, new[]
+            AddGroup(mods, amount, Utils.CsTagRegistry.Utility, new[]
             {
                 StatType.ProcessingSpeed, StatType.HealingSpeed,
                 StatType.AttractorMaxRange, StatType.AttractorPullVelocity,
@@ -162,7 +162,7 @@ public class ForgeModuleState : IModifierSource
             var tagCfg = new ModTagConfiguration
             {
                 RequiredTags = categoryTag != null ? new[] { categoryTag } : null,
-                TagsToAdd = new[] { CsTagRegistry.ForgeUpgraded },
+                TagsToAdd = new[] { Utils.CsTagRegistry.ForgeUpgraded },
             };
             foreach (var (stat, perkAmount) in perk.Payload)
                 mods.Add(new StatMod(new FloatModifier(perkAmount, ModifierType.AdditiveMultiplier, this), stat.Id, tagCfg));
@@ -178,7 +178,7 @@ public class ForgeModuleState : IModifierSource
         mods.Add(new StatMod(
             new FloatModifier(0f, ModifierType.PrimaryAddend, this),
             StatType.MaxHitPoints.Id,
-            new ModTagConfiguration { TagsToAdd = new[] { CsTagRegistry.ForgeUpgraded } }));
+            new ModTagConfiguration { TagsToAdd = new[] { Utils.CsTagRegistry.ForgeUpgraded } }));
 
         return mods;
     }
@@ -190,7 +190,7 @@ public class ForgeModuleState : IModifierSource
         var tagCfg = new ModTagConfiguration
         {
             RequiredTags = new[] { categoryTag },
-            TagsToAdd = new[] { CsTagRegistry.ForgeUpgraded },
+            TagsToAdd = new[] { Utils.CsTagRegistry.ForgeUpgraded },
         };
 
         foreach (var statType in statTypes)

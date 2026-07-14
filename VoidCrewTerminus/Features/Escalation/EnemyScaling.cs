@@ -1,7 +1,7 @@
 using CG.Space;
 using Gameplay.Utilities;
 
-namespace VoidCrewTerminus.EnemyScaling;
+namespace VoidCrewTerminus.Escalation;
 
 // Enemy-scaling primitives — kept as a distinct feature area (not under Forge)
 // because Sector Escalation is the first consumer but not the only one: the

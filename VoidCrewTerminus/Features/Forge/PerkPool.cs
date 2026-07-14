@@ -86,16 +86,16 @@ public static class PerkPool
     public static IEnumerable<PerkDefinition> AllPerks() => _pools.Values.SelectMany(p => p);
 
     // Highest slot index a relic tier may fill (inclusive).
-    public static int MaxSlotForTier(RelicTier tier) => tier switch
+    public static int MaxSlotForTier(Loot.RelicTier tier) => tier switch
     {
-        RelicTier.Legendary => 2,
-        RelicTier.Rare => 1,
+        Loot.RelicTier.Legendary => 2,
+        Loot.RelicTier.Rare => 1,
         _ => 0,
     };
 
     // Lowest empty slot the tier is eligible for, or -1 when every eligible slot
     // is occupied. `slots` uses null/empty = free.
-    public static int TargetSlot(IReadOnlyList<string> slots, RelicTier tier)
+    public static int TargetSlot(IReadOnlyList<string> slots, Loot.RelicTier tier)
     {
         int max = MaxSlotForTier(tier);
         for (int i = 0; i <= max && i < SlotCount; i++)
@@ -104,10 +104,10 @@ public static class PerkPool
         return -1;
     }
 
-    public static float RollChance(RelicTier tier) => tier switch
+    public static float RollChance(Loot.RelicTier tier) => tier switch
     {
-        RelicTier.Legendary => TerminusConfig.PerkRollChanceLegendary?.Value ?? 0.75f,
-        RelicTier.Rare => TerminusConfig.PerkRollChanceRare?.Value ?? 0.40f,
+        Loot.RelicTier.Legendary => TerminusConfig.PerkRollChanceLegendary?.Value ?? 0.75f,
+        Loot.RelicTier.Rare => TerminusConfig.PerkRollChanceRare?.Value ?? 0.40f,
         _ => TerminusConfig.PerkRollChanceCommon?.Value ?? 0.25f,
     };
 

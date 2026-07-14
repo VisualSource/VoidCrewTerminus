@@ -28,7 +28,7 @@ In Progress:
                 [] reuse or create new BuildBox asset
                 ✔ only allow upgrading MKIII modules @done(26-07-09 13:16)
                 ✔ relic and buildbox ord @done(26-07-09 13:16)
-                [] fix bug where BuildBox likes to "float away" while holding it after picking it up from the forge
+                ✔ fix bug where BuildBox likes to "float away" while holding it after picking it up from the forge @done(26-07-14 12:52)
    Leeach:
 
    Fab Relic:

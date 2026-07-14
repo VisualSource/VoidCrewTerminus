@@ -19,18 +19,18 @@ public enum CommitStatus
 public readonly struct CommitRequest
 {
     public int CurrentLevel { get; }
-    public IReadOnlyList<RelicTier> RelicTiers { get; }   // FIFO — position 0 is consumed first
+    public IReadOnlyList<Loot.RelicTier> RelicTiers { get; }   // FIFO — position 0 is consumed first
     public ForgeCategory Category { get; }
     public IReadOnlyList<string> PerkSlots { get; }       // current slot contents; null/empty = free
 
     public CommitRequest(
         int currentLevel,
-        IReadOnlyList<RelicTier> relicTiers,
+        IReadOnlyList<Loot.RelicTier> relicTiers,
         ForgeCategory category,
         IReadOnlyList<string> perkSlots)
     {
         CurrentLevel = currentLevel;
-        RelicTiers = relicTiers ?? Array.Empty<RelicTier>();
+        RelicTiers = relicTiers ?? Array.Empty<Loot.RelicTier>();
         Category = category;
         PerkSlots = perkSlots ?? Array.Empty<string>();
     }
@@ -44,7 +44,7 @@ public readonly struct CommitOutcome
     public CommitStatus Status { get; }
     public int NewLevel { get; }
     public int RelicsConsumed { get; }
-    public RelicTier BestTier { get; }
+    public Loot.RelicTier BestTier { get; }
 
     // Perk-roll fields — RolledPerk is null when no roll was attempted OR when the
     // roll gate failed. RollAttempted disambiguates.
@@ -54,7 +54,7 @@ public readonly struct CommitOutcome
     public bool RollAttempted { get; }
 
     private CommitOutcome(
-        CommitStatus status, int newLevel, int relicsConsumed, RelicTier bestTier,
+        CommitStatus status, int newLevel, int relicsConsumed, Loot.RelicTier bestTier,
         PerkDefinition rolledPerk, int targetSlot, float rollChance, bool rollAttempted)
     {
         Status = status;
@@ -68,10 +68,10 @@ public readonly struct CommitOutcome
     }
 
     public static CommitOutcome Failure(CommitStatus status) =>
-        new(status, 0, 0, RelicTier.Common, null, -1, 0f, false);
+        new(status, 0, 0, Loot.RelicTier.Common, null, -1, 0f, false);
 
     public static CommitOutcome Success(
-        int newLevel, int relicsConsumed, RelicTier bestTier,
+        int newLevel, int relicsConsumed, Loot.RelicTier bestTier,
         PerkDefinition rolledPerk, int targetSlot, float rollChance, bool rollAttempted) =>
         new(CommitStatus.Ok, newLevel, relicsConsumed, bestTier,
             rolledPerk, targetSlot, rollChance, rollAttempted);
@@ -105,7 +105,7 @@ public static class UpgradeCommitCalculator
 
         // Best tier among the relics actually consumed drives the perk gamble.
         // Multi-relic commits roll once, at the quality of their best relic.
-        var bestTier = RelicTier.Common;
+        var bestTier = Loot.RelicTier.Common;
         int scanUpTo = Math.Min(relicsConsumed, request.RelicTiers.Count);
         for (int i = 0; i < scanUpTo; i++)
             if (request.RelicTiers[i] > bestTier) bestTier = request.RelicTiers[i];
@@ -114,7 +114,7 @@ public static class UpgradeCommitCalculator
     }
 
     private static CommitOutcome RollPerk(
-        int newLevel, int relicsConsumed, RelicTier bestTier,
+        int newLevel, int relicsConsumed, Loot.RelicTier bestTier,
         CommitRequest request, Func<float> nextRandom)
     {
         int slot = PerkPool.TargetSlot(request.PerkSlots, bestTier);

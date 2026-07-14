@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.Linq;
 using VoidCrewTerminus.Forge;
+using VoidCrewTerminus.Loot;
+using VoidCrewTerminus.Escalation;
 using Xunit;
 
 namespace VoidCrewTerminus.Tests;
@@ -10,13 +12,13 @@ namespace VoidCrewTerminus.Tests;
 public class SectorEscalationTests
 {
     // Known-tier names lifted from RelicTierData._map so tier lookups are real.
-    private const string CommonRelic1  = "Relic_00_Solo";
-    private const string CommonRelic2  = "Relic_01_A_StarboardPower";
-    private const string RareRelic1    = "Relic_02_PowerForBreakers";
-    private const string RareRelic2    = "Relic_03_VulnerabilityDuringVoidCharge";
+    private const string CommonRelic1 = "Relic_00_Solo";
+    private const string CommonRelic2 = "Relic_01_A_StarboardPower";
+    private const string RareRelic1 = "Relic_02_PowerForBreakers";
+    private const string RareRelic2 = "Relic_03_VulnerabilityDuringVoidCharge";
     private const string LegendaryRelic1 = "Relic_15_BiomassForThrustersAndDamage";
     private const string LegendaryRelic2 = "Relic_28_PayloadRecharge";
-    private const string NonRelic      = "SomeModule_Cell";
+    private const string NonRelic = "SomeModule_Cell";
 
     private static List<string> MakeEntries(params string[] names) => new(names);
 

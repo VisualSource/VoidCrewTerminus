@@ -20,11 +20,11 @@ public static class ForgeCategoryExtensions
 {
     public static CsTag ToCsTag(this ForgeCategory category) => category switch
     {
-        ForgeCategory.Weapon => CsTagRegistry.Weapon,
-        ForgeCategory.Defense => CsTagRegistry.Defense,
-        ForgeCategory.PowerProvider => CsTagRegistry.PowerProvider,
-        ForgeCategory.BuiltIn => CsTagRegistry.BuiltIn,
-        ForgeCategory.Utility => CsTagRegistry.Utility,
+        ForgeCategory.Weapon => Utils.CsTagRegistry.Weapon,
+        ForgeCategory.Defense => Utils.CsTagRegistry.Defense,
+        ForgeCategory.PowerProvider => Utils.CsTagRegistry.PowerProvider,
+        ForgeCategory.BuiltIn => Utils.CsTagRegistry.BuiltIn,
+        ForgeCategory.Utility => Utils.CsTagRegistry.Utility,
         _ => null,
     };
 }

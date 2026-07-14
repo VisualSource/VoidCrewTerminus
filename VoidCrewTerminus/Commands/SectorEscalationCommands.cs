@@ -26,12 +26,12 @@ internal class DifficultyCommand : PublicCommand
         if (!TerminusConfig.EnableDevMode.Value) return;
 
         int scalar = ForgeMeterController.DifficultyScalar;
-        int bosses = SectorEscalation.BossesDefeated;
+        int bosses = Escalation.SectorEscalation.BossesDefeated;
         int rareUnlock = TerminusConfig.EscalationRareUnlockScalar?.Value ?? 3;
         int legendaryUnlock = TerminusConfig.EscalationLegendaryUnlockScalar?.Value ?? 6;
         int threshold = TerminusConfig.EscalationBossActivationThreshold?.Value ?? 2;
-        var maxTier = SectorEscalation.MaxAllowedTier(scalar, bosses, rareUnlock, legendaryUnlock);
-        string status = SectorEscalation.IsScalingActive
+        var maxTier = Escalation.SectorEscalation.MaxAllowedTier(scalar, bosses, rareUnlock, legendaryUnlock);
+        string status = Escalation.SectorEscalation.IsScalingActive
             ? "ACTIVE"
             : $"DORMANT (needs {threshold - bosses} more boss defeat{(threshold - bosses == 1 ? "" : "s")})";
 
@@ -76,7 +76,7 @@ internal class SetBossesCommand : PublicCommand
             Messaging.Notification("Usage: !setbosses <n>  (n >= 0)");
             return;
         }
-        SectorEscalation.SetBossesDefeated(value);
+        Escalation.SectorEscalation.SetBossesDefeated(value);
         Messaging.Notification($"BossesDefeated set to {value}. Next sector's loot table will reshape on entry.");
     }
 }
@@ -112,12 +112,12 @@ internal class LootDumpCommand : PublicCommand
             if (kv.Value.Count == 0) continue;
 
             int total = kv.Value.Count;
-            var tierCounts = new Dictionary<RelicTier, int>();
+            var tierCounts = new Dictionary<Loot.RelicTier, int>();
             int nonRelic = 0;
             foreach (var itemRef in kv.Value)
             {
                 var name = itemRef?.Filename;
-                if (!string.IsNullOrEmpty(name) && RelicTierData.TryGet(name, out var entry))
+                if (!string.IsNullOrEmpty(name) && Loot.RelicTierData.TryGet(name, out var entry))
                 {
                     tierCounts.TryGetValue(entry.Tier, out int c);
                     tierCounts[entry.Tier] = c + 1;
@@ -126,7 +126,7 @@ internal class LootDumpCommand : PublicCommand
             }
 
             var parts = new List<string> { $"total={total}" };
-            foreach (RelicTier t in System.Enum.GetValues(typeof(RelicTier)))
+            foreach (Loot.RelicTier t in System.Enum.GetValues(typeof(Loot.RelicTier)))
                 if (tierCounts.TryGetValue(t, out int c)) parts.Add($"{t}={c}");
             if (nonRelic > 0) parts.Add($"non-relic={nonRelic}");
 

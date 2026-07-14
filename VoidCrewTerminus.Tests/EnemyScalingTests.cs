@@ -1,4 +1,4 @@
-using VoidCrewTerminus.EnemyScaling;
+using VoidCrewTerminus.Escalation;
 using Xunit;
 
 namespace VoidCrewTerminus.Tests;

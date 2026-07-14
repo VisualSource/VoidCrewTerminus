@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace VoidCrewTerminus.Forge;
+namespace VoidCrewTerminus.Escalation;
 
 // Phase 6 — Sector Escalation loot half. Reshapes relic entries in the sector's
 // vanilla loot pool so early sectors flood Common relics and later sectors admit
@@ -75,15 +75,15 @@ public static class SectorEscalation
 
         // Optimisation and correctness: at max scalar nothing is ever downgraded,
         // so skip the walk (and skip triggering any RelicTierData lookups) entirely.
-        if (maxAllowed == RelicTier.Legendary) return;
+        if (maxAllowed == Loot.RelicTier.Legendary) return;
 
         // Cache tier per entry so we don't hit RelicTierData twice per relic.
         // Null = non-relic (name not in the tier data map).
-        var tiers = new RelicTier?[entries.Count];
+        var tiers = new Loot.RelicTier?[entries.Count];
         for (int i = 0; i < entries.Count; i++)
         {
             var name = getName(entries[i]);
-            if (!string.IsNullOrEmpty(name) && RelicTierData.TryGet(name, out var entry))
+            if (!string.IsNullOrEmpty(name) && Loot.RelicTierData.TryGet(name, out var entry))
                 tiers[i] = entry.Tier;
         }
 
@@ -113,26 +113,26 @@ public static class SectorEscalation
         }
     }
 
-    public static RelicTier MaxAllowedTier(int scalar, int bossesDefeated, int rareUnlockScalar, int legendaryUnlockScalar)
+    public static Loot.RelicTier MaxAllowedTier(int scalar, int bossesDefeated, int rareUnlockScalar, int legendaryUnlockScalar)
     {
         var fromScalar = TierFromScalar(scalar, rareUnlockScalar, legendaryUnlockScalar);
         var fromBosses = TierFromBossCount(bossesDefeated);
         return fromScalar > fromBosses ? fromScalar : fromBosses;
     }
 
-    private static RelicTier TierFromScalar(int scalar, int rareUnlockScalar, int legendaryUnlockScalar)
+    private static Loot.RelicTier TierFromScalar(int scalar, int rareUnlockScalar, int legendaryUnlockScalar)
     {
-        if (scalar < rareUnlockScalar) return RelicTier.Common;
-        if (scalar < legendaryUnlockScalar) return RelicTier.Rare;
-        return RelicTier.Legendary;
+        if (scalar < rareUnlockScalar) return Loot.RelicTier.Common;
+        if (scalar < legendaryUnlockScalar) return Loot.RelicTier.Rare;
+        return Loot.RelicTier.Legendary;
     }
 
     // First boss unlocks Rare; second boss unlocks Legendary. Third+ bosses have
     // no further tier to unlock (Legendary is the ceiling).
-    private static RelicTier TierFromBossCount(int bossesDefeated)
+    private static Loot.RelicTier TierFromBossCount(int bossesDefeated)
     {
-        if (bossesDefeated <= 0) return RelicTier.Common;
-        if (bossesDefeated == 1) return RelicTier.Rare;
-        return RelicTier.Legendary;
+        if (bossesDefeated <= 0) return Loot.RelicTier.Common;
+        if (bossesDefeated == 1) return Loot.RelicTier.Rare;
+        return Loot.RelicTier.Legendary;
     }
 }

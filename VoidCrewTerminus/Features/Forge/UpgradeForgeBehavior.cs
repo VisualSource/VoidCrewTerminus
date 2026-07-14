@@ -226,9 +226,9 @@ public class UpgradeForgeBehavior : MonoBehaviour
         if (_moduleBox == null) return CommitOutcome.Failure(CommitStatus.NoModule);
         if (_moduleBox.photonView == null) return CommitOutcome.Failure(CommitStatus.MissingViewId);
 
-        var relicTiers = new RelicTier[_relics.Count];
+        var relicTiers = new Loot.RelicTier[_relics.Count];
         for (int i = 0; i < _relics.Count; i++)
-            relicTiers[i] = _relics[i] != null ? RelicTierData.Get(_relics[i].name).Tier : RelicTier.Common;
+            relicTiers[i] = _relics[i] != null ? Loot.RelicTierData.Get(_relics[i].name).Tier : Loot.RelicTier.Common;
 
         var category = PerkPool.CategoryOf(_moduleBox.moduleRef?.Asset as CellModule);
         int viewId = _moduleBox.photonView.ViewID;
@@ -683,13 +683,13 @@ public class UpgradeForgeBehavior : MonoBehaviour
         if (go == null) return false;
 
         var carryable = go.GetComponent<CarryableObject>();
-        var relicTag = CsTagRegistry.Relic;
+        var relicTag = Utils.CsTagRegistry.Relic;
         if (carryable != null && relicTag != null && carryable.CsTags != null &&
             System.Array.IndexOf(carryable.CsTags, relicTag) >= 0)
             return true;
 
-        if (RelicTierData.TryGet(go.name, out _)) return true;
-        var normalized = RelicTierData.NormalizeName(go.name);
+        if (Loot.RelicTierData.TryGet(go.name, out _)) return true;
+        var normalized = Loot.RelicTierData.NormalizeName(go.name);
         return !string.IsNullOrEmpty(normalized) &&
                normalized.StartsWith("Relic_", System.StringComparison.Ordinal);
     }

@@ -52,7 +52,7 @@ namespace VoidCrewTerminus
             {
                 VoidCrewTerminus.Forge.ForgeStateStore.ClearAll();
                 VoidCrewTerminus.Forge.ForgeMeterController.ResetForRun();
-                VoidCrewTerminus.Forge.SectorEscalation.ResetForRun();
+                VoidCrewTerminus.Escalation.SectorEscalation.ResetForRun();
                 Patches.BossDefeatHook.OnSessionStart();
             };
             VoidManager.Events.Instance.HostStartSession += _onHostStartSession;

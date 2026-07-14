@@ -97,7 +97,7 @@ internal class ForgeStatusCommand : PublicCommand
         var levelDesc = box == null ? "—" : $"L{forge.CurrentBoxLevel} → projected L{forge.ProjectedTargetLevel}";
         Messaging.Notification($"[Forge] socket: {boxDesc}  |  {levelDesc}");
         Messaging.Notification($"[Forge] relics: {forge.RelicCount}/{UpgradeForgeBehavior.Capacity} " +
-                               $"({string.Join(", ", forge.Relics.Select(r => r == null ? "(null)" : RelicTierData.NormalizeName(r.name)))})");
+                               $"({string.Join(", ", forge.Relics.Select(r => r == null ? "(null)" : Loot.RelicTierData.NormalizeName(r.name)))})");
     }
 }
 

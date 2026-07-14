@@ -98,7 +98,7 @@ internal class PerkOddsCommand : PublicCommand
         if (!TerminusConfig.EnableDevMode.Value) return;
 
         var parts = (arguments ?? "").Trim().Split(' ', System.StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length < 1 || !System.Enum.TryParse<RelicTier>(parts[0], true, out var tier))
+        if (parts.Length < 1 || !System.Enum.TryParse<Loot.RelicTier>(parts[0], true, out var tier))
         {
             Messaging.Notification("Usage: !perkodds <common|rare|legendary> [rolls]");
             return;

@@ -1,5 +1,6 @@
 using System;
 using VoidCrewTerminus.Forge;
+using VoidCrewTerminus.Loot;
 using Xunit;
 
 namespace VoidCrewTerminus.Tests;

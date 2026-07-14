@@ -1,7 +1,7 @@
 using Gameplay.Tags;
 using UnityEngine;
 
-namespace VoidCrewTerminus.Forge;
+namespace VoidCrewTerminus.Utils;
 
 // Lazily resolves built-in CsTag ScriptableObjects from the game's CsTagTable and
 // exposes the mod-authored Forge_Upgraded tag created at runtime.

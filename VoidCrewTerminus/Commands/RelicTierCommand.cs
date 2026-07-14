@@ -36,15 +36,15 @@ internal class RelicTierCommand : PublicCommand
         }
 
         var name = arguments.Trim();
-        var known = RelicTierData.TryGet(name, out var entry);
-        var normalized = RelicTierData.NormalizeName(name);
+        var known = Loot.RelicTierData.TryGet(name, out var entry);
+        var normalized = Loot.RelicTierData.NormalizeName(name);
         var status = known ? "" : " (unknown — defaulting to Common)";
         Messaging.Notification($"{normalized}: {entry}{status}");
     }
 
     private static void ListAll()
     {
-        var groups = RelicTierData.All
+        var groups = Loot.RelicTierData.All
             .GroupBy(kv => kv.Value.Tier)
             .OrderBy(g => (int)g.Key);
 
