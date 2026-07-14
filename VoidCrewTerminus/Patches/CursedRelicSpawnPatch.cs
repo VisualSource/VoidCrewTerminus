@@ -79,8 +79,19 @@ internal static class CursedRelicSpawnPatch
             float chance = CursedRelicRoll.ChanceFor(entry, scalar, active, baseChance, scalarBonus);
             if (CursedRelicRoll.ShouldBeCursed(chance, Random.value))
             {
-                CursedRelicMarker.MarkCursed(go);
-                BepinPlugin.Log?.LogDebug($"[Escalation] Relic {name} spawned CURSED (chance {chance:P1})");
+                // Pick the specific burden type NOW, at spawn — the curse is
+                // baked into the relic. Uniform pick from the relic's
+                // BurdenAffinity list. If empty, no burden can attach — skip
+                // marking cursed at all (defensive; RelicTierEntry defaults to
+                // [RandomShutoff] so this branch is rare).
+                var affinity = entry.BurdenAffinity;
+                if (affinity == null || affinity.Count == 0) continue;
+                int idx = affinity.Count == 1 ? 0 : Random.Range(0, affinity.Count);
+                var burden = affinity[idx];
+
+                CursedRelicMarker.MarkCursed(go, burden);
+                BepinPlugin.Log?.LogDebug(
+                    $"[Escalation] Relic {name} spawned CURSED with {burden} (chance {chance:P1})");
             }
 
             // Idempotency marker so we don't re-roll on subsequent scans.

@@ -228,12 +228,12 @@ public class UpgradeForgeBehavior : MonoBehaviour
 
         var relicTiers = new Loot.RelicTier[_relics.Count];
         var relicNames = new string[_relics.Count];
-        var relicIsCursed = new bool[_relics.Count];
+        var relicCursedBurden = new BurdenType[_relics.Count];
         for (int i = 0; i < _relics.Count; i++)
         {
             relicTiers[i] = _relics[i] != null ? Loot.RelicTierData.Get(_relics[i].name).Tier : Loot.RelicTier.Common;
             relicNames[i] = _relics[i] != null ? _relics[i].name : null;
-            relicIsCursed[i] = _relics[i] != null && Loot.CursedRelicMarker.IsCursed(_relics[i]);
+            relicCursedBurden[i] = _relics[i] != null ? Loot.CursedRelicMarker.GetBurden(_relics[i]) : BurdenType.None;
         }
 
         var category = PerkPool.CategoryOf(_moduleBox.moduleRef?.Asset as CellModule);
@@ -241,7 +241,7 @@ public class UpgradeForgeBehavior : MonoBehaviour
         var current = ForgeStateStore.TryPeekSnapshot(viewId, out var s) ? s : ForgeSnapshot.Empty;
         int currentLevel = CurrentBoxLevel;
 
-        var request = new CommitRequest(currentLevel, relicTiers, relicNames, relicIsCursed, category, current.PerkSlots);
+        var request = new CommitRequest(currentLevel, relicTiers, relicNames, relicCursedBurden, category, current.PerkSlots);
         var outcome = UpgradeCommitCalculator.Calculate(request);
         if (outcome.Status != CommitStatus.Ok) return outcome;
 

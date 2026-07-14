@@ -73,7 +73,7 @@ internal static class TerminusConfig
     // Maintenance Burden (Phase 7-C) — when a cursed relic is consumed in a
     // successful commit, an independent roll decides whether the module also
     // takes on a burden. Perk roll is unaffected.
-    [BindConfig("forge", 0.50f, "Chance a successful commit consuming ≥1 cursed relic also attaches a Maintenance Burden to the target module")]
+    [BindConfig("forge", 0.75f, "Chance a successful commit consuming ≥1 cursed relic attaches the relic's baked Maintenance Burden to the target module — 'high chance' per design intent")]
     internal static ConfigEntry<float> BurdenApplicationChance;
 
     [BindConfig("forge", 2f, "RandomShutoff burden — minimum seconds the module stays powered off during a shutoff event")]

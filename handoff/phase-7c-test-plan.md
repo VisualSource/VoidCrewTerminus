@@ -38,9 +38,23 @@ For scaffolding + spawn-time cursed roll, see [phase-7b-test-plan.md](phase-7b-t
 | (also useful) `!perks`, `!cursedstatus`, `!difficulty`, `!setbosses` | Context from other phases |
 
 **Automated coverage** (in `dotnet test`)
-- Calculator burden roll: cursed + chance passes → `RandomShutoff`; cursed + chance fails → `None`; no cursed relics → `None`; leftover cursed relics ignored.
+- Calculator burden roll: cursed + chance passes → applies baked burden; cursed + chance fails → `None`; no cursed relics → `None`; leftover cursed relics ignored; FIFO tie-break when multiple cursed relics consumed.
 - `ForgeSnapshot`: `Burdens` starts empty; `WithBurdenAdded` idempotent per-type; different types stack; `WithLevel`/`WithPerk` preserve burdens; `Create` dedups and drops `None`.
-- Not covered by automation: the actual `RandomShutoffBehavior` MonoBehaviour cycle, `CellModule.TurnOff/On` integration, tag stamping via `BuildMods` (all need game runtime). All verified by playtest below.
+- Not covered by automation: the actual `RandomShutoffBehavior` MonoBehaviour cycle, `CellModule.TurnOff/On` integration, tag stamping via `BuildMods`, spawn-time burden bake (all need game runtime). All verified by playtest below.
+
+**Two-stage curse flow (Phase 7-C shipped design)**
+
+1. **Spawn time (host, in-world).** When a relic spawns, `CursedRelicSpawnPatch` rolls cursed status per `CursedRelicRoll.ChanceFor(entry, scalar, ...)`. If the roll passes, the specific burden type is ALSO picked at that moment — uniformly from the relic's `RelicTierEntry.BurdenAffinity`. Both flag AND burden type are stamped onto the relic via `CursedRelicMarker.MarkCursed(go, burden)`. Immutable for that relic instance.
+2. **Commit time (calculator).** For each consumed relic, read the baked burden from its marker (`None` if not cursed). Walk FIFO; the first consumed relic with a non-`None` burden wins. If the application-chance roll (`BurdenApplicationChance = 0.75` default) passes, that specific burden gets applied to the module.
+
+Today all 29 relic entries use the default affinity `[RandomShutoff]` — the only shipped burden type. So every cursed relic bakes `RandomShutoff` at spawn. When 7-D and future burden types (`HeatTick`, `ManualReset`) land, per-relic affinity overrides will encode lore fit:
+| Relic lore | Suggested affinity (when authored) |
+|---|---|
+| Breakers (`_02`, `_06`, `_09`, `_19`, `_24`) | `[RandomShutoff]` |
+| Defects (`_11_A`, `_11_B`) | `[ManualReset]` |
+| Temperature / Biomass (`_18`, `_15`) | `[HeatTick]` |
+| Vulnerability (`_03`, `_16`) | `[RandomShutoff, HeatTick]` (uniform pick at spawn) |
+| Generic Common | `[RandomShutoff]` (default) |
 
 ## Test scenarios
 
@@ -100,6 +114,22 @@ For scaffolding + spawn-time cursed roll, see [phase-7b-test-plan.md](phase-7b-t
 4. Now commit again with the leftover Legendary alone. Now the cursed relic IS consumed. `!listburdens` — module IS burdened.
 
 **Pass criteria:** Only consumed relics count. Consumption order = FIFO (same rule as Phase 7-A signature order).
+
+---
+
+### T4b — Burden type respects per-relic affinity (forward-looking)
+
+**Goal:** Prep verification for when more burden types exist. Today all cursed relics have `BurdenAffinity = [RandomShutoff]`, so this test currently only asserts the default. When 7-D or later ships a second burden type, this test should be extended.
+
+**Steps (today):**
+1. Force any cursed relic. Commit. If the burden roll passes, verify `!listburdens` shows `RandomShutoff` (the only shipped option).
+
+**Steps (future, once a second burden type ships):**
+1. Author a specific relic (e.g., `Relic_18_PowerForBiomassTemperature`) with `BurdenAffinity = [HeatTick]`.
+2. Force that relic cursed. Commit. Verify `!listburdens` shows `HeatTick`, never `RandomShutoff`.
+3. Force a relic with `BurdenAffinity = [RandomShutoff, HeatTick]`. Commit repeatedly. Verify both types appear with roughly equal frequency across many commits.
+
+**Pass criteria (today):** All cursed commits that fire a burden produce `RandomShutoff`. Data-model prep is invisible until 7-D. **Pass criteria (future):** Affinity mapping steers the burden pick as authored.
 
 ---
 
@@ -243,10 +273,11 @@ Attach the BepInEx log — burden events log at info-level: `[Forge] Committed L
 - `VoidCrewTerminus/Features/Forge/BurdenType.cs` — enum
 - `VoidCrewTerminus/Features/Forge/ForgeSnapshot.cs` — `Burdens` field + `WithBurdenAdded` builder
 - `VoidCrewTerminus/Features/Forge/ForgeModuleState.cs` — snapshot round-trip for burdens + burden tag markers + MonoBehaviour attach in `SyncBurdenBehaviors`
-- `VoidCrewTerminus/Features/Forge/UpgradeCommitCalculator.cs` — `AppliedBurden` field + `RollBurden` logic
+- `VoidCrewTerminus/Features/Forge/UpgradeCommitCalculator.cs` — `AppliedBurden` field + `RollBurden` logic (gathers affinity union, uniform pick)
 - `VoidCrewTerminus/Features/Forge/UpgradeForgeBehavior.cs` — `TryCommit` applies burden to snapshot
 - `VoidCrewTerminus/Features/Forge/Burdens/MaintenanceBurdenBehavior.cs` — base MonoBehaviour
 - `VoidCrewTerminus/Features/Forge/Burdens/RandomShutoffBehavior.cs` — the actual shutoff cycle
+- `VoidCrewTerminus/Features/Loot/RelicTierData.cs` — `RelicTierEntry.BurdenAffinity: IReadOnlyList<BurdenType>` with `[RandomShutoff]` default
 - `VoidCrewTerminus/Utils/CsTagRegistry.cs` — `BurdenRandomShutoff` tag + `BurdenTagFor` helper
 
 **Commands**

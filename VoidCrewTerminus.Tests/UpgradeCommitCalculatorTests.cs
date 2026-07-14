@@ -18,10 +18,10 @@ public class UpgradeCommitCalculatorTests
         ForgeCategory category = ForgeCategory.Weapon,
         string[] perkSlots = null,
         string[] relicNames = null,
-        bool[] relicIsCursed = null) =>
+        BurdenType[] relicCursedBurden = null) =>
         new(currentLevel, relicTiers,
             relicNames ?? new string[relicTiers.Length],
-            relicIsCursed ?? new bool[relicTiers.Length],
+            relicCursedBurden ?? new BurdenType[relicTiers.Length],
             category, perkSlots ?? EmptySlots);
 
     // Rig: force the perk-roll gate to always fail so tests that only care about
@@ -286,7 +286,7 @@ public class UpgradeCommitCalculatorTests
     {
         var outcome = UpgradeCommitCalculator.Calculate(
             Request(3, new[] { RelicTier.Common },
-                relicIsCursed: new[] { false }),
+                relicCursedBurden: new[] { BurdenType.None }),
             nextRandom: () => 1f);   // perk gate fails; burden roll never sees a cursed relic
 
         Assert.Equal(BurdenType.None, outcome.AppliedBurden);
@@ -300,23 +300,43 @@ public class UpgradeCommitCalculatorTests
 
         var outcome = UpgradeCommitCalculator.Calculate(
             Request(3, new[] { RelicTier.Common },
-                relicIsCursed: new[] { true }),
+                relicCursedBurden: new[] { BurdenType.RandomShutoff }),
             nextRandom: () => draws.Dequeue());
 
         Assert.Equal(BurdenType.None, outcome.AppliedBurden);
     }
 
     [Fact]
-    public void BurdenRoll_CursedRelic_ChancePasses_ReturnsRandomShutoff()
+    public void BurdenRoll_CursedRelic_ChancePasses_ReturnsBakedBurden()
     {
-        // Sequence: [1f perk gate=fails] then [0f burden roll = passes]
+        // Sequence: [1f perk gate=fails], [0f burden chance=passes]
+        // Baked burden is RandomShutoff — no pool pick needed, the specific
+        // burden is already baked into the relic at spawn time.
         var draws = new System.Collections.Generic.Queue<float>(new[] { 1f, 0f });
 
         var outcome = UpgradeCommitCalculator.Calculate(
             Request(3, new[] { RelicTier.Common },
-                relicIsCursed: new[] { true }),
+                relicCursedBurden: new[] { BurdenType.RandomShutoff }),
             nextRandom: () => draws.Dequeue());
 
+        Assert.Equal(BurdenType.RandomShutoff, outcome.AppliedBurden);
+    }
+
+    [Fact]
+    public void BurdenRoll_FIFO_FirstConsumedCursedRelicWins()
+    {
+        // Two cursed relics with different baked burdens. FIFO consumption
+        // means the first one's burden wins (matches signature FIFO tie-break).
+        // Only RandomShutoff shipped today so we test the mechanism by making
+        // one cursed and one not.
+        var draws = new System.Collections.Generic.Queue<float>(new[] { 1f, 0f });
+
+        var outcome = UpgradeCommitCalculator.Calculate(
+            Request(5, new[] { RelicTier.Common, RelicTier.Common },
+                relicCursedBurden: new[] { BurdenType.None, BurdenType.RandomShutoff }),
+            nextRandom: () => draws.Dequeue());
+
+        // Position 1 is cursed; FIFO scan finds it. Chance roll passes → burden applied.
         Assert.Equal(BurdenType.RandomShutoff, outcome.AppliedBurden);
     }
 
@@ -332,7 +352,7 @@ public class UpgradeCommitCalculatorTests
         // no consumed relic is cursed.
         var outcome = UpgradeCommitCalculator.Calculate(
             Request(3, new[] { RelicTier.Common, RelicTier.Common, RelicTier.Legendary },
-                relicIsCursed: new[] { false, false, true }),
+                relicCursedBurden: new[] { BurdenType.None, BurdenType.None, BurdenType.RandomShutoff }),
             nextRandom: () => 1f);
 
         Assert.Equal(2, outcome.RelicsConsumed);

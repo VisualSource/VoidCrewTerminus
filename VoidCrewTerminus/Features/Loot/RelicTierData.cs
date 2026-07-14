@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using VoidCrewTerminus.Forge;
 
 namespace VoidCrewTerminus.Loot;
 
@@ -15,11 +16,26 @@ public readonly struct RelicTierEntry
     // chance is clamped to [0, 1] after adding scalar-driven bonuses.
     public readonly float BaseCurseChanceModifier;
 
-    public RelicTierEntry(RelicTier tier, bool isCursed = false, float baseCurseChanceModifier = 0f)
+    // Which burden types this relic can inflict when it's cursed AND the burden
+    // roll passes (Phase 7-C). The calculator gathers affinities from every
+    // consumed cursed relic and picks uniformly from the union. Empty = this
+    // relic never causes any burden even if cursed and the roll passes.
+    //
+    // With only RandomShutoff shipped, the default [RandomShutoff] is the
+    // sensible fallback for all cursed relics — every cursed relic today
+    // manifests as random power drops. Later burden types (HeatTick,
+    // ManualReset) get authored per-relic based on lore fit (temperature /
+    // biomass relics → HeatTick, defects relics → ManualReset, etc.).
+    public readonly IReadOnlyList<BurdenType> BurdenAffinity;
+
+    private static readonly IReadOnlyList<BurdenType> _defaultAffinity = new[] { BurdenType.RandomShutoff };
+
+    public RelicTierEntry(RelicTier tier, bool isCursed = false, float baseCurseChanceModifier = 0f, IReadOnlyList<BurdenType> burdenAffinity = null)
     {
         Tier = tier;
         IsCursed = isCursed;
         BaseCurseChanceModifier = baseCurseChanceModifier;
+        BurdenAffinity = burdenAffinity ?? _defaultAffinity;
     }
 
     public override string ToString() => $"{Tier}{(IsCursed ? " (Cursed)" : "")}{(BaseCurseChanceModifier != 0f ? $" [curse+{BaseCurseChanceModifier:+0.00;-0.00}]" : "")}";

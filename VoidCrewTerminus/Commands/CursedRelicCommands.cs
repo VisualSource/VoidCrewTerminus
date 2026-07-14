@@ -49,11 +49,15 @@ internal class CursedStatusCommand : PublicCommand
         {
             var name = RelicTierData.NormalizeName(co.gameObject.name);
             RelicTierData.TryGet(name, out var entry);
-            bool cursed = CursedRelicMarker.IsCursed(co.gameObject);
+            var burden = CursedRelicMarker.GetBurden(co.gameObject);
+            bool cursed = burden != Forge.BurdenType.None;
             float chance = CursedRelicRoll.ChanceFor(entry, scalar, active, baseChance, scalarBonus);
+            string affinity = entry.BurdenAffinity != null && entry.BurdenAffinity.Count > 0
+                ? string.Join("/", entry.BurdenAffinity)
+                : "none";
             Messaging.Notification(
-                $"{name}: {entry.Tier}{(cursed ? " CURSED" : "")} — chance would be {chance:P1} " +
-                $"(base {baseChance:P0}, relic {entry.BaseCurseChanceModifier:+0.00;-0.00}, scalar +{scalar * scalarBonus:P1})");
+                $"{name}: {entry.Tier}{(cursed ? $" CURSED({burden})" : "")} — chance would be {chance:P1} " +
+                $"(base {baseChance:P0}, relic {entry.BaseCurseChanceModifier:+0.00;-0.00}, scalar +{scalar * scalarBonus:P1}); affinity: {affinity}");
         }
     }
 }
@@ -61,15 +65,21 @@ internal class CursedStatusCommand : PublicCommand
 internal class ForceCursedCommand : PublicCommand
 {
     public override string[] CommandAliases() => new[] { "forcecursed" };
-    public override string Description() => "[DevMode] Force the nearest relic cursed / non-cursed: !forcecursed <on|off>";
-    public override List<Argument> Arguments() => [new("%on_or_off")];
-    public override string[] UsageExamples() => ["!forcecursed on", "!forcecursed off"];
+    public override string Description() => "[DevMode] Force the nearest relic cursed with a specific burden type: !forcecursed <on|off> [burdenType]. Defaults to the relic's first affinity when omitted.";
+    public override List<Argument> Arguments() => [new("%on_or_off"), new("%burden_type?")];
+    public override string[] UsageExamples() => ["!forcecursed on", "!forcecursed on RandomShutoff", "!forcecursed off"];
 
     public override void Execute(string arguments, int sender)
     {
         if (!TerminusConfig.EnableDevMode.Value) return;
 
-        var arg = (arguments ?? "").Trim().ToLowerInvariant();
+        var parts = (arguments ?? "").Trim().Split(' ', System.StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 1)
+        {
+            Messaging.Notification("Usage: !forcecursed <on|off> [burdenType]");
+            return;
+        }
+        var arg = parts[0].ToLowerInvariant();
         bool? target = arg switch
         {
             "on" or "true" or "1" or "yes" => true,
@@ -78,8 +88,19 @@ internal class ForceCursedCommand : PublicCommand
         };
         if (target == null)
         {
-            Messaging.Notification("Usage: !forcecursed <on|off>");
+            Messaging.Notification("Usage: !forcecursed <on|off> [burdenType]");
             return;
+        }
+
+        Forge.BurdenType? explicitBurden = null;
+        if (target.Value && parts.Length >= 2)
+        {
+            if (!System.Enum.TryParse<Forge.BurdenType>(parts[1], ignoreCase: true, out var parsed) || parsed == Forge.BurdenType.None)
+            {
+                Messaging.Notification($"Unknown burden type '{parts[1]}'. Valid: RandomShutoff.");
+                return;
+            }
+            explicitBurden = parsed;
         }
 
         var player = LocalPlayer.Instance;
@@ -99,8 +120,17 @@ internal class ForceCursedCommand : PublicCommand
 
         if (target.Value)
         {
-            CursedRelicMarker.MarkCursed(nearest.gameObject);
-            Messaging.Notification($"{nearest.gameObject.name} is now CURSED.");
+            var name = RelicTierData.NormalizeName(nearest.gameObject.name);
+            RelicTierData.TryGet(name, out var entry);
+            Forge.BurdenType chosen = explicitBurden
+                ?? (entry.BurdenAffinity != null && entry.BurdenAffinity.Count > 0
+                    ? entry.BurdenAffinity[0]
+                    : Forge.BurdenType.RandomShutoff);
+
+            // Uncurse first so re-cursing with a different burden type works.
+            CursedRelicMarker.Uncurse(nearest.gameObject);
+            CursedRelicMarker.MarkCursed(nearest.gameObject, chosen);
+            Messaging.Notification($"{nearest.gameObject.name} is now CURSED with {chosen}.");
         }
         else
         {

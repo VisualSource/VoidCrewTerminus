@@ -19,24 +19,24 @@ public enum CommitStatus
 public readonly struct CommitRequest
 {
     public int CurrentLevel { get; }
-    public IReadOnlyList<Loot.RelicTier> RelicTiers { get; }   // FIFO — position 0 is consumed first
-    public IReadOnlyList<string> RelicNames { get; }           // FIFO, parallel to RelicTiers — used for signature lookup
-    public IReadOnlyList<bool> RelicIsCursed { get; }          // FIFO, parallel to RelicTiers — Phase 7-B; consumed by Phase 7-C
+    public IReadOnlyList<Loot.RelicTier> RelicTiers { get; }        // FIFO — position 0 is consumed first
+    public IReadOnlyList<string> RelicNames { get; }                // FIFO, parallel to RelicTiers — used for signature lookup
+    public IReadOnlyList<BurdenType> RelicCursedBurden { get; }     // FIFO, parallel to RelicTiers — Phase 7-C. None = not cursed. Non-None = the burden baked at spawn.
     public ForgeCategory Category { get; }
-    public IReadOnlyList<string> PerkSlots { get; }            // current slot contents; null/empty = free
+    public IReadOnlyList<string> PerkSlots { get; }                 // current slot contents; null/empty = free
 
     public CommitRequest(
         int currentLevel,
         IReadOnlyList<Loot.RelicTier> relicTiers,
         IReadOnlyList<string> relicNames,
-        IReadOnlyList<bool> relicIsCursed,
+        IReadOnlyList<BurdenType> relicCursedBurden,
         ForgeCategory category,
         IReadOnlyList<string> perkSlots)
     {
         CurrentLevel = currentLevel;
         RelicTiers = relicTiers ?? Array.Empty<Loot.RelicTier>();
         RelicNames = relicNames ?? Array.Empty<string>();
-        RelicIsCursed = relicIsCursed ?? Array.Empty<bool>();
+        RelicCursedBurden = relicCursedBurden ?? Array.Empty<BurdenType>();
         Category = category;
         PerkSlots = perkSlots ?? Array.Empty<string>();
     }
@@ -137,17 +137,25 @@ public static class UpgradeCommitCalculator
 
     private static BurdenType RollBurden(int relicsConsumed, CommitRequest request, Func<float> nextRandom)
     {
-        int scanUpTo = Math.Min(relicsConsumed, request.RelicIsCursed.Count);
-        bool anyCursed = false;
+        // Curse identity is fixed at spawn — each cursed relic already carries
+        // a specific burden type (baked from its BurdenAffinity when the spawn
+        // roll passed). Walk consumed relics in FIFO order and grab the first
+        // cursed one's baked burden. Consistent with signature FIFO tie-break.
+        int scanUpTo = Math.Min(relicsConsumed, request.RelicCursedBurden.Count);
+        BurdenType baked = BurdenType.None;
         for (int i = 0; i < scanUpTo; i++)
-            if (request.RelicIsCursed[i]) { anyCursed = true; break; }
-        if (!anyCursed) return BurdenType.None;
+        {
+            if (request.RelicCursedBurden[i] != BurdenType.None)
+            {
+                baked = request.RelicCursedBurden[i];
+                break;
+            }
+        }
+        if (baked == BurdenType.None) return BurdenType.None;
 
-        float chance = TerminusConfig.BurdenApplicationChance?.Value ?? 0.5f;
+        float chance = TerminusConfig.BurdenApplicationChance?.Value ?? 0.75f;
         if (nextRandom() >= chance) return BurdenType.None;
-
-        // Only one burden type in Phase 7-C. When more land, weighted-pick here.
-        return BurdenType.RandomShutoff;
+        return baked;
     }
 
     private static CommitOutcome WithBurden(CommitOutcome perkOutcome, BurdenType burden) =>
