@@ -505,13 +505,62 @@
 </p>
 
 <h2 id="escalation">Sector Escalation</h2>
-<p>Each successful sector jump increments a <code>DifficultyScalar</code> on the <code>ForgeMeterController</code>:</p>
+<p>Escalation is driven by two independent counters:</p>
 <ul class="bullets">
-  <li><strong>Enemy stats</strong> scale (HP, damage, optionally density) via Harmony postfixes on enemy spawn/init paths.</li>
-  <li><strong>Relic drop table</strong> shifts: at scalar 0, only Common; at scalar 3+, Common/Rare mix; at scalar 6+, Rare/Legendary mix.</li>
-  <li><strong>Forge Meter</strong> gets its +20 contribution per jump (as above).</li>
+  <li><code>DifficultyScalar</code> (<code>int</code>, on <code>ForgeMeterController</code>) — accumulates from successful sector jumps and boss defeats.</li>
+  <li><code>BossesDefeated</code> (<code>int</code>, on <code>SectorEscalation</code>) — increments on each Endless-quest boss objective completion.</li>
 </ul>
-<p>Effectively, pushing deeper makes the run harder <em>and</em> shifts loot toward higher tiers — tightening the risk-reward loop.</p>
+
+<div class="callout warn">
+  <span class="label">Activation gate</span>
+  <strong>No escalation applies until <code>BossesDefeated ≥ EscalationBossActivationThreshold</code> (default 2).</strong>
+  The player must clear the configured number of boss objectives before the mod starts turning the pressure up.
+  Boss defeats before the threshold accumulate on <code>BossesDefeated</code> silently (no notification, no scalar bump).
+  The boss defeat that <em>crosses</em> the threshold fires an "Escalation is now active" notification and flips the gate on;
+  it does not itself bump <code>DifficultyScalar</code>.
+  Subsequent sector jumps and boss defeats <em>do</em> bump the scalar, starting the ramp from zero and building up gradually.
+</div>
+
+<p>Once escalation is active, four systems apply:</p>
+<ul class="bullets">
+  <li><strong>Loot tier biasing</strong> (host-authoritative). At sector setup, a Harmony postfix on
+    <code>LootManager.SetupCurrentSectorLootLists</code> reshapes each per-rarity relic entry list. Downgrade-only
+    <em>Z-shape</em> rule: relics above the current tier ceiling are swapped for a seeded same-tier pick from the
+    same list; relics at or below the ceiling pass through untouched; non-relic entries are never modified. Tier
+    ceiling is the greater of the scalar-based ceiling (Common at scalar &lt; 3, Rare at 3–5, Legendary at ≥ 6) and
+    the boss-based ceiling (Rare after 1 boss, Legendary after 2). Deterministic seed
+    <code>quest.Seed + sector.Id</code> matches the vanilla shuffle so all clients converge.</li>
+  <li><strong>Enemy density</strong> (host-authoritative, primary axis at +0.20 per scalar). Four Harmony
+    prefixes on <code>AIDirector.Set/AddSpawner{Target,MaxTarget}Intensity</code> rewrite the incoming <code>int</code>
+    via <code>Ceil(n × (1 + scalar × rate))</code>, clamped to <code>Max(requested, scaled)</code> so scenarios that
+    <em>reduce</em> intensity (negative deltas) pass through unamplified. Only the general <code>AIDirector</code>
+    spawn path (Endless / Pilgrimage) is scaled; <code>WavesSpawnManager</code> (Survivor mode) is untouched.</li>
+  <li><strong>Enemy HP</strong> (host + client stat sync, minor at +0.05 per scalar). Harmony postfix on
+    <code>DestroyableComponent.InitializeHealth</code> attaches a <code>StatMod(MaxHitPoints, AdditiveMultiplier,
+    +scalar × rate)</code> to the component's <code>_stats</code> collection via a shared <code>EnemyScalingSource</code>
+    <code>IModifierSource</code> singleton. Applied only to Hollows (faction id 3) and Remnant (id 2); wildlife and
+    neutrals are ignored.</li>
+  <li><strong>Enemy damage</strong> (receiver-side, minor at +0.05 per scalar). Harmony postfix on
+    <code>DestroyableComponent.CalculateRawDamage</code> multiplies the result by <code>(1 + scalar × rate)</code>
+    only when the attacker is enemy-faction and the receiver is player-faction. One hook captures every enemy
+    damage source without walking enemy weapon child stat collections.</li>
+</ul>
+
+<p>Density is the <em>primary</em> escalation axis — deeper sectors feel different because there are more enemies
+to track. HP and damage are minor boosts that chip at the numbers as the run progresses; combined with density,
+they produce meaningful pressure without spiking the difficulty curve.</p>
+
+<p>Pushing deeper also shifts loot toward higher tiers (via the boss and scalar ceilings above), tightening the
+risk-reward loop: deep sectors reward you with better relics AND punish you with harder combat, both climbing
+in lockstep.</p>
+
+<div class="callout">
+  <span class="label">Boss vs Forge presence</span>
+  The <em>Forge Meter</em> (Forge Level progression) is gated on <code>UpgradeForgeBehavior</code> being installed
+  on the ship — no Forge, no meter fill. The <em>DifficultyScalar</em> / <em>BossesDefeated</em> counters are
+  <strong>not</strong> gated on Forge presence; they accumulate in the background whenever escalation is active
+  so that installing a Forge mid-run picks up the current run's intensity level immediately.
+</div>
 
 <h2 id="cursed">Cursed Relics &amp; Maintenance Burden</h2>
 <p>
@@ -545,19 +594,26 @@
   <h4>New files</h4>
   <table class="data">
     <tr><th>File</th><th>Responsibility</th></tr>
-    <tr><td class="k">Patches/SectorJumpHook.cs</td><td>Subscribe to <code>GameSessionSectorManager.OnSectorEntered</code>; drive meter + escalation.</td></tr>
+    <tr><td class="k">Patches/ForgeSectorHook.cs</td><td>Subscribe to <code>GameSessionSectorManager.OnSectorExited</code>; award meter + tick <code>DifficultyScalar</code> (gated on <code>IsScalingActive</code>) per successful jump.</td></tr>
+    <tr><td class="k">Patches/BossDefeatHook.cs</td><td>Subscribe to <code>ModelEventBus.OnObjectiveStateChanged</code>; increment <code>BossesDefeated</code> on Endless-quest boss completion, flip the activation gate at threshold.</td></tr>
     <tr><td class="k">Patches/ForgeInteractionPatch.cs</td><td>Patches binding in-world Forge interactions (relic insert, alloy terminal) to controller logic.</td></tr>
+    <tr><td class="k">Patches/LootTableEscalationPatch.cs</td><td>Harmony postfix on <code>LootManager.SetupCurrentSectorLootLists</code>; reshapes per-rarity relic lists via <code>SectorEscalation.DowngradeRelics</code>.</td></tr>
+    <tr><td class="k">Patches/EnemyDensityPatch.cs</td><td>Four Harmony prefixes on <code>AIDirector.Set/AddSpawner{Target,MaxTarget}Intensity</code>; scale intensity via <code>EnemyScalingHelpers.ScaleIntensity</code>.</td></tr>
+    <tr><td class="k">Patches/EnemyStatScalingPatch.cs</td><td>HP postfix on <code>DestroyableComponent.InitializeHealth</code> (attaches StatMod for enemy factions) + damage postfix on <code>CalculateRawDamage</code> (multiplies enemy→player damage).</td></tr>
     <tr><td class="k">Forge/ForgeModuleState.cs</td><td>Per-<code>CellModule</code> overlay record (level, slots, burden, accumulated mods). Implements <code>IModifierSource</code> and pushes <code>StatMod</code> bundles into <code>module.Stats</code> directly — no per-getter Harmony patches needed. See <a href="#refinements">Refinements</a>.</td></tr>
-    <tr><td class="k">Forge/ForgeOverlayTable.cs</td><td>Static <code>ConditionalWeakTable&lt;CellModule, ForgeModuleState&gt;</code>; per-run reset on session start.</td></tr>
+    <tr><td class="k">Forge/ForgeStateStore.cs</td><td>Static store: <code>ConditionalWeakTable&lt;CellModule, ForgeModuleState&gt;</code> + snapshot bridge for deconstruct→reconstruct; per-run reset on session start. (Renamed from <code>ForgeOverlayTable</code> as part of the Candidate 2 seam-sealing refactor.)</td></tr>
+    <tr><td class="k">Forge/ForgeSnapshot.cs</td><td>Immutable snapshot value carried across the deconstruct→reconstruct bridge. Single canonical shape; <code>ForgeModuleState.Snapshot()</code> / <code>ApplySnapshot()</code> are the only conversion points.</td></tr>
     <tr><td class="k">Forge/CsTagRegistry.cs</td><td>Resolves built-in <code>CsTag</code> ScriptableObjects (<code>Module_Category_Weapon</code>, etc.) by name + exposes the mod's own <code>Forge_Upgraded</code> tag. See <a href="#refinements">Refinements</a>.</td></tr>
-    <tr><td class="k">Forge/ForgeMeterController.cs</td><td>Authoritative singleton: Forge level, meter, difficulty. Host-side rolls.</td></tr>
-    <tr><td class="k">Forge/RelicTierData.cs</td><td>Maps each of ~25 vanilla relics to its Tier + IsCursed flag.</td></tr>
-    <tr><td class="k">Forge/PerkPool.cs</td><td>Category pools + signature perk overrides; <code>RollPerk(...)</code> entry point.</td></tr>
-    <tr><td class="k">Forge/MaintenanceBurden.cs</td><td>Operational quirks (random shutoffs, etc.) attached to burdened modules.</td></tr>
-    <tr><td class="k">Forge/SectorEscalation.cs</td><td>Enemy stat + loot tier scaling per <code>DifficultyScalar</code>.</td></tr>
-    <tr><td class="k">Net/PerkRollRequestMessage.cs</td><td>Client → host: "I'm committing this upgrade."</td></tr>
-    <tr><td class="k">Net/PerkRollMessage.cs</td><td>Host → all (incl. self): authoritative roll result + animation seed.</td></tr>
-    <tr><td class="k">Net/ForgeStateSyncMessage.cs</td><td>Host → late joiner: full current overlay state.</td></tr>
+    <tr><td class="k">Forge/ForgeMeterController.cs</td><td>Static Forge Level / Meter / <code>DifficultyScalar</code> singleton. Host-side spend, per-run reset.</td></tr>
+    <tr><td class="k">Forge/RelicTierData.cs</td><td>Maps each of ~29 vanilla relics to its Tier + IsCursed flag.</td></tr>
+    <tr><td class="k">Forge/PerkPool.cs</td><td>Category pools + slot gating; <code>RollChance</code> / <code>TargetSlot</code> / <code>PoolFor</code>. Perk roll math lives in <code>UpgradeCommitCalculator</code>.</td></tr>
+    <tr><td class="k">Forge/UpgradeCommitCalculator.cs</td><td>Pure commit algorithm — <code>CommitRequest → CommitOutcome</code>. Unity-free, RNG injected via <code>Func&lt;float&gt;</code> for test seeding. (Extracted from <code>UpgradeForgeBehavior.TryCommit</code> as Candidate 1.)</td></tr>
+    <tr><td class="k">Forge/MaintenanceBurden.cs</td><td>Operational quirks (random shutoffs, etc.) attached to burdened modules. <em>(Phase 7.)</em></td></tr>
+    <tr><td class="k">Forge/SectorEscalation.cs</td><td>Owns <code>BossesDefeated</code> + <code>IsScalingActive</code> gate; hosts <code>MaxAllowedTier</code> and the pure <code>DowngradeRelics&lt;T&gt;</code> loot-reshape algorithm.</td></tr>
+    <tr><td class="k">EnemyScaling/EnemyScaling.cs</td><td>Shared enemy-scaling primitives (kept out of <code>Forge/</code> because the Leech encounter and future scalar-driven features consume the same helpers): pure <code>EnemyScalingHelpers.ScaleIntensity</code>, faction membership checks, and <code>EnemyScalingSource</code> <code>IModifierSource</code> singleton.</td></tr>
+    <tr><td class="k">Net/PerkRollRequestMessage.cs</td><td>Client → host: "I'm committing this upgrade." <em>(Phase 8.)</em></td></tr>
+    <tr><td class="k">Net/PerkRollMessage.cs</td><td>Host → all (incl. self): authoritative roll result + animation seed. <em>(Phase 8.)</em></td></tr>
+    <tr><td class="k">Net/ForgeStateSyncMessage.cs</td><td>Host → late joiner: full current overlay state. <em>(Phase 8.)</em></td></tr>
     <tr><td class="k">Assets/upgrade_forge.metem</td><td>Asset bundle containing the Forge prefab (placeholder OK for alpha).</td></tr>
   </table>
 
@@ -806,7 +862,7 @@ Phase 8 (Multiplayer Sync + Edge Cases)</code></pre>
 <ul class="bullets">
   <li><code>Forge/ForgeMeterController.cs</code> — singleton tracking Forge Level, Meter, DifficultyScalar (latter unused until Phase 6).</li>
   <li><code>Forge/AlloyTerminal.cs</code> — Fabricator-style alloy-spend terminal interaction.</li>
-  <li><code>Patches/SectorJumpHook.cs</code> — subscribe to <code>GameSessionSectorManager.OnSectorEntered</code>. De-dupe initial-sector and interdiction-resumption events.</li>
+  <li><code>Patches/ForgeSectorHook.cs</code> — subscribe to <code>GameSessionSectorManager.OnSectorExited</code>. De-dupe initial-sector, failed-objective, and no-Forge cases; award meter (and, when escalation is active, tick <code>DifficultyScalar</code>).</li>
   <li>Update <code>UpgradeForgeBehavior</code> to enforce capacity gating.</li>
 </ul>
 <div class="callout warn">
@@ -815,18 +871,108 @@ Phase 8 (Multiplayer Sync + Edge Cases)</code></pre>
 </div>
 <p><strong>Test:</strong> New run starts at Forge L1 (capacity 1) → only L4–L5 upgrades possible. Spend alloys → Meter fills → Forge levels → larger upgrades unlock. Jumps contribute +20 each. L1→L2 takes 100, L2→L3 takes 150 (1.5× curve). Interdiction gets ONE +20, not two.</p>
 
-<h3>Phase 6 — Sector Escalation</h3>
-<p><strong>Goal:</strong> Per-jump enemy threat scaling + loot tier biasing.</p>
+<h3>Phase 6 — Sector Escalation <span class="pill">shipped</span></h3>
+<p><strong>Goal:</strong> Per-jump loot tier biasing + enemy pressure scaling (density primary, HP/damage minor),
+    gated behind a boss-defeat activation threshold.</p>
+
+<h4>Loot tier biasing</h4>
 <ul class="bullets">
-  <li><code>Forge/SectorEscalation.cs</code> — reads <code>DifficultyScalar</code>.</li>
-  <li>Harmony patches on enemy spawn/init paths (HP, damage, density × scalar function).</li>
-  <li>Harmony patches on relic loot table draws (tier bias by scalar).</li>
+  <li><code>Forge/SectorEscalation.cs</code> — owns <code>BossesDefeated</code>, exposes
+    <code>IsScalingActive</code>, <code>MaxAllowedTier(scalar, bosses, ...)</code>, and the pure
+    <code>DowngradeRelics&lt;T&gt;(entries, getName, scalar, bosses, seed)</code> algorithm.</li>
+  <li><code>Patches/LootTableEscalationPatch.cs</code> — Harmony postfix on
+    <code>LootManager.SetupCurrentSectorLootLists</code>. Runs once per sector on every client.
+    Reflects the private <code>CurrentSectorLootLists</code> dictionary via <code>AccessTools.FieldRefAccess</code>,
+    seeds from <code>quest.Seed + sector.Id</code>, and reshapes each per-rarity list. Skips reshape when
+    <code>!IsScalingActive</code>.</li>
+  <li>Downgrade replacement is a seeded random pick from same-list relics of the target tier; when the target
+    tier has no candidates in the pool, the entry is dropped.</li>
 </ul>
-<div class="callout warn">
-  <span class="label">Pre-flight required</span>
-  Identify enemy spawn paths and loot table draw points via live decompile.
-</div>
-<p><strong>Test:</strong> Sector 1: enemy stats baseline, drops Common only. Sector 5+: enemies measurably tougher, drops include Rare/Legendary. Tune scalars to feel right.</p>
+
+<h4>Enemy density (primary)</h4>
+<ul class="bullets">
+  <li><code>Features/EnemyScaling/EnemyScaling.cs</code> — pure static
+    <code>EnemyScalingHelpers.ScaleIntensity(int, int, float)</code> using <code>System.Math</code> so the algorithm
+    is testable without a Unity runtime. Faction helpers <code>IsEnemyFaction</code> / <code>IsPlayerFaction</code>
+    based on <code>CG.Space.Factions</code> constants (Hollows=3, Remnant=2, Metem=1). <code>EnemyScalingSource</code>
+    singleton for shared <code>IModifierSource</code> tagging.</li>
+  <li><code>Patches/EnemyDensityPatch.cs</code> — four Harmony prefixes on
+    <code>AIDirector.Set/AddSpawner{Target,MaxTarget}Intensity</code>. Each rewrites the incoming <code>int</code>
+    via a shared <code>ScaleForCurrentScalar</code> helper. Gated on <code>IsScalingActive</code>.</li>
+  <li><code>Ceil(n × (1 + scalar × rate))</code> with <code>Max(requested, scaled)</code> clamp — positive requests
+    grow, negative deltas (scenarios reducing intensity) pass through unamplified. Default rate 0.20.</li>
+</ul>
+
+<h4>Enemy HP + damage (minor boosts)</h4>
+<ul class="bullets">
+  <li><code>Patches/EnemyStatScalingPatch.cs</code> — two Harmony postfixes:
+    <ul class="bullets">
+      <li><code>DestroyableComponent.InitializeHealth</code> — attaches a <code>StatMod(MaxHitPoints,
+        AdditiveMultiplier, +scalar × rate)</code> on enemy faction components via
+        <code>EnemyScalingSource</code>.</li>
+      <li><code>DestroyableComponent.CalculateRawDamage</code> — multiplies the returned damage by
+        <code>(1 + scalar × rate)</code> when the attacker's faction is enemy and the receiver's is player.
+        Single receiver-side hook captures all enemy damage sources without walking weapon child collections.</li>
+    </ul>
+  </li>
+  <li>Both gated on <code>IsScalingActive</code>. Default rate 0.05 (much smaller than density's 0.20 — HP/damage
+    are chip pressure, not the main threat axis).</li>
+</ul>
+
+<h4>Activation gate + counters</h4>
+<ul class="bullets">
+  <li><code>Patches/BossDefeatHook.cs</code> — subscribes to
+    <code>ClientGame.Current.ModelEventBus.OnObjectiveStateChanged</code> on session start. On
+    <code>ObjectiveState.Completed</code> for an <code>EndlessQuest.IsBossObjective</code> objective,
+    increments <code>BossesDefeated</code>. Uses per-run dedup by <code>Objective</code> reference.</li>
+  <li><code>Patches/ForgeSectorHook.cs</code> — on each successful sector exit, increments
+    <code>DifficultyScalar</code> alongside the meter award, <strong>only when
+    <code>IsScalingActive</code></strong>. During warm-up, sector exits fill the meter but do not accumulate scalar.</li>
+  <li>Boss defeats similarly only bump scalar when escalation was already active <em>before</em> the defeat, so the
+    threshold-crossing boss defeat itself doesn't tick scalar. The next post-activation event is the first to.</li>
+</ul>
+
+<h4>Config surface</h4>
+<table class="data">
+  <tr><th>Key</th><th>Default</th><th>Purpose</th></tr>
+  <tr><td class="k">EscalationRareUnlockScalar</td><td class="muted">3</td><td class="muted">Scalar at which Rare relics start dropping (below: downgraded to Common)</td></tr>
+  <tr><td class="k">EscalationLegendaryUnlockScalar</td><td class="muted">6</td><td class="muted">Scalar at which Legendary relics start dropping (below: downgraded to Rare)</td></tr>
+  <tr><td class="k">EscalationBossScalarBonus</td><td class="muted">1</td><td class="muted">Scalar bump per boss defeat (post-activation)</td></tr>
+  <tr><td class="k">EscalationBossActivationThreshold</td><td class="muted">2</td><td class="muted">Boss defeats required before escalation activates</td></tr>
+  <tr><td class="k">EscalationDensityScalarPerJump</td><td class="muted">0.20</td><td class="muted">Density multiplier per scalar (primary axis)</td></tr>
+  <tr><td class="k">EscalationStatScalarPerJump</td><td class="muted">0.05</td><td class="muted">HP + damage multiplier per scalar (minor boosts)</td></tr>
+</table>
+
+<h4>Dev commands</h4>
+<ul class="bullets">
+  <li><code>!difficulty</code> — prints ACTIVE / DORMANT status + current scalar and boss counts.</li>
+  <li><code>!setdifficulty &lt;n&gt;</code> / <code>!setbosses &lt;n&gt;</code> — force values for testing.</li>
+  <li><code>!lootdump</code> — dumps the current sector's reshaped loot pool per rarity.</li>
+</ul>
+
+<h4>Known limitations</h4>
+<ul class="bullets">
+  <li><strong>Boss HP exclusion is not implemented.</strong> Linking a spawned enemy ship to its ObjectiveData
+    boss reference needs a separate pre-flight pass. At the default minor rate (0.05/scalar), a scalar-6 boss
+    gets +30% HP — meaningful but not game-breaking; acceptable for v1.</li>
+  <li><strong>Survivor waves are not scaled.</strong> Only the <code>AIDirector</code> spawner path is patched;
+    <code>WavesSpawnManager</code> (Survivor mode) uses author-defined wave counts and has its own difficulty
+    progression.</li>
+  <li><strong>Counters do NOT check for Forge presence.</strong> <code>DifficultyScalar</code> and
+    <code>BossesDefeated</code> accumulate in the background even without a Forge installed on the ship
+    (the meter itself does check — no Forge, no meter). This is intentional: installing a Forge mid-run picks
+    up the accumulated intensity level immediately. The check would need to walk <code>FindObjectOfType</code>
+    on every event; the current design accepts that tradeoff.</li>
+  <li><strong>Multiplayer sync deferred to Phase 8.</strong> <code>DifficultyScalar</code> and
+    <code>BossesDefeated</code> are per-client static state. Late joiners will not see current values until sync
+    ModMessages ship.</li>
+</ul>
+
+<p><strong>Test:</strong> Fresh run → no scaling until 2 boss objectives complete (Endless quest). Kill boss #1 →
+"Escalation is now active" fires; scalar still 0, counters at 1. Kill boss #2 → activation message, counters at 2.
+Next sector exit → scalar bumps to 1, density scales visibly, HP/damage tick up. <code>!lootdump</code> in a
+scalar-5 sector: Common entries pass through, any Legendaries in the pool downgrade to Rare. Boss-defeat unlock
+messages still fire post-activation as tier ceilings shift.</p>
 
 <h3>Phase 7 — Content Pass (Signatures + Cursed + Maintenance Burden)</h3>
 <p><strong>Goal:</strong> Roguelike content depth. Flagship relics carry signature perks. ~30% of relics cursed; cursed perks trigger Maintenance Burden.</p>
