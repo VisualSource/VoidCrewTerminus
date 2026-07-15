@@ -26,10 +26,14 @@ internal static class LootTableEscalationPatch
             var lists = LootListsRef(__instance);
             if (lists == null) return;
 
-            // Escalation warm-up gate: no reshaping until the player has cleared
-            // the configured number of boss objectives this run.
-            if (!SectorEscalation.IsScalingActive) return;
-
+            // NOTE: loot tier biasing is deliberately NOT behind the escalation
+            // warm-up gate (unlike density/HP/damage). The relic ceiling is driven
+            // by boss count from the very first sector: 0 bosses → Common only,
+            // 1 → Rare unlocked, 2 → Legendary. Gating this on IsScalingActive
+            // (>= 2 bosses) would suppress it exactly until the boss ceiling is
+            // already Legendary, making the downgrade a permanent no-op. During
+            // warm-up DifficultyScalar stays 0, so the boss ceiling alone drives
+            // the tier — which is the intended behaviour.
             int scalar = ForgeMeterController.DifficultyScalar;
             int bosses = SectorEscalation.BossesDefeated;
             int seed = ResolveSeed();

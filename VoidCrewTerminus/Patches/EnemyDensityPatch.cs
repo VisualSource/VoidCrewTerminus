@@ -31,7 +31,10 @@ internal static class AIDirectorSetTargetIntensityPatch
 
         int scalar = ForgeMeterController.DifficultyScalar;
         float rate = TerminusConfig.EscalationDensityScalarPerJump?.Value ?? 0.20f;
-        return EnemyScalingHelpers.ScaleIntensity(n, scalar, rate);
+        int scaled = EnemyScalingHelpers.ScaleIntensity(n, scalar, rate);
+        if (scaled != n)
+            BepinPlugin.Log.LogDebug($"[Escalation] Density {n} → {scaled} (scalar {scalar}, rate {rate}).");
+        return scaled;
     }
 }
 

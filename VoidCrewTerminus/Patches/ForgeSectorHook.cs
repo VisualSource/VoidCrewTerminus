@@ -18,7 +18,8 @@ namespace VoidCrewTerminus.Patches;
 //   - Each sector pays out its departure at most once per run, so bouncing between
 //     two sectors can't farm the meter. The arrival sector of the run simply pays
 //     on ITS departure — the first real jump.
-//   - A sector whose objective FAILED pays nothing, and its payout is burned.
+//   - Only a COMPLETED objective pays out; leaving a sector Started (mission
+//     abandoned), Failed, or with NoObjective earns nothing and burns the payout.
 internal static class ForgeSectorHook
 {
     private static bool _initialized;
@@ -96,10 +97,16 @@ internal static class ForgeSectorHook
                 return;
             }
 
-            if (departed.ObjectiveState == ObjectiveState.Failed)
+            // Only a COMPLETED objective pays out. Leaving a sector still in
+            // Started (mission abandoned mid-flight) or Failed earns nothing —
+            // the crew has to actually finish the work. Sectors with no mission
+            // at all (NoObjective) likewise don't fill the Forge; the run's empty
+            // starting zone is already handled by the first-exit branch above.
+            if (departed.ObjectiveState != ObjectiveState.Completed)
             {
-                Messaging.Notification("The Forge gains nothing from a failed sector.");
-                BepinPlugin.Log.LogInfo($"[Forge] Sector {departed.Id} objective failed — meter award withheld.");
+                Messaging.Notification("The Forge gains nothing from an unfinished sector.");
+                BepinPlugin.Log.LogInfo(
+                    $"[Forge] Sector {departed.Id} objective {departed.ObjectiveState} (not Completed) — meter award withheld.");
                 return;
             }
 

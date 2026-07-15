@@ -18,6 +18,11 @@ In Progress:
                 ✔ enemy scaling — density primary, HP/damage minor @done(26-07-14) (density: 4 Harmony prefixes on AIDirector.Set/AddSpawner{Target,MaxTarget}Intensity scale int via Ceil(n*(1+scalar*rate)) with Max(requested,scaled) clamp so scenarios reducing intensity aren't amplified; HP: Harmony postfix on DestroyableComponent.InitializeHealth attaches StatMod(MaxHitPoints, AdditiveMultiplier, +scalar*rate) via EnemyScalingSource for Hollows/Remnant faction only; damage: postfix on DestroyableComponent.CalculateRawDamage scales damage when enemy→player faction pair; configs EscalationDensityScalarPerJump=0.20 (primary), EscalationStatScalarPerJump=0.05 (minor); AIDirector-based Endless/Pilgrimage only, WavesSpawnManager Survivor path untouched; boss exclusion DEFERRED — ObjectiveData→spawned ship link needs another pre-flight pass, minor rate keeps scalar-6 boss at +30% HP which is acceptable; feature code lives in Features/EnemyScaling/ (namespace VoidCrewTerminus.EnemyScaling, static class EnemyScalingHelpers) — kept out of Features/Forge/ because Leech and future scalar-driven features share it; 15 xunit tests on pure ScaleIntensity + faction helpers)
                 ✔ activation gate — no escalation until N bosses defeated @done(26-07-14) (SectorEscalation.IsScalingActive gates all four patches — loot tier bias, density, HP, damage — so nothing takes effect until BossesDefeated ≥ EscalationBossActivationThreshold (default 2). DifficultyScalar does NOT accumulate during warm-up: sector-jump increments and boss-defeat scalar bumps both check IsScalingActive first and skip when dormant. Only BossesDefeated ticks during warm-up. This means scaling starts from scalar=0 the moment the threshold is crossed and ramps up gradually from there — no "boom" moment. The threshold-crossing boss defeat itself doesn't bump scalar (it just flips the gate on); the FIRST post-activation event (next sector exit or next boss) is the first to contribute. Boss defeats before threshold = silent state ticks; threshold-crossing boss defeat = "Escalation is now active" notification; post-activation boss defeats keep the tier-unlock messages. !difficulty command shows ACTIVE/DORMANT status with remaining-boss countdown. 3 xunit tests on gate behavior.)
                 [] multiplayer sync of DifficultyScalar for late joiners (defer to ph8)
+                Test: 
+                 ✔ T1,T2,T3,T4 @done(26-07-14 21:39)
+                 [] T5,T6,T6,T7,T8
+                 [] T9
+                 [] T10,T12
         [] phase 7
         [] phase 8
         Cleanup:
@@ -26,6 +31,7 @@ In Progress:
                 [] upgrade hover module name to reflect mod level
                 [] update fab to display correct recyle value
                 [] reuse or create new BuildBox asset
+                ✔ forge meter still incressing on mission failure @done(26-07-14) (now Completed-only: Started/Failed/NoObjective all withhold, in ForgeSectorHook)
                 ✔ only allow upgrading MKIII modules @done(26-07-09 13:16)
                 ✔ relic and buildbox ord @done(26-07-09 13:16)
                 ✔ fix bug where BuildBox likes to "float away" while holding it after picking it up from the forge @done(26-07-14 12:52)
