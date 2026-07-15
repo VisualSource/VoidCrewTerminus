@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using CG.Game;
 using Gameplay.Loot;
+using Gameplay.Quests;
 using HarmonyLib;
 using ResourceAssets;
 using VC.Common.CoreData;
@@ -25,6 +26,12 @@ internal static class LootTableEscalationPatch
         {
             var lists = LootListsRef(__instance);
             if (lists == null) return;
+
+            // Endless-only: the relic ceiling is driven by boss count, and bosses
+            // are only defeatable in EndlessQuest (see BossDefeatHook). In other
+            // quest types BossesDefeated is permanently 0, which would crush every
+            // sector's loot to Common forever — so we don't touch non-Endless runs.
+            if (!(GameSessionManager.ActiveSession?.ActiveQuest is EndlessQuest)) return;
 
             // NOTE: loot tier biasing is deliberately NOT behind the escalation
             // warm-up gate (unlike density/HP/damage). The relic ceiling is driven
