@@ -59,6 +59,36 @@ public class EnemyScalingTests
         Assert.Equal(10, EnemyScalingHelpers.ScaleIntensity(10, 0, 0.20f));
     }
 
+    // ---- CapScalar ---------------------------------------------------------
+
+    [Theory]
+    [InlineData(3, 10, 3)]    // below cap — unchanged
+    [InlineData(10, 10, 10)]  // at cap — unchanged
+    [InlineData(25, 10, 10)]  // above cap — clamped
+    [InlineData(0, 10, 0)]    // zero — unchanged
+    public void CapScalar_ClampsToCap(int scalar, int cap, int expected)
+    {
+        Assert.Equal(expected, EnemyScalingHelpers.CapScalar(scalar, cap));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void CapScalar_NonPositiveCap_MeansUncapped(int cap)
+    {
+        Assert.Equal(999, EnemyScalingHelpers.CapScalar(999, cap));
+    }
+
+    [Fact]
+    public void CapScalar_ThenScaleIntensity_PlateausAtCap()
+    {
+        // Past the cap, density stops growing: scalar 25 capped at 10 gives the
+        // same result as scalar 10.
+        int rateAtCap = EnemyScalingHelpers.ScaleIntensity(5, EnemyScalingHelpers.CapScalar(10, 10), 0.12f);
+        int rateBeyond = EnemyScalingHelpers.ScaleIntensity(5, EnemyScalingHelpers.CapScalar(25, 10), 0.12f);
+        Assert.Equal(rateAtCap, rateBeyond);
+    }
+
     // ---- faction helpers ---------------------------------------------------
 
     [Theory]

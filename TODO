@@ -32,6 +32,7 @@ In Progress:
                 [] update fab to display correct recyle value
                 [] reuse or create new BuildBox asset
                 ✔ forge meter still incressing on mission failure @done(26-07-14) (now Completed-only: Started/Failed/NoObjective all withhold, in ForgeSectorHook)
+                ✔ density scaling was a no-op (target intensity clamped to profile max) @done(26-07-15) (fixed via Spawner.InitSpawner postfix raising the ceiling host-side; added EscalationScalarCap=10 plateau, rate 0.20→0.12, !spawners diag cmd)
                 ✔ only allow upgrading MKIII modules @done(26-07-09 13:16)
                 ✔ relic and buildbox ord @done(26-07-09 13:16)
                 ✔ fix bug where BuildBox likes to "float away" while holding it after picking it up from the forge @done(26-07-14 12:52)

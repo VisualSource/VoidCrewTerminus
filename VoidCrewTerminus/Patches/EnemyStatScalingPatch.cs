@@ -29,7 +29,8 @@ internal static class EnemyHealthScalingPatch
         {
             if (!SectorEscalation.IsScalingActive) return;
 
-            int scalar = ForgeMeterController.DifficultyScalar;
+            int scalar = EnemyScalingHelpers.CapScalar(
+                ForgeMeterController.DifficultyScalar, TerminusConfig.EscalationScalarCap?.Value ?? 10);
             if (scalar <= 0) return;
 
             var parent = __instance?.GetParentObject();
@@ -71,7 +72,8 @@ internal static class EnemyDamageScalingPatch
             if (source == null || __instance == null) return;
             if (!SectorEscalation.IsScalingActive) return;
 
-            int scalar = ForgeMeterController.DifficultyScalar;
+            int scalar = EnemyScalingHelpers.CapScalar(
+                ForgeMeterController.DifficultyScalar, TerminusConfig.EscalationScalarCap?.Value ?? 10);
             if (scalar <= 0) return;
 
             var target = __instance.GetParentObject();

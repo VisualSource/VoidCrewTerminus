@@ -29,6 +29,13 @@ public static class EnemyScalingHelpers
         return System.Math.Max(requested, scaled);
     }
 
+    // Clamp the raw DifficultyScalar to the configured enemy-scaling cap so
+    // density/HP/damage plateau in deep runs (the raw scalar keeps climbing for
+    // loot tiers and display). A cap <= 0 means "uncapped" — pass the scalar
+    // through unchanged. Pure so the cap logic is unit-testable.
+    public static int CapScalar(int scalar, int cap) =>
+        cap > 0 ? System.Math.Min(scalar, cap) : scalar;
+
     // Enemy factions per CG.Space.Factions. Hollows (3) and Remnant (2) are the
     // two hostile factions we scale; wildlife (4) and neutral (0) are ignored,
     // player Metem (1) is never touched.

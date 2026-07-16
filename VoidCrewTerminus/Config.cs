@@ -58,8 +58,11 @@ internal static class TerminusConfig
     [BindConfig("forge", 0.05f, "Fractional multiplier added to enemy HP and damage per DifficultyScalar tick (minor boost — density is the primary axis)")]
     internal static ConfigEntry<float> EscalationStatScalarPerJump;
 
-    [BindConfig("forge", 0.20f, "Fractional multiplier added to enemy spawner intensity per DifficultyScalar tick (primary escalation axis — deeper sectors bring more enemies)")]
+    [BindConfig("forge", 0.12f, "Fractional multiplier added to enemy spawner intensity per DifficultyScalar tick (primary escalation axis — deeper sectors bring more enemies). At the default cap of 10, density tops out at 1 + 10*0.12 = 2.2x.")]
     internal static ConfigEntry<float> EscalationDensityScalarPerJump;
+
+    [BindConfig("forge", 10, "Upper cap on the effective DifficultyScalar used for ENEMY scaling (density + HP + damage). Raw scalar keeps climbing (loot tier / display), but enemy pressure plateaus here so deep runs stay survivable and don't spawn an unbounded number of networked ships. Set 0 to disable the cap (uncapped linear growth).")]
+    internal static ConfigEntry<int> EscalationScalarCap;
 
     [BindConfig("forge", 2, "Number of boss objectives that must be defeated in a run before any escalation (density, HP, damage, loot tier biasing) takes effect. DifficultyScalar and BossesDefeated still accumulate during the warm-up so scaling kicks in with full accumulated intensity once the threshold is crossed.")]
     internal static ConfigEntry<int> EscalationBossActivationThreshold;

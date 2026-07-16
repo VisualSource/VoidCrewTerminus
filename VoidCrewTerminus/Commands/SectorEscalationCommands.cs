@@ -3,7 +3,9 @@ using System.Linq;
 using System.Reflection;
 using CG.Game;
 using Gameplay.Loot;
+using Gameplay.NPC.AI;
 using ResourceAssets;
+using ToolClasses;
 using VC.Common.CoreData;
 using VoidCrewTerminus.Forge;
 using VoidManager.Chat.Router;
@@ -107,6 +109,9 @@ internal class LootDumpCommand : PublicCommand
             return;
         }
 
+        int recognizedTotal = 0;
+        var unrecognizedSamples = new List<string>();
+
         foreach (var kv in lists)
         {
             if (kv.Value.Count == 0) continue;
@@ -121,8 +126,14 @@ internal class LootDumpCommand : PublicCommand
                 {
                     tierCounts.TryGetValue(entry.Tier, out int c);
                     tierCounts[entry.Tier] = c + 1;
+                    recognizedTotal++;
                 }
-                else nonRelic++;
+                else
+                {
+                    nonRelic++;
+                    if (!string.IsNullOrEmpty(name) && !unrecognizedSamples.Contains(name) && unrecognizedSamples.Count < 12)
+                        unrecognizedSamples.Add(name);
+                }
             }
 
             var parts = new List<string> { $"total={total}" };
@@ -132,5 +143,59 @@ internal class LootDumpCommand : PublicCommand
 
             Messaging.Notification($"[{kv.Key}] {string.Join(", ", parts)}");
         }
+
+        // Name-match diagnostic: if RelicTierData recognizes ZERO entries, the key
+        // format almost certainly doesn't match CraftableItemRef.Filename and loot
+        // gating is a silent no-op. Print the raw filenames so the mismatch (and the
+        // real names to fix the map with) is visible in one command.
+        if (recognizedTotal == 0)
+            Messaging.Notification("WARNING: 0 relics recognized by RelicTierData — loot gating is likely a NO-OP (name mismatch). Raw sample names below:");
+        if (unrecognizedSamples.Count > 0)
+            Messaging.Notification($"raw filenames: {string.Join(", ", unrecognizedSamples)}");
+    }
+}
+
+// Dump every live AIDirector spawner's intensity so density escalation can be
+// verified directly (Target/Max are what SpawnerInitIntensityScalingPatch and the
+// AIDirector prefixes inflate; Current is how much has actually spawned). If the
+// escalation is working you'll see Max/Target above the vanilla profile values;
+// compare the same encounter at !setdifficulty 0 vs a high value.
+internal class SpawnersDumpCommand : PublicCommand
+{
+    private static readonly FieldInfo SpawnersField =
+        typeof(AIDirector).GetField("spawners", BindingFlags.Instance | BindingFlags.NonPublic);
+    private static readonly FieldInfo DefaultSpawnerField =
+        typeof(AIDirector).GetField("defaultSpawner", BindingFlags.Instance | BindingFlags.NonPublic);
+
+    public override string[] CommandAliases() => new[] { "spawners" };
+    public override string Description() => "[DevMode] Dump live AIDirector spawner intensities (Target/Current/Max) to verify density scaling";
+    public override List<Argument> Arguments() => [];
+    public override string[] UsageExamples() => ["!spawners"];
+
+    public override void Execute(string arguments, int sender)
+    {
+        if (!TerminusConfig.EnableDevMode.Value) return;
+
+        var director = Singleton<AIDirector>.I;
+        if (director == null) { Messaging.Notification("No AIDirector in the active session."); return; }
+        if (SpawnersField == null) { Messaging.Notification("Spawners: reflection lookup failed."); return; }
+
+        int scalar = ForgeMeterController.DifficultyScalar;
+        int capped = Escalation.EnemyScalingHelpers.CapScalar(scalar, TerminusConfig.EscalationScalarCap?.Value ?? 10);
+        float rate = TerminusConfig.EscalationDensityScalarPerJump?.Value ?? 0.12f;
+        Messaging.Notification(
+            $"Spawners — escalation {(Escalation.SectorEscalation.IsScalingActive ? "ACTIVE" : "DORMANT")}, " +
+            $"scalar={scalar} (capped {capped}), density x{1f + capped * rate:0.00}");
+
+        var all = new List<Spawner>();
+        if (DefaultSpawnerField?.GetValue(director) is Spawner def && def != null) all.Add(def);
+        if (SpawnersField.GetValue(director) is List<Spawner> list)
+            all.AddRange(list.Where(s => s != null && !all.Contains(s)));
+
+        if (all.Count == 0) { Messaging.Notification("No active spawners right now (none created for this sector yet)."); return; }
+
+        foreach (var s in all)
+            Messaging.Notification(
+                $"[{s.Identifier?.Asset?.name ?? "Default"}] Target={s.TargetIntensity}, Current={s.CurrentIntensity:0.#}, Max={s.MaxIntensity:0.#}");
     }
 }

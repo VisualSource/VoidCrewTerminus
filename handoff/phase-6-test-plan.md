@@ -3,13 +3,23 @@
 **Project:** VoidCrewTerminus
 **Phase:** 6 — Sector Escalation (loot tier biasing + enemy density + HP + damage + activation gate)
 **Status:** Shipped, ready for QA verification.
-**Date:** 2026-07-14
+**Date:** 2026-07-14 (updated 2026-07-15)
 
 ## What this covers
 
-Phase 6 introduces two counters (`DifficultyScalar`, `BossesDefeated`) and four escalation systems (loot bias, enemy density, enemy HP, enemy damage), all gated behind a boss-defeat activation threshold. This plan verifies each system independently and then the whole thing end-to-end.
+Phase 6 introduces two counters (`DifficultyScalar`, `BossesDefeated`) and four escalation systems (loot bias, enemy density, enemy HP, enemy damage). This plan verifies each system independently and then the whole thing end-to-end.
 
 For the design intent and implementation details, read [`docs/upgrade-forge-design.html`](../docs/upgrade-forge-design.html) — the `Sector Escalation` and `Phase 6` sections are the authoritative reference. The `Known limitations` list at the bottom of that section tells you what's intentionally out of scope for QA.
+
+## Changes since the 2026-07-14 QA pass (re-verify these)
+
+- **T1–T4 removed** — activation-gate warm-up (T1–T3) and basic loot reshape (T4) were verified on 2026-07-14. They're gone from this doc; the scenarios below start at T5.
+- **Loot tier biasing is no longer gated by the boss-activation threshold.** It now reshapes from the first sector, driven purely by boss count: **0 bosses → Common only, 1 → Rare unlocked, 2 → Legendary**. (Previously it was suppressed until 2 bosses — exactly the point where the ceiling was already Legendary — so it never downgraded anything. That was the bug.) The enemy systems (density/HP/damage) **keep** the 2-boss warm-up gate; only loot changed.
+- **Loot biasing is Endless-only.** Bosses are only defeatable in `EndlessQuest`, so the loot patch now no-ops in Pilgrimage/Survivor/etc. to avoid crushing all their loot to Common forever.
+- **Forge Meter + DifficultyScalar now require a `Completed` objective.** Leaving a sector in `Started` (mission abandoned mid-jump), `Failed`, or `NoObjective` awards nothing — previously only `Failed` was blocked, so abandoned missions still paid out.
+- **Density scaling now logs.** When a spawner intensity is actually scaled, `EnemyDensityPatch` emits `[Escalation] Density N → M (scalar X, rate Y)` at debug level — use it to confirm T6 without eyeballing spawn counts.
+- **Density scaling was fundamentally broken and is now fixed.** The old patches scaled a spawner's *target* intensity, but `Spawner.SetTargetIntensity` clamps it to `maxTargetIntensity`, which is baked in from the profile at spawner creation (bypassing the patched mutators). So whenever a scenario drove intensity to its max — the common case — the boost was clipped and **no extra enemies spawned**. Fixed by a postfix on `Spawner.InitSpawner(SpawnerProfile)` that raises the ceiling (host-only) so the target scaling has headroom. Verify with `!spawners`.
+- **Enemy scaling is now capped.** `EscalationScalarCap` (default 10) bounds the effective scalar for density/HP/damage so deep runs don't spawn an unbounded number of networked ships. Density plateaus at **2.2×**, HP/damage at **+50%**. Loot tiers and the raw scalar are unaffected. Density rate lowered `0.20 → 0.12` (the old value was never felt because scaling didn't work; retune via config).
 
 ## Test environment
 
@@ -21,12 +31,13 @@ For the design intent and implementation details, read [`docs/upgrade-forge-desi
 **Config knobs relevant to this phase** (all under `[forge]` in the config file)
 | Key | Default | Purpose |
 |---|---|---|
-| `EscalationBossActivationThreshold` | `2` | Boss defeats required before any escalation activates |
+| `EscalationBossActivationThreshold` | `2` | Boss defeats required before the **enemy** systems (density/HP/damage) activate. Does **not** gate loot biasing — that runs from the first Endless sector. |
 | `EscalationRareUnlockScalar` | `3` | Below this scalar, Rares get downgraded to Common |
 | `EscalationLegendaryUnlockScalar` | `6` | Below this scalar, Legendaries get downgraded to Rare |
 | `EscalationBossScalarBonus` | `1` | Scalar bump per boss defeat (post-activation) |
-| `EscalationDensityScalarPerJump` | `0.20` | Density multiplier per scalar tick (primary axis) |
-| `EscalationStatScalarPerJump` | `0.05` | HP + damage multiplier per scalar tick (minor axis) |
+| `EscalationDensityScalarPerJump` | `0.12` | Density multiplier per scalar tick (primary axis). At the cap of 10 → density tops out at 2.2×. |
+| `EscalationStatScalarPerJump` | `0.05` | HP + damage multiplier per scalar tick (minor axis). At the cap of 10 → +50%. |
+| `EscalationScalarCap` | `10` | Upper cap on the **effective** scalar used for enemy scaling (density/HP/damage). Raw scalar still climbs for loot/display; enemy pressure plateaus here. `0` = uncapped. |
 
 **Dev commands available**
 | Command | Purpose |
@@ -35,6 +46,7 @@ For the design intent and implementation details, read [`docs/upgrade-forge-desi
 | `!setdifficulty <n>` | Force `DifficultyScalar` to a value |
 | `!setbosses <n>` | Force `BossesDefeated` to a value |
 | `!lootdump` | Dump current sector's per-rarity loot pool (post-reshape) with tier counts |
+| `!spawners` | Dump every live `AIDirector` spawner's Target/Current/Max intensity — the direct way to verify density scaling without counting ships |
 | `!forgemeter` | Show Forge Meter progression |
 | `!setmeter <v>` / `!setforgelevel <n>` | Direct meter/level manipulation |
 
@@ -46,103 +58,53 @@ For the design intent and implementation details, read [`docs/upgrade-forge-desi
 
 ## Test scenarios
 
-### T1 — Activation gate: warm-up dormancy
+> **T1–T4** (activation-gate warm-up dormancy, threshold-crossing boss defeat, post-activation ramp, basic loot reshape) were verified on 2026-07-14 and have been retired. Scenarios resume at T5. Note the ramp/gate behaviour they covered is unchanged **for the enemy systems**; only loot was decoupled from the gate (see "Changes since the 2026-07-14 QA pass").
 
-**Goal:** Confirm nothing scales until the boss threshold is crossed.
+### T5 — Loot tier biasing: boss-count ceiling (always-on, Endless-only)
 
-**Setup:** Fresh Endless run. Install an Upgrade Forge on the ship (use `!forgespawn` if needed).
+**Goal:** Confirm loot lists reshape from the first sector, driven by boss count, with `MaxAllowedTier = max(scalarCeiling, bossCeiling)`. Loot biasing is **not** gated by the activation threshold anymore.
 
-**Steps:**
-1. Run `!difficulty` at run start. Expected: `Escalation DORMANT — DifficultyScalar=0, BossesDefeated=0/2, max relic tier: Common`.
-2. Jump through 3–5 sectors, completing objectives normally. **Do not fight boss sectors yet.**
-3. After each jump, run `!difficulty`. Expected: `DifficultyScalar` stays at 0 (does NOT tick up during warm-up). `BossesDefeated` stays at 0.
-4. Run `!lootdump` in one of the sectors. Expected: pool passes through untouched (whatever the quest designer put in shows up as-is). Any Rare/Legendary relics that would normally drop still do.
-5. Enter combat in one of these sectors. Enemies should feel vanilla — no visibly-tougher spawns, no HP bloat, no extra damage taken.
-
-**Pass criteria:** No scaling visible anywhere in the warm-up period.
-
----
-
-### T2 — Activation gate: threshold-crossing boss defeat
-
-**Goal:** Confirm the 2nd boss defeat activates escalation without itself contributing to scalar.
-
-**Setup:** Fresh Endless run, Forge installed.
+**Setup:** Fresh Endless run. No dev overrides yet.
 
 **Steps:**
-1. Find and complete a boss objective (Endless quest boss sector). Expected: silent — no on-screen notification, `!difficulty` shows `DifficultyScalar=0, BossesDefeated=1/2, DORMANT (needs 1 more boss defeat)`.
-2. Find and complete a second boss objective. Expected: on-screen notification **"Boss defeated — the Forge stirs to life. Escalation is now active."** After this, `!difficulty` reports `Escalation ACTIVE — DifficultyScalar=0, BossesDefeated=2/2`.
-3. **Critical check:** After boss #2, `DifficultyScalar` is still **0**, not 1 or 2. The threshold-crossing defeat does not itself bump scalar — only post-activation events do.
-
-**Pass criteria:** Silent boss #1, "Escalation is now active" message on boss #2, scalar still 0 after boss #2.
-
----
-
-### T3 — Activation gate: post-activation ramp
-
-**Goal:** Confirm scalar starts ticking on the FIRST post-activation event.
-
-**Setup:** Continue from T2 (2 bosses defeated, scalar=0, activation just fired).
-
-**Steps:**
-1. Jump to the next sector. Run `!difficulty`. Expected: `DifficultyScalar=1` — the sector jump bumped it.
-2. Complete another boss objective. Expected: on-screen notification **"Boss defeated — the Forge unlocks Legendary-tier relics."** (Third boss = already at Legendary ceiling from boss ceiling, but this is the first *post-activation* boss so the tier-unlock message shows.) `!difficulty` reports `DifficultyScalar=2` (bumped by both the jump above and the boss).
-3. Jump another sector. Expected: `DifficultyScalar=3`.
-
-**Pass criteria:** Every post-activation sector exit and boss defeat bumps scalar by 1 each.
-
----
-
-### T4 — Loot tier biasing: sector reshape
-
-**Goal:** Confirm sector loot lists get reshaped once escalation is active.
-
-**Setup:** Continue from T3 or use `!setdifficulty 6` + `!setbosses 2` to force post-activation state.
-
-**Steps:**
-1. Enter a sector known to contain relic drops (check with `!lootdump` in a vanilla sector first to identify one).
-2. Run `!lootdump`. Expected output resembles:
-   `[Common] total=8, Common=3, Rare=2, Legendary=0, non-relic=3` (numbers vary by quest, but the tier counts should be present).
-3. At `DifficultyScalar=0` (use `!setdifficulty 0`), re-enter a sector and `!lootdump` — Legendary count should drop to 0 (all downgraded to Rare) but only if Rare candidates existed in the pool; otherwise those slots drop entirely.
-4. At `DifficultyScalar=6`, re-enter a sector — nothing gets downgraded (scalar hits Legendary ceiling naturally).
-5. Kill enemies; verify actual dropped relics match the reshaped pool's tier distribution. Sample size: destroy 10–20 loot droppers.
+0. **Name-match sanity check (do this first).** Run `!lootdump` in any relic-bearing sector. If it prints `WARNING: 0 relics recognized by RelicTierData …` plus a `raw filenames: …` line, then `RelicTierData`'s keys don't match the live `CraftableItemRef.Filename` values and **loot gating is a silent no-op** — capture those raw filenames and report them so the key map can be fixed. If you see `Common=/Rare=/Legendary=` tier counts, the names match and gating is live; continue.
+1. **0 bosses (fresh run, no forcing):** enter the first relic-bearing sector and run `!lootdump`. Expected: **every relic is Common** — all Rares/Legendaries downgraded to Common (or dropped if the list had no Common candidate). Non-relic entries untouched. This is the key regression check: before the fix, 0-boss sectors passed through unchanged.
+2. `!setbosses 1` (boss ceiling = Rare), re-enter a sector, `!lootdump`. Expected: Legendaries downgrade to Rare, Rares stay, Commons stay.
+3. `!setbosses 2` (boss ceiling = Legendary), `!lootdump`. Expected: nothing downgrades — Legendary is the ceiling.
+4. Confirm `MaxAllowedTier` respects the scalar side too: `!setbosses 0` + `!setdifficulty 6`, `!lootdump`. Expected: nothing downgrades (scalar alone hits the Legendary ceiling).
+5. Kill enemies at step 1's state; verify actual dropped relics match the reshaped (all-Common) distribution. Sample: 10–20 loot droppers.
+6. Re-enter the same sector — reshape must be identical (determinism: `quest.Seed + sector.Id` seeds both the shuffle and our downgrade).
 
 **Pass criteria:**
-- Reshape occurs (`!lootdump` shows downgraded distribution vs vanilla).
-- Actual drops match the reshaped list.
-- Same sector re-entered gives the same reshape (determinism — `quest.Seed + sector.Id` seeds both the shuffle and our downgrade).
+- 0-boss Endless sectors show **all-Common** loot (the fix).
+- Boss count promotes the ceiling (0→Common, 1→Rare, 2→Legendary); scalar can promote it independently.
+- Actual drops match the reshaped list; re-entry is deterministic.
+
+**Negative case (Endless-only guard):** Start a **Survivor** quest (the wave-based mode — base `Quest`, not `EndlessQuest`). Run `!lootdump` in a relic sector. Expected: loot passes through **untouched** (vanilla tiers) — the loot patch no-ops outside `EndlessQuest`. This must hold even though `BossesDefeated=0`.
+
+> **Naming note:** the game's main roguelike mode is *labeled* **"Pilgrimage"** in the menu but is internally an `EndlessQuest` (`GamemodeType.Default` → `SelectEndlessQuest`). Escalation therefore **does** apply to the "Pilgrimage" menu mode — that's the mode QA has been testing, and why boss defeats register there. The `is EndlessQuest` guard only excludes base-`Quest` modes (Survivor, and any Generic/Tutorial/Special content).
 
 ---
 
-### T5 — Loot tier biasing: boss ceiling overrides scalar ceiling
+### T6 — Density scaling: spawner intensity (the fix)
 
-**Goal:** Confirm `MaxAllowedTier = max(scalarCeiling, bossCeiling)` behavior.
+**Goal:** Confirm `AIDirector` spawners actually produce more enemies at high scalar — the case that was silently broken by the intensity clamp before this fix.
 
-**Setup:** `!setdifficulty 0` (scalar ceiling = Common), `!setbosses 1` (boss ceiling = Rare).
+**Setup:** Post-activation state (`!setbosses 2` to activate). Must be an `EndlessQuest`-backed run (the "Pilgrimage" menu mode). **Host client** — density scaling is host-authoritative.
 
-**Steps:**
-1. Run `!difficulty`. Expected: `max relic tier: Rare` (max of Common from scalar, Rare from boss).
-2. Enter a sector, `!lootdump`. Expected: Legendaries downgrade to Rare (ceiling), Rares stay, Commons stay.
-3. `!setbosses 2` (boss ceiling = Legendary), `!lootdump` again. Expected: nothing downgrades — Legendary is the ceiling.
-
-**Pass criteria:** Boss count promotes the ceiling above whatever scalar dictates.
-
----
-
-### T6 — Density scaling: spawner intensity
-
-**Goal:** Confirm `AIDirector` spawners produce more enemies when scalar is high.
-
-**Setup:** Post-activation state. Compare two runs (or the same enemy encounter at different scalars).
+> With `EscalationScalarCap=10` and rate `0.12`, effective density is `1 + min(scalar,10)*0.12`: scalar 5 → 1.6×, scalar 10 → **2.2× (plateau)**, scalar 25 → still 2.2×.
 
 **Steps:**
-1. `!setdifficulty 0` (density scaling effectively off — no scalar means no bump). Trigger an enemy encounter (find a hostile POI or Hollows patrol). Count the number of spawned enemies over ~60 seconds.
-2. `!setdifficulty 6` (density +120%). Trigger the same type of encounter. Count spawns over the same window.
-3. Compare counts. Expected: scalar-6 encounter has roughly 2.2× the enemies (rounded up per scenario intensity value).
+1. `!setdifficulty 0`, then `!spawners` during an encounter. Note each spawner's `Target`/`Max` — these are the **vanilla** profile values (baseline).
+2. `!setdifficulty 10`. Enter a **fresh** sector (the ceiling is scaled at spawner *creation*, so it applies to spawners made after the change — don't expect already-spawned encounters to retroactively grow). Trigger the same encounter type.
+3. `!spawners` again. Expected: `Max` and `Target` are **~2.2× the baseline** from step 1. This is the direct proof the ceiling fix works — before the fix, `Max` stayed at the vanilla value and `Target` was clamped to it.
+4. Count enemies over ~60s at step 1 vs step 3. Expected: visibly more at scalar 10 (up to ~2.2× per encounter).
+5. **Log confirmation:** `[Escalation] Density N → M …` (scenario target writes) and `[Escalation] Spawner intensity T/M → …` (ceiling scaled at creation) appear at scalar 10, none at scalar 0.
+6. **Cap check:** `!setdifficulty 25`, fresh sector, `!spawners`. Expected: identical `Max`/`Target` to scalar 10 — density plateaus at the cap, does not keep growing.
 
-**Pass criteria:** Visibly more enemies at high scalar. Density affects the general `AIDirector` path, not Survivor waves.
+**Pass criteria:** `!spawners` shows `Max`/`Target` scaled ~2.2× at scalar ≥10 (and no higher past the cap); visibly more enemies; log lines present. Density affects the general `AIDirector` path, not Survivor waves.
 
-**Negative case:** Start a Survivor-mode quest. Wave counts should NOT be affected by scalar (Survivor uses `WavesSpawnManager`, not `AIDirector`, and is intentionally left alone).
+**Negative case:** Start a **Survivor** quest. `!spawners` intensities should stay at vanilla values regardless of scalar (Survivor uses `WavesSpawnManager`, not `AIDirector`, and escalation is gated to `EndlessQuest` anyway).
 
 ---
 
@@ -154,8 +116,9 @@ For the design intent and implementation details, read [`docs/upgrade-forge-desi
 
 **Steps:**
 1. `!setdifficulty 0`. Engage a Hollows enemy of known type (e.g., a Fighter). Note approximately how many hits from a standard weapon kill it.
-2. `!setdifficulty 6`. Engage the same enemy type. Expected: ~30% more effective HP (5 hits → ~6-7 hits).
+2. `!setdifficulty 6`. Engage the same enemy type. Expected: ~30% more effective HP (5 hits → ~6-7 hits). (HP scales at `min(scalar,10)*0.05`, so it plateaus at **+50%** by scalar 10.)
 3. Also check wildlife (space whale, drones) — these should NOT be scaled (wildlife faction ≠ Hollows/Remnant).
+4. **Cap check:** `!setdifficulty 25` — HP should be the same +50% as scalar 10, not higher.
 
 **Pass criteria:** Enemy HP visibly higher at high scalar. Wildlife untouched. Neutral objects untouched.
 
@@ -187,9 +150,11 @@ For the design intent and implementation details, read [`docs/upgrade-forge-desi
 1. Jump through 3 sectors normally. Run `!forgemeter`. Expected: Meter is 0 (or 0/threshold), Forge Level stays at 1 — no meter fill without a Forge.
 2. Complete 2 boss objectives. Run `!difficulty`. Expected: `BossesDefeated=2/2, ACTIVE`. Yes — escalation activated even without a Forge.
 3. Jump another sector. Run `!difficulty`. Expected: `DifficultyScalar=1` — sector jump bumped scalar despite no Forge on board.
-4. **Now install a Forge.** Enemies immediately face the current scalar's density/HP/damage boost. Player experiences +5% enemy stats etc. Loot in the next sector reshapes per current scalar.
+4. **Now install a Forge.** Enemies immediately face the current scalar's density/HP/damage boost. Player experiences +5% enemy stats etc.
 
-**Pass criteria:** No meter without Forge. Counters tick regardless. Installing a Forge mid-run applies the accumulated intensity.
+**Note on loot:** loot reshaping is independent of the Forge — it runs on `LootManager` driven by boss count, so sectors have been reshaping to the boss-count ceiling since run start regardless of whether a Forge is installed. Installing the Forge doesn't change the loot picture.
+
+**Pass criteria:** No meter without Forge. Counters tick regardless. Installing a Forge mid-run applies the accumulated enemy intensity.
 
 ---
 
@@ -197,46 +162,53 @@ For the design intent and implementation details, read [`docs/upgrade-forge-desi
 
 **Goal:** Confirm all Phase 6 state resets between runs.
 
-**Setup:** Existing run with high scalar / high boss count (use T3 or T9).
+**Setup:** Existing run with high scalar / high boss count (continue from T9, or force with `!setdifficulty 6` + `!setbosses 2`).
 
 **Steps:**
 1. Note current `!difficulty` and `!forgemeter` state.
 2. Die or return to hub, then start a new Endless run.
 3. Run `!difficulty` at the start of the new run. Expected: `DifficultyScalar=0, BossesDefeated=0/2, DORMANT`.
 4. Run `!forgemeter`. Expected: Meter=0, Forge Level=1.
-5. `!lootdump` in the first sector. Expected: no downgrading (activation dormant).
+5. `!lootdump` in the first sector. Expected: **all relics Common** — with `BossesDefeated=0` the ceiling is Common, so the fresh run immediately downgrades to Common (loot biasing is always-on in Endless, not gated by activation). This is the inverse of the old expectation; confirm the reset didn't leave a stale higher ceiling.
 
-**Pass criteria:** All counters, meter, and Forge level reset to zero/baseline on each new run.
+**Pass criteria:** All counters, meter, and Forge level reset to zero/baseline on each new run; first-sector loot ceiling is back to Common.
 
 ---
 
-### T11 — Non-Endless quest types
+### T11 — Quest-type scoping (base-`Quest` modes stay vanilla)
 
-**Goal:** Confirm quest types that don't have bosses behave gracefully.
+**Goal:** Confirm escalation only touches `EndlessQuest`-backed runs, and base-`Quest` modes are left completely alone.
+
+> **Read the naming note in T5 first.** The menu's **"Pilgrimage"** mode is internally an `EndlessQuest` — escalation **is** active there (that's the main mode QA tests). This scenario is about the *other* modes that run on the base `Quest` class: **Survivor** (and Generic/Tutorial/Special content).
 
 **Steps:**
-1. Start a Pilgrimage quest. Complete sectors normally.
-2. Run `!difficulty`. Expected: `DORMANT` forever (no bosses can be defeated in Pilgrimage, so the threshold is never crossed).
-3. Loot pools and enemy stats should stay vanilla for the whole quest.
-4. Try Survivor quest. Same expectation — bosses aren't a thing in Survivor, so escalation stays off.
+1. Start the main **"Pilgrimage"** menu mode. Confirm escalation behaves normally (bosses count, loot reshapes, `!difficulty` reaches `ACTIVE` after 2 bosses). This is the positive control — it must scale.
+2. Start a **Survivor** quest. Complete sectors / survive waves normally.
+3. Run `!difficulty`. Expected: `DORMANT` forever — Survivor is a base `Quest`, so no bosses are registered and the loot patch no-ops.
+4. `!lootdump` in Survivor. Expected: vanilla loot tiers, no downgrade (even at `BossesDefeated=0`).
+5. Enemy density/HP/damage in Survivor should stay vanilla (Survivor uses `WavesSpawnManager`, which is untouched regardless).
 
-**Pass criteria:** Non-Endless quests never activate escalation.
+**Pass criteria:** "Pilgrimage" menu mode scales; Survivor and other base-`Quest` modes never activate escalation and never reshape loot.
 
-**Note:** If you want to test the escalation systems' effect *without* clearing bosses, use `!setbosses 2` in any quest type to force activation for playtest.
+**Note:** To test the enemy escalation systems *without* clearing bosses, use `!setbosses 2` in an `EndlessQuest`-backed run. `!setbosses` won't make a Survivor run escalate — the loot patch and boss hook are quest-class-gated, not just counter-gated.
 
 ---
 
 ### T12 — Sector jump edge cases (regression)
 
-**Goal:** Confirm Phase 5's sector-jump gating still works.
+**Goal:** Confirm Phase 5's sector-jump gating still works, now under the tightened **`Completed`-only** award rule.
+
+> **Changed rule:** the Forge Meter and `DifficultyScalar` now award **only** when the departed sector's objective is `Completed`. Leaving a sector in `Started` (mission abandoned mid-jump), `Failed`, or `NoObjective` awards nothing. Previously only `Failed` was blocked, so abandoned/unfinished sectors still paid out — that was the bug this fixes.
 
 **Steps:**
-1. Complete a sector with a failed objective. `!difficulty` should show `DifficultyScalar` unchanged (Phase 5 refuses meter award AND — by our activation gate — refuses scalar tick too).
-2. Bounce between two sectors (go A → B → A). Each sector only pays out once per run (Phase 5 dedup). Confirm scalar doesn't double-count.
-3. Interdiction: get interdicted mid-jump, resume. Only ONE scalar tick per successful arrival at a new sector.
-4. Leaving the starting hub-adjacent sector at run start: no meter award (Phase 5) AND no scalar tick.
+1. Leave a sector whose objective is **Failed**. `!forgemeter` unchanged, `!difficulty` shows `DifficultyScalar` unchanged. Log line: `objective Failed (not Completed) — meter award withheld`.
+2. Leave a sector whose objective is still **Started** (jump away before finishing the mission). Same result — **no meter, no scalar** (this is the specific case that used to wrongly pay out; verify it now withholds). Log line: `objective Started (not Completed) — …`.
+3. Leave a **Completed** sector. Meter +20 and scalar +1 (scalar only if escalation is active). This is the positive control.
+4. Bounce between two sectors (A → B → A). Each sector only pays out once per run (Phase 5 dedup). Confirm scalar/meter don't double-count.
+5. Interdiction: get interdicted mid-jump, resume. Only ONE award per successful arrival at a new sector.
+6. Leaving the starting hub-adjacent sector at run start: no meter award AND no scalar tick.
 
-**Pass criteria:** All Phase 5 gating remains intact under Phase 6 scalar logic.
+**Pass criteria:** Only `Completed` sectors award meter/scalar; `Started`/`Failed`/`NoObjective` all withhold. Phase 5 dedup and start-zone gating remain intact.
 
 ---
 
@@ -314,14 +286,14 @@ For reference — the code exercised by this test plan:
 - `VoidCrewTerminus/Features/Forge/ForgeMeterController.cs` — DifficultyScalar owner, sector-jump increment host
 
 **Patches**
-- `VoidCrewTerminus/Patches/BossDefeatHook.cs` — boss objective detection, activation trigger
-- `VoidCrewTerminus/Patches/ForgeSectorHook.cs` — sector-exit meter + scalar increment
-- `VoidCrewTerminus/Patches/LootTableEscalationPatch.cs` — loot reshape hook
-- `VoidCrewTerminus/Patches/EnemyDensityPatch.cs` — 4× `AIDirector` intensity prefixes
-- `VoidCrewTerminus/Patches/EnemyStatScalingPatch.cs` — HP + damage postfixes
+- `VoidCrewTerminus/Patches/BossDefeatHook.cs` — boss objective detection (gated on `is EndlessQuest`), activation trigger
+- `VoidCrewTerminus/Patches/ForgeSectorHook.cs` — sector-exit meter + scalar increment; **awards only on `ObjectiveState.Completed`**
+- `VoidCrewTerminus/Patches/LootTableEscalationPatch.cs` — loot reshape hook; **`EndlessQuest`-only, not gated by the activation threshold** (boss-count-driven from sector 1)
+- `VoidCrewTerminus/Patches/EnemyDensityPatch.cs` — 4× `AIDirector` intensity prefixes **+ `Spawner.InitSpawner` postfix** (raises the ceiling — the density fix); emits `[Escalation] Density …` / `Spawner intensity …`; all capped by `EscalationScalarCap`
+- `VoidCrewTerminus/Patches/EnemyStatScalingPatch.cs` — HP + damage postfixes; capped by `EscalationScalarCap`
 
 **Commands**
-- `VoidCrewTerminus/Commands/SectorEscalationCommands.cs` — `!difficulty`, `!setdifficulty`, `!setbosses`, `!lootdump`
+- `VoidCrewTerminus/Commands/SectorEscalationCommands.cs` — `!difficulty`, `!setdifficulty`, `!setbosses`, `!lootdump`, `!spawners`
 
 **Automated tests**
 - `VoidCrewTerminus.Tests/SectorEscalationTests.cs`
