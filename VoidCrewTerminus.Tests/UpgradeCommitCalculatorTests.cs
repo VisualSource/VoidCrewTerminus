@@ -16,8 +16,13 @@ public class UpgradeCommitCalculatorTests
         int currentLevel,
         RelicTier[] relicTiers,
         ForgeCategory category = ForgeCategory.Weapon,
-        string[] perkSlots = null) =>
-        new(currentLevel, relicTiers, category, perkSlots ?? EmptySlots);
+        string[] perkSlots = null,
+        string[] relicNames = null,
+        BurdenType[] relicCursedBurden = null) =>
+        new(currentLevel, relicTiers,
+            relicNames ?? new string[relicTiers.Length],
+            relicCursedBurden ?? new BurdenType[relicTiers.Length],
+            category, perkSlots ?? EmptySlots);
 
     // Rig: force the perk-roll gate to always fail so tests that only care about
     // level/consumption aren't sensitive to which perk lands.
@@ -212,5 +217,145 @@ public class UpgradeCommitCalculatorTests
     {
         var slots = new string[] { "common_perk", null, null };
         Assert.Equal(-1, PerkPool.TargetSlot(slots, RelicTier.Common));
+    }
+
+    // ---- signature perks (Phase 7-A) ----------------------------------------
+    //
+    // Signature behaviour tests (SignaturesFor / TryGet on real signatures / the
+    // calculator picking a signature over a category perk) all touch
+    // PerkPool._signatures whose static init evaluates StatType values — same
+    // NRE limitation as the existing skipped tests. Left skipped with a clear
+    // reason so the intent is documented in-source.
+    //
+    // PerkDefinition shape assertions (IsSignature true/false) also drag StatType
+    // into the tuple type reference of the params payload, which the test project
+    // doesn't currently link against. Playtest verifies via !forceperk.
+
+    [Fact(Skip = "PerkPool._signatures static init evaluates StatType values which " +
+        "require the game runtime; same limitation as PerkRoll_UsesInjectedRng.")]
+    public void SignaturesFor_FlagshipRelic_ReturnsAtLeastOne()
+    {
+        Assert.NotEmpty(PerkPool.SignaturesFor("Relic_15_BiomassForThrustersAndDamage"));
+    }
+
+    [Fact(Skip = "See SignaturesFor_FlagshipRelic_ReturnsAtLeastOne.")]
+    public void SignaturesFor_HandlesCloneSuffix()
+    {
+        var withClone = PerkPool.SignaturesFor("Relic_15_BiomassForThrustersAndDamage(Clone)");
+        var withoutClone = PerkPool.SignaturesFor("Relic_15_BiomassForThrustersAndDamage");
+        Assert.Equal(withoutClone.Count, withClone.Count);
+    }
+
+    [Fact(Skip = "See SignaturesFor_FlagshipRelic_ReturnsAtLeastOne.")]
+    public void TryGet_ResolvesSignaturePerkIds()
+    {
+        Assert.True(PerkPool.TryGet("sig_biomass_ram", out var perk));
+        Assert.True(perk.IsSignature);
+        Assert.Equal("Relic_15_BiomassForThrustersAndDamage", perk.SignatureRelicId);
+    }
+
+    [Fact(Skip = "See SignaturesFor_FlagshipRelic_ReturnsAtLeastOne.")]
+    public void PerkRoll_FlagshipRelic_PicksSignatureOverCategoryPool()
+    {
+        var outcome = UpgradeCommitCalculator.Calculate(
+            Request(3, new[] { RelicTier.Legendary },
+                category: ForgeCategory.BuiltIn,
+                relicNames: new[] { "Relic_15_BiomassForThrustersAndDamage" }),
+            nextRandom: () => 0f);
+
+        Assert.True(outcome.RollAttempted);
+        Assert.NotNull(outcome.RolledPerk);
+        Assert.True(outcome.RolledPerk.IsSignature);
+        Assert.Equal("Relic_15_BiomassForThrustersAndDamage", outcome.RolledPerk.SignatureRelicId);
+    }
+
+    // ---- burden roll (Phase 7-C) ----------------------------------------
+    //
+    // RNG consumption order in the calculator:
+    //   1. Perk gate         (float)
+    //   2. Signature pick    (only if any signature exists — none in test env; skipped)
+    //   3. Category pool pick (only if signature didn't fire — but pool init NRE in test env)
+    //   4. Burden roll       (only if any consumed relic is cursed)
+    //
+    // For the burden-roll tests below, we ensure the perk gate FAILS (rng=1f)
+    // so we skip past all the StatType-touching branches and land on the
+    // burden roll cleanly.
+
+    [Fact]
+    public void BurdenRoll_NoCursedRelics_ReturnsNone()
+    {
+        var outcome = UpgradeCommitCalculator.Calculate(
+            Request(3, new[] { RelicTier.Common },
+                relicCursedBurden: new[] { BurdenType.None }),
+            nextRandom: () => 1f);   // perk gate fails; burden roll never sees a cursed relic
+
+        Assert.Equal(BurdenType.None, outcome.AppliedBurden);
+    }
+
+    [Fact]
+    public void BurdenRoll_CursedRelic_ChanceFails_ReturnsNone()
+    {
+        // Sequence: [1f perk gate=fails] then [1f burden roll = fails]
+        var draws = new System.Collections.Generic.Queue<float>(new[] { 1f, 1f });
+
+        var outcome = UpgradeCommitCalculator.Calculate(
+            Request(3, new[] { RelicTier.Common },
+                relicCursedBurden: new[] { BurdenType.RandomShutoff }),
+            nextRandom: () => draws.Dequeue());
+
+        Assert.Equal(BurdenType.None, outcome.AppliedBurden);
+    }
+
+    [Fact]
+    public void BurdenRoll_CursedRelic_ChancePasses_ReturnsBakedBurden()
+    {
+        // Sequence: [1f perk gate=fails], [0f burden chance=passes]
+        // Baked burden is RandomShutoff — no pool pick needed, the specific
+        // burden is already baked into the relic at spawn time.
+        var draws = new System.Collections.Generic.Queue<float>(new[] { 1f, 0f });
+
+        var outcome = UpgradeCommitCalculator.Calculate(
+            Request(3, new[] { RelicTier.Common },
+                relicCursedBurden: new[] { BurdenType.RandomShutoff }),
+            nextRandom: () => draws.Dequeue());
+
+        Assert.Equal(BurdenType.RandomShutoff, outcome.AppliedBurden);
+    }
+
+    [Fact]
+    public void BurdenRoll_FIFO_FirstConsumedCursedRelicWins()
+    {
+        // Two cursed relics with different baked burdens. FIFO consumption
+        // means the first one's burden wins (matches signature FIFO tie-break).
+        // Only RandomShutoff shipped today so we test the mechanism by making
+        // one cursed and one not.
+        var draws = new System.Collections.Generic.Queue<float>(new[] { 1f, 0f });
+
+        var outcome = UpgradeCommitCalculator.Calculate(
+            Request(5, new[] { RelicTier.Common, RelicTier.Common },
+                relicCursedBurden: new[] { BurdenType.None, BurdenType.RandomShutoff }),
+            nextRandom: () => draws.Dequeue());
+
+        // Position 1 is cursed; FIFO scan finds it. Chance roll passes → burden applied.
+        Assert.Equal(BurdenType.RandomShutoff, outcome.AppliedBurden);
+    }
+
+    [Fact]
+    public void BurdenRoll_OnlyConsumedRelicsMatter_LeftoverCursedIgnored()
+    {
+        // L3 + 3 relics: greedy walk consumes 2 (L3→L4 = 1, L4→L5 = 1),
+        // then L5→L6 = 2 > 1 leftover so it stops at L5 with 1 leftover.
+        // The Legendary at position 2 is a leftover — not consumed. Even
+        // though it's cursed, the burden roll should ignore it because
+        // only consumed relics count.
+        // Sequence: [1f perk gate=fails] — burden roll never fires because
+        // no consumed relic is cursed.
+        var outcome = UpgradeCommitCalculator.Calculate(
+            Request(3, new[] { RelicTier.Common, RelicTier.Common, RelicTier.Legendary },
+                relicCursedBurden: new[] { BurdenType.None, BurdenType.None, BurdenType.RandomShutoff }),
+            nextRandom: () => 1f);
+
+        Assert.Equal(2, outcome.RelicsConsumed);
+        Assert.Equal(BurdenType.None, outcome.AppliedBurden);
     }
 }

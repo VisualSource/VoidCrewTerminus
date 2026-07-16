@@ -67,6 +67,30 @@ internal static class TerminusConfig
     [BindConfig("forge", 2, "Number of boss objectives that must be defeated in a run before any escalation (density, HP, damage, loot tier biasing) takes effect. DifficultyScalar and BossesDefeated still accumulate during the warm-up so scaling kicks in with full accumulated intensity once the threshold is crossed.")]
     internal static ConfigEntry<int> EscalationBossActivationThreshold;
 
+    [BindConfig("forge", 0.15f, "Base chance (0-1) that a spawned relic is flagged as Cursed. Per-relic modifiers in RelicTierData.BaseCurseChanceModifier are added on top; scalar bonus is added when escalation is active. Final chance clamped to [0, 1].")]
+    internal static ConfigEntry<float> RelicBaseCurseChance;
+
+    [BindConfig("forge", 0.03f, "Additional cursed chance per DifficultyScalar tick — deeper sectors produce more cursed relics. Only applied when escalation is active.")]
+    internal static ConfigEntry<float> EscalationCurseChancePerScalar;
+
+    // Maintenance Burden (Phase 7-C) — when a cursed relic is consumed in a
+    // successful commit, an independent roll decides whether the module also
+    // takes on a burden. Perk roll is unaffected.
+    [BindConfig("forge", 0.75f, "Chance a successful commit consuming ≥1 cursed relic attaches the relic's baked Maintenance Burden to the target module — 'high chance' per design intent")]
+    internal static ConfigEntry<float> BurdenApplicationChance;
+
+    [BindConfig("forge", 2f, "RandomShutoff burden — minimum seconds the module stays powered off during a shutoff event")]
+    internal static ConfigEntry<float> BurdenShutoffMinSeconds;
+
+    [BindConfig("forge", 4f, "RandomShutoff burden — maximum seconds the module stays powered off during a shutoff event")]
+    internal static ConfigEntry<float> BurdenShutoffMaxSeconds;
+
+    [BindConfig("forge", 30f, "RandomShutoff burden — minimum seconds between shutoff events")]
+    internal static ConfigEntry<float> BurdenIntervalMinSeconds;
+
+    [BindConfig("forge", 90f, "RandomShutoff burden — maximum seconds between shutoff events")]
+    internal static ConfigEntry<float> BurdenIntervalMaxSeconds;
+
     [BindConfig("forge", 3, "DifficultyScalar at which Rare relics start dropping (below this, Rares in the loot pool are downgraded to Common)")]
     internal static ConfigEntry<int> EscalationRareUnlockScalar;
 

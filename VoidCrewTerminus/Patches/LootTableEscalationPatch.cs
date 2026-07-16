@@ -5,8 +5,8 @@ using Gameplay.Quests;
 using HarmonyLib;
 using ResourceAssets;
 using VC.Common.CoreData;
-using VoidCrewTerminus.Forge;
 using VoidCrewTerminus.Escalation;
+using VoidCrewTerminus.Forge;
 
 namespace VoidCrewTerminus.Patches;
 

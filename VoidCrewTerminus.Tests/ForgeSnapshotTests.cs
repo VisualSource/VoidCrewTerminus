@@ -101,4 +101,75 @@ public class ForgeSnapshotTests
         Assert.Throws<System.ArgumentOutOfRangeException>(
             () => ForgeSnapshot.Empty.WithPerk(PerkPool.SlotCount, "x"));
     }
+
+    // ---- burdens (Phase 7-C) --------------------------------------------
+
+    [Fact]
+    public void Empty_HasNoBurdens()
+    {
+        Assert.Empty(ForgeSnapshot.Empty.Burdens);
+    }
+
+    [Fact]
+    public void WithBurdenAdded_AddsToBurdenSet()
+    {
+        var updated = ForgeSnapshot.Empty.WithBurdenAdded(BurdenType.RandomShutoff);
+
+        Assert.Contains(BurdenType.RandomShutoff, updated.Burdens);
+        Assert.Empty(ForgeSnapshot.Empty.Burdens);   // original unchanged
+    }
+
+    [Fact]
+    public void WithBurdenAdded_None_IsNoOp()
+    {
+        var snap = ForgeSnapshot.Empty;
+        Assert.Same(snap, snap.WithBurdenAdded(BurdenType.None));
+    }
+
+    [Fact]
+    public void WithBurdenAdded_SameType_Idempotent_ReturnsSameInstance()
+    {
+        var once = ForgeSnapshot.Empty.WithBurdenAdded(BurdenType.RandomShutoff);
+        var twice = once.WithBurdenAdded(BurdenType.RandomShutoff);
+
+        Assert.Same(once, twice);
+        Assert.Single(twice.Burdens);
+    }
+
+    [Fact]
+    public void WithLevel_PreservesBurdens()
+    {
+        var withBurden = ForgeSnapshot.Empty
+            .WithLevel(5)
+            .WithBurdenAdded(BurdenType.RandomShutoff);
+
+        var relevelled = withBurden.WithLevel(7);
+
+        Assert.Equal(7, relevelled.Level);
+        Assert.Contains(BurdenType.RandomShutoff, relevelled.Burdens);
+    }
+
+    [Fact]
+    public void WithPerk_PreservesBurdens()
+    {
+        var withBurden = ForgeSnapshot.Empty.WithBurdenAdded(BurdenType.RandomShutoff);
+        var withPerk = withBurden.WithPerk(0, "some_perk");
+
+        Assert.Contains(BurdenType.RandomShutoff, withPerk.Burdens);
+        Assert.Equal("some_perk", withPerk.PerkSlots[0]);
+    }
+
+    [Fact]
+    public void Create_DedupsBurdens_DropsNone()
+    {
+        var snap = ForgeSnapshot.Create(5, null, new[]
+        {
+            BurdenType.RandomShutoff,
+            BurdenType.None,             // dropped
+            BurdenType.RandomShutoff,    // deduped
+        });
+
+        Assert.Single(snap.Burdens);
+        Assert.Equal(BurdenType.RandomShutoff, snap.Burdens[0]);
+    }
 }

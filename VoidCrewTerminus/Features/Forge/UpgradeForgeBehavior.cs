@@ -227,21 +227,29 @@ public class UpgradeForgeBehavior : MonoBehaviour
         if (_moduleBox.photonView == null) return CommitOutcome.Failure(CommitStatus.MissingViewId);
 
         var relicTiers = new Loot.RelicTier[_relics.Count];
+        var relicNames = new string[_relics.Count];
+        var relicCursedBurden = new BurdenType[_relics.Count];
         for (int i = 0; i < _relics.Count; i++)
+        {
             relicTiers[i] = _relics[i] != null ? Loot.RelicTierData.Get(_relics[i].name).Tier : Loot.RelicTier.Common;
+            relicNames[i] = _relics[i] != null ? _relics[i].name : null;
+            relicCursedBurden[i] = _relics[i] != null ? Loot.CursedRelicMarker.GetBurden(_relics[i]) : BurdenType.None;
+        }
 
         var category = PerkPool.CategoryOf(_moduleBox.moduleRef?.Asset as CellModule);
         int viewId = _moduleBox.photonView.ViewID;
         var current = ForgeStateStore.TryPeekSnapshot(viewId, out var s) ? s : ForgeSnapshot.Empty;
         int currentLevel = CurrentBoxLevel;
 
-        var request = new CommitRequest(currentLevel, relicTiers, category, current.PerkSlots);
+        var request = new CommitRequest(currentLevel, relicTiers, relicNames, relicCursedBurden, category, current.PerkSlots);
         var outcome = UpgradeCommitCalculator.Calculate(request);
         if (outcome.Status != CommitStatus.Ok) return outcome;
 
         var updated = current.WithLevel(outcome.NewLevel);
         if (outcome.RolledPerk != null)
             updated = updated.WithPerk(outcome.TargetSlot, outcome.RolledPerk.Id);
+        if (outcome.AppliedBurden != BurdenType.None)
+            updated = updated.WithBurdenAdded(outcome.AppliedBurden); // idempotent
         ForgeStateStore.SaveSnapshot(viewId, updated);
 
         for (int i = 0; i < outcome.RelicsConsumed && _relics.Count > 0; i++)
