@@ -569,8 +569,17 @@ in lockstep.</p>
 </p>
 <ul class="bullets">
   <li>The stat bump still applies in full — there is no <em>stat</em> penalty.</li>
-  <li>The perk roll, if it occurs, draws from a <em>cursed-augmented pool</em> that pairs a beneficial perk with a Maintenance Burden flag.</li>
+  <li>The perk roll is <strong>unaffected</strong> — a cursed relic draws from the same signature/category pool as any other relic.</li>
+  <li>Instead, an <strong>independent</strong> roll (<code>BurdenApplicationChance</code>, default 0.75) decides whether the target module also picks up the Maintenance Burden that was baked onto that relic at spawn. Perk and burden are <em>orthogonal</em> outcomes of one commit: you can get a perk with no burden, a burden with no perk, both, or neither.</li>
 </ul>
+
+<div class="callout warn">
+  <strong>Superseded (2026-07-14, 7-C):</strong> this section originally specified a
+  <em>cursed-augmented perk pool</em> — cursed relics drawing from a separate authored perk
+  list that paired each perk with a burden flag. That is <strong>not</strong> what shipped.
+  Perk selection is identical for cursed and non-cursed relics; the curse only drives the
+  independent burden roll described above.
+</div>
 
 <div class="callout warn">
   <span class="label">Design intent</span>
@@ -975,11 +984,11 @@ scalar-5 sector: Common entries pass through, any Legendaries in the pool downgr
 messages still fire post-activation as tier ceilings shift.</p>
 
 <h3>Phase 7 — Content Pass (Signatures + Cursed + Maintenance Burden)</h3>
-<p><strong>Goal:</strong> Roguelike content depth. Flagship relics carry signature perks. ~30% of relics cursed; cursed perks trigger Maintenance Burden.</p>
+<p><strong>Goal:</strong> Roguelike content depth. Flagship relics carry signature perks. Relics may spawn cursed; consuming a cursed relic can saddle the module with a Maintenance Burden.</p>
 <ul class="bullets">
-  <li>Update <code>RelicTierData.cs</code> — flag ~30% of relics with <code>IsCursed = true</code>.</li>
+  <li><s>Update <code>RelicTierData.cs</code> — flag ~30% of relics with <code>IsCursed = true</code>.</s> <strong>Superseded:</strong> cursed is a <em>per-instance</em> roll at spawn, not a static per-relic-type flag. <code>RelicTierData</code> instead carries a per-relic <code>BaseCurseChanceModifier</code>; the chance is <code>clamp(RelicBaseCurseChance + modifier + DifficultyScalar × EscalationCurseChancePerScalar, 0, RelicMaxCurseChance)</code>, rolled once per relic on spawn and baked onto the instance (<code>CursedRelicMarker</code>). Not gated on escalation — curses apply from the first sector.</li>
   <li>Update <code>PerkPool.cs</code> — add ~5–10 signature perks tied to specific flagship relic IDs.</li>
-  <li>Update <code>PerkPool.RollPerk</code> to draw from cursed-augmented pool when relic is cursed.</li>
+  <li><s>Update <code>PerkPool.RollPerk</code> to draw from cursed-augmented pool when relic is cursed.</s> <strong>Superseded:</strong> the perk roll ignores cursed entirely. A cursed relic instead triggers an independent <code>BurdenApplicationChance</code> roll that attaches its baked burden. Perk and burden are orthogonal.</li>
   <li><strong>Dynamic-scaling signatures</strong> — author ~2 signature perks using <code>ModDynamicScalingValue</code> (Stalker / Hoarder; see <a href="#refinements">Refinements §3</a>). Constructed in-code via <code>JObject</code> → <code>ModDynamicValue.LoadDynamicValue</code>; no asset-bundle JSON.</li>
   <li><code>Forge/MaintenanceBurden.cs</code> — operational quirks (random shutoffs, increased heat ticks, etc.) on burdened modules. <strong>MonoBehaviour-driven</strong>; <code>ModDynamicCondition</code> is explicitly not used.</li>
 </ul>
@@ -987,7 +996,7 @@ messages still fire post-activation as tier ceilings shift.</p>
   <span class="label">Pre-flight required</span>
   Confirm the <code>ModDynamicScalingValue</code> JSON schema (exact field names: <code>scaling</code> / <code>source</code> / <code>min_value</code> / <code>max_value</code> or otherwise) and the <code>ValueScalingType</code> enum's string forms by decompiling live <code>Assembly-CSharp.dll</code>. Also confirm whether <code>StatMod.InitDynamicElements()</code> must be called manually after assigning <code>DynamicValue</code> post-construction, or whether <code>ApplyModifiers</code> invokes it.
 </div>
-<p><strong>Test:</strong> Flagship relic on empty Slot 1 has chance to roll its signature. Cursed relic → upgrade succeeds, perk rolls from cursed pool, Maintenance Burden activates. Force-apply Stalker via <code>!forceperk stalker &lt;weapon&gt;</code>; observe damage at idle vs. full sublight scales (zero at zero speed, +30% at top). Clean L10 module (no cursed relics ever used) operates perfectly. Per-run reset clears all flags.</p>
+<p><strong>Test:</strong> Flagship relic on empty Slot 1 has chance to roll its signature. Cursed relic → upgrade succeeds, perk rolls normally (cursed does <em>not</em> change the pool), and an independent roll may activate a Maintenance Burden. Force-apply Stalker via <code>!forceperk stalker &lt;weapon&gt;</code>; observe damage at idle vs. full sublight scales (zero at zero speed, +30% at top). Clean L10 module (no cursed relics ever used) operates perfectly. Per-run reset clears all flags.</p>
 
 <h3>Phase 8 — Multiplayer Sync + Edge Cases</h3>
 <p><strong>Goal:</strong> All Phase 0–7 mechanics work correctly in a hosted multiplayer session.</p>

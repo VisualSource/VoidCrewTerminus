@@ -241,6 +241,16 @@ public class UpgradeForgeBehavior : MonoBehaviour
         var current = ForgeStateStore.TryPeekSnapshot(viewId, out var s) ? s : ForgeSnapshot.Empty;
         int currentLevel = CurrentBoxLevel;
 
+        // Cursed state lives in a host-only marker component and DifficultyScalar
+        // isn't networked yet, so an off-host commit reads every relic as
+        // un-cursed and can never produce a burden. The whole commit path is
+        // unsynced until Phase 8 (perk rolls diverge too) — log it rather than
+        // let the divergence be silent.
+        if (!Photon.Pun.PhotonNetwork.IsMasterClient)
+            BepinPlugin.Log.LogWarning(
+                "[Forge] Commit running OFF-HOST — cursed relics read as un-cursed and the perk roll is " +
+                "not authoritative. Outcome will diverge from the host (known gap; Phase 8 syncs the commit path).");
+
         var request = new CommitRequest(currentLevel, relicTiers, relicNames, relicCursedBurden, category, current.PerkSlots);
         var outcome = UpgradeCommitCalculator.Calculate(request);
         if (outcome.Status != CommitStatus.Ok) return outcome;
@@ -264,7 +274,66 @@ public class UpgradeForgeBehavior : MonoBehaviour
             $"(consumed {outcome.RelicsConsumed} relic{(outcome.RelicsConsumed == 1 ? "" : "s")}, {_relics.Count} remain, " +
             $"tier={outcome.BestTier}, perk={DescribePerkResult(outcome)})");
 
+        LogPerkCausalChain(outcome, relicNames);
+        LogBurdenCausalChain(outcome, relicCursedBurden);
+
         return outcome;
+    }
+
+    // 7-A causal log: proves whether the perk came from a flagship relic's
+    // signature or from the category pool. Without this the two are
+    // indistinguishable — !perks shows the resulting slot either way, and the
+    // signature-vs-pool unit test is skipped (StatType init), so this line is
+    // the only evidence 7-A actually works.
+    private static void LogPerkCausalChain(CommitOutcome outcome, IReadOnlyList<string> relicNames)
+    {
+        if (!outcome.RollAttempted)
+        {
+            BepinPlugin.Log.LogDebug("[Forge] Perk: no roll attempted (no eligible slot for this tier).");
+            return;
+        }
+
+        if (outcome.RolledPerk == null)
+        {
+            BepinPlugin.Log.LogDebug(
+                $"[Forge] Perk: roll FAILED at {outcome.RollChance:P0} ({outcome.BestTier}) — no perk.");
+            return;
+        }
+
+        string consumed = relicNames == null || relicNames.Count == 0
+            ? "?"
+            : string.Join(",", relicNames);
+
+        if (outcome.RolledPerk.IsSignature)
+            BepinPlugin.Log.LogDebug(
+                $"[Forge] Perk: SIGNATURE '{outcome.RolledPerk.Id}' preferred over category pool " +
+                $"(flagship relic {outcome.RolledPerk.SignatureRelicId}; consumed [{consumed}]) → slot {outcome.TargetSlot + 1}.");
+        else
+            BepinPlugin.Log.LogDebug(
+                $"[Forge] Perk: POOL draw '{outcome.RolledPerk.Id}' (no signature among consumed [{consumed}]) " +
+                $"→ slot {outcome.TargetSlot + 1}.");
+    }
+
+    // 7-C causal log: proves the cursed→burden chain end-to-end. A burden roll
+    // that never fires must be distinguishable from one that fired and failed.
+    private static void LogBurdenCausalChain(CommitOutcome outcome, IReadOnlyList<BurdenType> relicCursedBurden)
+    {
+        int cursedCount = 0;
+        if (relicCursedBurden != null)
+            for (int i = 0; i < relicCursedBurden.Count; i++)
+                if (relicCursedBurden[i] != BurdenType.None) cursedCount++;
+
+        if (cursedCount == 0)
+        {
+            BepinPlugin.Log.LogDebug("[Forge] Burden: no cursed relics consumed — no roll.");
+            return;
+        }
+
+        float chance = TerminusConfig.BurdenApplicationChance?.Value ?? 0.75f;
+        BepinPlugin.Log.LogInfo(
+            outcome.AppliedBurden != BurdenType.None
+                ? $"[Forge] Burden: cursed x{cursedCount} consumed, roll {chance:P0} → APPLIED {outcome.AppliedBurden}."
+                : $"[Forge] Burden: cursed x{cursedCount} consumed, roll {chance:P0} → none (roll failed).");
     }
 
     // Human-readable perk-roll summary used by DoCommit for the notification line.

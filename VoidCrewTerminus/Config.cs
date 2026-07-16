@@ -67,11 +67,14 @@ internal static class TerminusConfig
     [BindConfig("forge", 2, "Number of boss objectives that must be defeated in a run before any escalation (density, HP, damage, loot tier biasing) takes effect. DifficultyScalar and BossesDefeated still accumulate during the warm-up so scaling kicks in with full accumulated intensity once the threshold is crossed.")]
     internal static ConfigEntry<int> EscalationBossActivationThreshold;
 
-    [BindConfig("forge", 0.15f, "Base chance (0-1) that a spawned relic is flagged as Cursed. Per-relic modifiers in RelicTierData.BaseCurseChanceModifier are added on top; scalar bonus is added when escalation is active. Final chance clamped to [0, 1].")]
+    [BindConfig("forge", 0.15f, "Base chance (0-1) that a spawned relic is flagged as Cursed. Per-relic modifiers in RelicTierData.BaseCurseChanceModifier are added on top, plus a DifficultyScalar bonus. Applies from the first sector — curses are NOT gated on the escalation boss threshold.")]
     internal static ConfigEntry<float> RelicBaseCurseChance;
 
-    [BindConfig("forge", 0.03f, "Additional cursed chance per DifficultyScalar tick — deeper sectors produce more cursed relics. Only applied when escalation is active.")]
+    [BindConfig("forge", 0.03f, "Additional cursed chance per DifficultyScalar tick — deeper sectors produce more cursed relics. Note DifficultyScalar only starts climbing once escalation activates, so in practice this is flat during warm-up.")]
     internal static ConfigEntry<float> EscalationCurseChancePerScalar;
+
+    [BindConfig("forge", 0.50f, "Hard ceiling (0-1) on the final cursed chance, applied after base + per-relic modifier + scalar bonus. Without it the uncapped DifficultyScalar drives curse chance to 100% in deep runs (every relic cursed). Set 1 to disable the ceiling.")]
+    internal static ConfigEntry<float> RelicMaxCurseChance;
 
     // Maintenance Burden (Phase 7-C) — when a cursed relic is consumed in a
     // successful commit, an independent roll decides whether the module also

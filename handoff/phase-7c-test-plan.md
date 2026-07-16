@@ -23,7 +23,7 @@ For scaffolding + spawn-time cursed roll, see [phase-7b-test-plan.md](phase-7b-t
 **Config knobs relevant to this phase** (under `[forge]`)
 | Key | Default | Purpose |
 |---|---|---|
-| `BurdenApplicationChance` | `0.50` | Chance a successful commit consuming ≥1 cursed relic attaches a burden |
+| `BurdenApplicationChance` | `0.75` | Chance a successful commit consuming ≥1 cursed relic attaches a burden ("high chance" per design intent; raised from the original 0.50) |
 | `BurdenShutoffMinSeconds` | `2` | RandomShutoff: min seconds a shutoff event lasts |
 | `BurdenShutoffMaxSeconds` | `4` | RandomShutoff: max seconds a shutoff event lasts |
 | `BurdenIntervalMinSeconds` | `30` | RandomShutoff: min seconds between shutoff events |

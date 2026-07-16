@@ -30,8 +30,8 @@ internal class CursedStatusCommand : PublicCommand
 
         float baseChance = TerminusConfig.RelicBaseCurseChance?.Value ?? 0.15f;
         float scalarBonus = TerminusConfig.EscalationCurseChancePerScalar?.Value ?? 0.03f;
+        float maxChance = TerminusConfig.RelicMaxCurseChance?.Value ?? 0.50f;
         int scalar = Forge.ForgeMeterController.DifficultyScalar;
-        bool active = SectorEscalation.IsScalingActive;
 
         var relics = Object.FindObjectsOfType<CarryableObject>()
             .Where(co => co != null && RelicTierData.TryGet(RelicTierData.NormalizeName(co.gameObject.name), out _))
@@ -51,13 +51,15 @@ internal class CursedStatusCommand : PublicCommand
             RelicTierData.TryGet(name, out var entry);
             var burden = CursedRelicMarker.GetBurden(co.gameObject);
             bool cursed = burden != Forge.BurdenType.None;
-            float chance = CursedRelicRoll.ChanceFor(entry, scalar, active, baseChance, scalarBonus);
+            float chance = CursedRelicRoll.ChanceFor(entry, scalar, baseChance, scalarBonus, maxChance);
+            float uncapped = baseChance + entry.BaseCurseChanceModifier + scalar * scalarBonus;
             string affinity = entry.BurdenAffinity != null && entry.BurdenAffinity.Count > 0
                 ? string.Join("/", entry.BurdenAffinity)
                 : "none";
             Messaging.Notification(
-                $"{name}: {entry.Tier}{(cursed ? $" CURSED({burden})" : "")} — chance would be {chance:P1} " +
-                $"(base {baseChance:P0}, relic {entry.BaseCurseChanceModifier:+0.00;-0.00}, scalar +{scalar * scalarBonus:P1}); affinity: {affinity}");
+                $"{name}: {entry.Tier}{(cursed ? $" CURSED({burden})" : "")} — chance would be {chance:P1}" +
+                $"{(uncapped > maxChance ? $" (capped from {uncapped:P1})" : "")} " +
+                $"(base {baseChance:P0}, relic {entry.BaseCurseChanceModifier:+0.00;-0.00}, scalar +{scalar * scalarBonus:P1}, ceiling {maxChance:P0}); affinity: {affinity}");
         }
     }
 }

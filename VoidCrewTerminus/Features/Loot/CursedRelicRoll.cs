@@ -5,27 +5,36 @@ namespace VoidCrewTerminus.Loot;
 // Pure math for the spawn-time cursed roll. Kept Unity-free so the chance
 // formula is testable without the game runtime.
 //
-// Total chance = clamp01(baseChance + perRelicModifier + scalarBonus).
+// Total chance = clamp(baseChance + perRelicModifier + scalarBonus, 0, maxChance).
 // Roll happens against a provided nextRandom (0..1) from the caller — patches
 // use UnityEngine.Random; tests pass a stub.
+//
+// Curses are deliberately NOT gated on SectorEscalation.IsScalingActive: a
+// cursed relic is a property of the relic, so the risk exists from the first
+// sector. DifficultyScalar only starts climbing after escalation activates,
+// which means this naturally yields a flat baseline during warm-up and rising
+// risk with depth — without a hard on/off switch.
+//
+// maxChance is the load-bearing part: DifficultyScalar is uncapped and climbs
+// ~1/sector, so an unbounded formula reaches 100% cursed in a long run (every
+// relic cursed forever). The ceiling keeps curses a risk rather than a
+// certainty.
 public static class CursedRelicRoll
 {
-    // Compute the final curse chance for a relic given the current escalation
-    // state. Returns 0 if escalation is dormant (no base chance during warm-up).
-    // Otherwise adds per-relic modifier and scalar-driven bonus, clamped to [0, 1].
+    // Compute the final curse chance for a relic. Adds the per-relic modifier
+    // and the scalar-driven bonus to the base, then clamps to [0, maxChance].
     public static float ChanceFor(
         RelicTierEntry entry,
         int difficultyScalar,
-        bool isScalingActive,
         float baseChance,
-        float scalarBonusPerScalar)
+        float scalarBonusPerScalar,
+        float maxChance)
     {
-        if (!isScalingActive) return 0f;
         float total = baseChance + entry.BaseCurseChanceModifier
                     + Math.Max(0, difficultyScalar) * scalarBonusPerScalar;
         if (total < 0f) return 0f;
-        if (total > 1f) return 1f;
-        return total;
+        float ceiling = maxChance < 0f ? 0f : (maxChance > 1f ? 1f : maxChance);
+        return total > ceiling ? ceiling : total;
     }
 
     // Given a chance and a random draw (0..1), decide cursed / not.
