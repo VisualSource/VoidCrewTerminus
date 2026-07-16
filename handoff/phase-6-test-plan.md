@@ -68,6 +68,10 @@ For the design intent and implementation details, read [`docs/upgrade-forge-desi
 
 **Steps:**
 0. **Name-match sanity check (do this first).** Run `!lootdump` in any relic-bearing sector. If it prints `WARNING: 0 relics recognized by RelicTierData …` plus a `raw filenames: …` line, then `RelicTierData`'s keys don't match the live `CraftableItemRef.Filename` values and **loot gating is a silent no-op** — capture those raw filenames and report them so the key map can be fixed. If you see `Common=/Rare=/Legendary=` tier counts, the names match and gating is live; continue.
+
+> **The `Reshape:` line is your main signal.** `!lootdump` now prints `Reshape: ceiling=<tier> (scalar N, bosses M); downgraded X, dropped Y. [bucket] Cn/Rn/Ln → Cn/Rn/Ln …` — the before→after tier histogram of the last reshape. This is the direct proof the biasing ran and what it did. The same summary is logged as `[Forge] Loot reshaped: …`.
+>
+> **Gotcha — test at 0 or 1 boss, not 2.** At `bosses=2` the ceiling is **Legendary**, so nothing is over the ceiling and the reshape correctly downgrades **nothing** — `!lootdump` looks identical to vanilla. That's not a failure. To *see* downgrades: `!setbosses 0` (everything → Common) or `!setbosses 1` (Legendary → Rare).
 1. **0 bosses (fresh run, no forcing):** enter the first relic-bearing sector and run `!lootdump`. Expected: **every relic is Common** — all Rares/Legendaries downgraded to Common (or dropped if the list had no Common candidate). Non-relic entries untouched. This is the key regression check: before the fix, 0-boss sectors passed through unchanged.
 2. `!setbosses 1` (boss ceiling = Rare), re-enter a sector, `!lootdump`. Expected: Legendaries downgrade to Rare, Rares stay, Commons stay.
 3. `!setbosses 2` (boss ceiling = Legendary), `!lootdump`. Expected: nothing downgrades — Legendary is the ceiling.

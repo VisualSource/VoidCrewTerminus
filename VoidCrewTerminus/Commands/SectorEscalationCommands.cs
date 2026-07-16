@@ -109,6 +109,12 @@ internal class LootDumpCommand : PublicCommand
             return;
         }
 
+        // Show what the last reshape actually did (before→after tier counts + ceiling).
+        // This is the direct "is loot gating working" signal: at 0 bosses you'll see
+        // Legendaries/Rares collapse to Common; at 2 bosses the ceiling is Legendary
+        // so it reports no downgrades — which is correct, not a bug.
+        Messaging.Notification($"Reshape: {Patches.LootTableEscalationPatch.LastReshapeSummary}");
+
         int recognizedTotal = 0;
         var unrecognizedSamples = new List<string>();
 
