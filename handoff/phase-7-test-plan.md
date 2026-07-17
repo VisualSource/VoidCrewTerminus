@@ -25,8 +25,8 @@ Phase 6 was marked "shipped" while enemy density was a silent no-op. So for Phas
 | `EscalationCurseChancePerScalar` | `0.03` | Added per `DifficultyScalar` (scalar only climbs post-activation) |
 | `RelicMaxCurseChance` | `0.50` | Hard ceiling on final curse chance |
 | `BurdenApplicationChance` | `0.75` | Chance a cursed-relic commit attaches the burden |
-| `BurdenShutoffMin/MaxSeconds` | `2` / `4` | RandomShutoff dark window |
-| `BurdenIntervalMin/MaxSeconds` | `30` / `90` | Gap between shutoffs |
+| `BurdenIntervalMin/MaxSeconds` | `30` / `90` | Gap between shutoff events (burden only turns the module OFF; the crew restores it) |
+| `PerkRollChanceRare` / `…Legendary` | `0.40` / `0.75` | Perk roll gate — set to `1.0` to make T2 deterministic |
 
 **Dev commands:** `!cursedstatus` · `!forcecursed <on\|off> [burden]` · `!listburdens` · `!triggerburden` · `!perks` · `!forceperk` · `!setbosses` · `!setdifficulty` · `!forgespawn` · `!forgeinsert` · `!forgecommit`
 
@@ -52,17 +52,19 @@ Phase 6 was marked "shipped" while enemy density was a silent no-op. So for Phas
 
 **Goal:** A consumed flagship relic yields its signature perk in preference to a category-pool draw. **This is the one with no automated coverage** (`PerkRoll_FlagshipRelic_PicksSignatureOverCategoryPool` is skipped on `StatType` init), so the log line is its *only* proof.
 
-**Setup:** Forge installed with a free perk slot. Flagship relics & signatures: `Relic_15_BiomassForThrustersAndDamage`→`sig_biomass_ram`, `Relic_28_PayloadRecharge`→`sig_sustained_payload`, `Relic_12_BenedictionDamageForAccuracy`→`sig_holy_purpose`, `Relic_13_ConfessorFireRateForPower`→`sig_confessor_cadence`, `Relic_02_PowerForBreakers`→`sig_overcharged_grid`.
+> **Two gotchas that block this test** (both hit on the first attempt): the perk roll is chance-gated (Rare 40% / Legendary 75%), so it often just fails; **and** the relic must be an actual **flagship** — a plain Rare like `Relic_11_A` yields a `POOL draw` even when the roll lands. Make it deterministic: set **`PerkRollChanceRare = 1.0`** (and/or `…Legendary = 1.0`) so every roll succeeds, and use a flagship relic below.
+
+**Setup:** Forge installed with a free perk slot; `PerkRollChanceRare = 1.0`. Flagship relics & signatures:
+`Relic_15_BiomassForThrustersAndDamage`→`sig_biomass_ram` (Legendary), `Relic_28_PayloadRecharge`→`sig_sustained_payload` (Legendary), `Relic_12_BenedictionDamageForAccuracy`→`sig_holy_purpose` (Rare), `Relic_13_ConfessorFireRateForPower`→`sig_confessor_cadence` (Rare), `Relic_02_PowerForBreakers`→`sig_overcharged_grid` (Rare).
 
 **Steps:**
-1. Spawn a flagship relic (e.g. `Relic_12`), insert it, `!forgecommit`. Repeat until the perk roll lands (Legendary/Rare chance-gated).
-2. On a landing commit, expected:
+1. `!spawn Relic_12_BenedictionDamageForAccuracy`, insert it, `!forgecommit`. With the roll forced to 100% it lands immediately. Expected:
    `[Forge] Perk: SIGNATURE 'sig_holy_purpose' preferred over category pool (flagship relic Relic_12_BenedictionDamageForAccuracy; consumed [...]) → slot N`
-3. Contrast: commit with a **non-flagship** relic of the same tier. Expected:
+2. Contrast: commit a **non-flagship** relic of the same tier (e.g. `Relic_11_A_WeaponFireRateForDefects`). Still 100% roll, but expected:
    `[Forge] Perk: POOL draw '<id>' (no signature among consumed [...]) → slot N`
-4. `!perks` confirms the slot now holds the expected perk.
+3. `!perks` confirms each slot holds the expected perk (the signature vs a generic pool perk).
 
-**Pass:** flagship commit logs the `SIGNATURE ... preferred over category pool` line naming the right relic; non-flagship logs `POOL draw`. Both reflected in `!perks`.
+**Pass:** the flagship commit logs `SIGNATURE ... preferred over category pool` naming the right relic; the non-flagship logs `POOL draw`. Both reflected in `!perks`.
 
 ---
 
@@ -84,22 +86,20 @@ Phase 6 was marked "shipped" while enemy density was a silent no-op. So for Phas
 
 ---
 
-### T4 — RandomShutoff behaves: owner-authoritative, loud on veto, respects the crew
+### T4 — RandomShutoff behaves: shuts OFF only, never restores
 
-**Goal:** The burden actually darkens the module, notifications track *real* power state, a vetoed request is never silent, and the burden never fights player intent. This is the 7-C fix pass (the `CellModule.TurnOff` = vetoable `RequestChange` trap).
+**Goal:** The burden cuts power to the module and **leaves it off** — restoring it is the crew's job. It never turns the module back on, and a vetoed shutoff is never silent. Owner-authoritative.
 
 **Setup:** A module carrying a RandomShutoff burden from T3.
 
 **Steps:**
-1. `!triggerburden`. The module should visibly power down; you get **"… powered down."**, then after 2–4s **"… restored."** These come from the real `PowerDrain.IsOn.OnChange`. Log:
-   `[Burden] <module> shutoff applied (IsOn->False)` … `restore applied (IsOn->True)`.
-2. **Crew-override case:** `!triggerburden`, and *while it's dark* manually power the module back on from the panel. The burden must **stand down**, not re-fight it. Log:
-   `[Burden] <module> IsOn changed to True externally during our shutoff — will not restore.`
-3. **Already-off case:** manually power the module off, then `!triggerburden`. It must **skip**, not schedule a stray TurnOn. Log:
-   `[Burden] <module> already powered down — skipping shutoff, rescheduling.`
-4. **Veto visibility:** if any shutoff is ever refused by the game, it must log `… DECLINED by a ChangeValidator …` — never a silent nothing.
+1. `!triggerburden`. The module powers down and you get **"… powered down — switch it back on manually."** (driven by real `PowerDrain.IsOn.OnChange`). Log: `[Burden] <module> shutoff applied (IsOn->False).` **Then wait** — the module must **stay off**. There must be **no** `restore`/`IsOn->True` line and no auto power-on.
+2. Switch the module back on yourself (panel). The burden says nothing and does not fight it. After the next interval it may shut off again — that's the tax.
+3. **Already-off case:** leave the module off (or switch it off yourself), then `!triggerburden`. It must do nothing — log `[Burden] <module> already off — nothing to shut off this cycle.` — and never a stray power-on.
+4. **Veto visibility:** if a shutoff is ever refused by the game, it logs `… shutoff DECLINED by a ChangeValidator …` — never a silent nothing.
+5. `!listburdens` while off shows `currently OFF — crew must switch it back on`; while running shows `Ns until next shutoff`.
 
-**Pass:** module darkens & recovers with notifications matching real state; the crew-override and already-off cases log the stand-down/skip lines and never force power against the player; no shutoff is ever a silent no-op.
+**Pass:** the module goes dark and **stays** dark until the crew restores it (no auto-restore line ever); the already-off cycle no-ops; no shutoff is ever silent.
 
 ---
 

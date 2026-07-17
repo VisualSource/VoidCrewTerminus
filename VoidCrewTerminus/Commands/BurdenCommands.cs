@@ -37,7 +37,7 @@ internal class ListBurdensCommand : PublicCommand
             string detail = b switch
             {
                 RandomShutoffBehavior rs => rs.IsShutOff
-                    ? $"SHUT OFF ({rs.SecondsUntilRecovery:0.0}s until recovery)"
+                    ? "currently OFF — crew must switch it back on"
                     : $"{rs.SecondsUntilNextShutoff:0.0}s until next shutoff",
                 _ => "(no detail)",
             };

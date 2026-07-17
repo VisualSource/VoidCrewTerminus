@@ -82,13 +82,7 @@ internal static class TerminusConfig
     [BindConfig("forge", 0.75f, "Chance a successful commit consuming ≥1 cursed relic attaches the relic's baked Maintenance Burden to the target module — 'high chance' per design intent")]
     internal static ConfigEntry<float> BurdenApplicationChance;
 
-    [BindConfig("forge", 2f, "RandomShutoff burden — minimum seconds the module stays powered off during a shutoff event")]
-    internal static ConfigEntry<float> BurdenShutoffMinSeconds;
-
-    [BindConfig("forge", 4f, "RandomShutoff burden — maximum seconds the module stays powered off during a shutoff event")]
-    internal static ConfigEntry<float> BurdenShutoffMaxSeconds;
-
-    [BindConfig("forge", 30f, "RandomShutoff burden — minimum seconds between shutoff events")]
+    [BindConfig("forge", 30f, "RandomShutoff burden — minimum seconds between shutoff events (the burden only turns the module OFF; the crew restores it manually)")]
     internal static ConfigEntry<float> BurdenIntervalMinSeconds;
 
     [BindConfig("forge", 90f, "RandomShutoff burden — maximum seconds between shutoff events")]
