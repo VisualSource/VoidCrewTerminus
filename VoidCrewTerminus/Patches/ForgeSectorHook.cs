@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using CG.Game.Scenarios;
 using VoidCrewTerminus.Escalation;
 using VoidCrewTerminus.Forge;
-using VoidCrewTerminus.Escalation;
 using VoidManager.Utilities;
 
 namespace VoidCrewTerminus.Patches;

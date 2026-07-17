@@ -5,7 +5,6 @@ using Gameplay.Quests;
 using VoidCrewTerminus.Escalation;
 using VoidCrewTerminus.Forge;
 using VoidManager.Utilities;
-using VoidCrewTerminus.Escalation;
 
 namespace VoidCrewTerminus.Patches;
 
