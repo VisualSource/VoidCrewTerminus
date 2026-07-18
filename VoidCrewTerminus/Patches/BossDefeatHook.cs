@@ -63,6 +63,11 @@ internal static class BossDefeatHook
             if (!(GameSessionManager.ActiveSession?.ActiveQuest is EndlessQuest endless)) return;
             if (!endless.IsBossObjective(objective.Asset)) return;
 
+            // Phase 8-A: BossesDefeated is host-authoritative. This event fires on
+            // every client; only the master counts + drives the unlock messages,
+            // and broadcasts the new count. Clients receive it via the broadcast.
+            if (!Net.ForgeNetSync.IsAuthority) return;
+
             if (!_awardedBossObjectives.Add(objective))
             {
                 BepinPlugin.Log.LogDebug($"[Forge] Boss objective {objective.Asset} already awarded — skipping.");
@@ -93,6 +98,9 @@ internal static class BossDefeatHook
             BepinPlugin.Log.LogInfo(
                 $"[Escalation] Boss defeated ({objective.Asset}) — scalar {(wasActive ? "+" + bump : "gated")}, " +
                 $"bosses → {SectorEscalation.BossesDefeated}.");
+
+            // Push the new boss count (+ any scalar bump) to clients.
+            Net.ForgeNetSync.BroadcastState();
         }
         catch (System.Exception e)
         {

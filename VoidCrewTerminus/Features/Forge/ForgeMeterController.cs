@@ -71,6 +71,20 @@ public static class ForgeMeterController
         BepinPlugin.Log.LogDebug($"[Forge] DifficultyScalar set to {DifficultyScalar} (dev)");
     }
 
+    // Phase 8-A — client-side apply of a host-authoritative state broadcast. Sets
+    // the backing fields directly (no notifications, no re-broadcast) and fires
+    // LevelChanged so installed Forges refresh their tube visibility. Never call
+    // on the authority; that path goes through AddMeter/IncrementDifficultyScalar.
+    internal static void ApplyNetworkState(int scalar, float meter, int level)
+    {
+        DifficultyScalar = Math.Max(0, scalar);
+        Meter = Math.Max(0f, meter);
+        int clamped = Math.Max(MinLevel, Math.Min(MaxLevel, level));
+        bool levelChanged = clamped != Level;
+        Level = clamped;
+        if (levelChanged) LevelChanged?.Invoke(Level);
+    }
+
     public static void AddMeter(float amount, string source)
     {
         if (amount <= 0f) return;
@@ -119,7 +133,11 @@ public static class ForgeMeterController
         }
         if (!supplies.photonView.IsMine)
         {
-            message = "Only the host can feed the Forge alloys (for now).";
+            // Phase 8-A: alloys are spent against the host's authoritative supplies.
+            // A client asks the host to spend on its behalf; the resulting
+            // meter/level arrives back via the state broadcast.
+            Net.ForgeNetSync.RequestAlloySpend();
+            message = "Requested the host feed the Forge — the meter will update shortly.";
             return false;
         }
 

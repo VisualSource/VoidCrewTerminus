@@ -528,7 +528,10 @@ public class UpgradeForgeBehavior : MonoBehaviour
                 break;
             case ForgeInteractableKind.AlloyTerminal:
                 if (ForgeMeterController.TrySpendAlloys(out var alloyError))
+                {
                     Messaging.Notification(ForgeMeterController.Describe());
+                    Net.ForgeNetSync.BroadcastState(); // host spent — propagate new meter/level
+                }
                 else
                     Messaging.Notification(alloyError);
                 break;

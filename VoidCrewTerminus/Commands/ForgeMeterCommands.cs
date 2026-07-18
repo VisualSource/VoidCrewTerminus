@@ -37,6 +37,7 @@ internal class SetMeterCommand : PublicCommand
             return;
         }
         ForgeMeterController.SetMeter(value);
+        VoidCrewTerminus.Net.ForgeNetSync.BroadcastState(); // host dev-set → propagate
         Messaging.Notification(ForgeMeterController.Describe());
     }
 }
@@ -57,6 +58,7 @@ internal class SetForgeLevelCommand : PublicCommand
             return;
         }
         ForgeMeterController.SetLevel(level);
+        VoidCrewTerminus.Net.ForgeNetSync.BroadcastState(); // host dev-set → propagate
         Messaging.Notification(ForgeMeterController.Describe());
     }
 }

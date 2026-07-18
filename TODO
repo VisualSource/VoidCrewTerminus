@@ -45,7 +45,13 @@ In Progress:
                   ✔ T1 cursed spawn (0 bosses, chance 25%), T3 cursed→burden (APPLIED/none/no-roll all seen), T4 shutoff, T5 tooling @done(26-07-16 log)
                   ✔ T2 signature-vs-pool @done(26-07-16) (passed w/ PerkRollChanceRare=1.0 + flagship relic; the ONLY proof since 7-A has no automated coverage)
                  [] note: BurdenAffinity is inert until a 2nd burden type exists (all 29 relics default [RandomShutoff]) — kept as forward-looking data
-        [] phase 8
+        phase 8 (MP sync — grilled 26-07-17; host-authoritative, split 8-A/B/C):
+                8-A meter/escalation state + alloy hop:
+                 ✔ CODE @done(26-07-17) (Net/ForgeNetSync + Net/NetMessages via VoidManager ModMessage. Host-only increment in ForgeSectorHook/BossDefeatHook + broadcast; clients pure receivers via ApplyNetworkState/ApplyNetworkBosses. Syncs DifficultyScalar+BossesDefeated+Meter+Level. Client→host AlloySpendRequest. Late joiner: SendStateTo on OnPlayerEnteredRoom. Host migration: re-assert on OnMasterClientSwitched (authority live-derived from IsMasterClient). Solo unchanged (not-in-room=authority, broadcast no-ops). Paired [Net] →sent/←applied logging. ScriptEngine self-registers ModMessages via reflection.)
+                 [] VERIFY 2-CLIENT (handoff/phase-8a-test-plan.md) — done only when client [Net] ←applied matches host →sent in BOTH captured logs. T1 counters, T2 live progression+loot determinism, T3 meter/level+client alloy feed, T4 late joiner, T5 host migration.
+                 [] RISK to watch: loot-reshape determinism depends on state broadcast arriving before next sector's loot setup (T2 !lootdump divergence would reveal it)
+                [] 8-B cursed marker live sync (by ViewID + join snapshot; pending-set for spawn-order race)
+                [] 8-C authoritative commit (client→host request, host rolls, broadcast result+seed) + overlay snapshot for late joiners
         Cleanup:
                 [] modal exterior for module
                 [] update caryable hover module to reflect mod level

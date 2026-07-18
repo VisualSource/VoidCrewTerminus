@@ -57,6 +57,10 @@ public static class SectorEscalation
         BepinPlugin.Log?.LogDebug($"[Escalation] BossesDefeated set to {BossesDefeated} (dev)");
     }
 
+    // Phase 8-A — client-side apply of the host-authoritative boss count. Silent
+    // (no notification); the host owns the count and drives the unlock messages.
+    internal static void ApplyNetworkBosses(int bosses) => BossesDefeated = System.Math.Max(0, bosses);
+
     // Reshape `entries` in place. Generic over the item ref type so tests can
     // pass plain strings; production callers pass CraftableItemRef and a name
     // extractor that reads .Filename.

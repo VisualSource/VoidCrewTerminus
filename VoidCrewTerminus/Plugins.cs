@@ -47,6 +47,7 @@ namespace VoidCrewTerminus
 
             AssetLoader.TryLoadAssetBundlesNextToDLL();
             Patches.ForgeSectorHook.Init();
+            Net.ForgeNetSync.Init();
 
             _onHostStartSession = (_, _) =>
             {
@@ -54,6 +55,9 @@ namespace VoidCrewTerminus
                 VoidCrewTerminus.Forge.ForgeMeterController.ResetForRun();
                 VoidCrewTerminus.Escalation.SectorEscalation.ResetForRun();
                 Patches.BossDefeatHook.OnSessionStart();
+                // Host owns the reset — push the cleared state so clients drop last
+                // run's scalar/bosses/meter/level (they don't get HostStartSession).
+                Net.ForgeNetSync.BroadcastState();
             };
             VoidManager.Events.Instance.HostStartSession += _onHostStartSession;
 
@@ -83,6 +87,11 @@ namespace VoidCrewTerminus
                 var asm = Assembly.GetExecutingAssembly();
                 AccessTools.Method(handler, "DiscoverCommands")?.Invoke(null, new object[] { asm, MyPluginInfo.USERS_PLUGIN_NAME });
                 AccessTools.Method(handler, "DiscoverPublicCommands")?.Invoke(null, new object[] { asm, MyPluginInfo.USERS_PLUGIN_NAME });
+                // ModMessages are discovered on the same chainloader scan; under
+                // ScriptEngine self-register them too so MP net code is reachable.
+                // ModMessageHandler is internal, so reach it by reflection.
+                var mmHandler = AccessTools.TypeByName("VoidManager.ModMessages.ModMessageHandler");
+                AccessTools.Method(mmHandler, "DiscoverModMessages")?.Invoke(null, new object[] { asm, Info });
             }
             catch (System.Exception e)
             {
@@ -98,6 +107,7 @@ namespace VoidCrewTerminus
                 _onHostStartSession = null;
             }
             Patches.ForgeSectorHook.Shutdown();
+            Net.ForgeNetSync.Shutdown();
 
             // Live scene objects created by this assembly must go with it: a
             // reloaded assembly has its OWN UpgradeForgeBehavior type, so the

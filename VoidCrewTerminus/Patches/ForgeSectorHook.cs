@@ -65,6 +65,15 @@ internal static class ForgeSectorHook
 
             if (session == null || session.IsHub) return;
 
+            // Phase 8-A: meter/scalar are host-authoritative. This event fires on
+            // every client, but only the master awards + increments; everyone else
+            // receives the result via the state broadcast.
+            if (!Net.ForgeNetSync.IsAuthority)
+            {
+                BepinPlugin.Log.LogDebug($"[Forge] Sector {departed.Id} exit — client defers meter/scalar to host.");
+                return;
+            }
+
             if (!ReferenceEquals(session, _lastSession))
             {
                 // First exit of a new run = leaving the empty starting zone to go
@@ -126,6 +135,9 @@ internal static class ForgeSectorHook
             // installed mid-run it applies with the current accumulated scalar.
             if (SectorEscalation.IsScalingActive)
                 ForgeMeterController.IncrementDifficultyScalar();
+
+            // Push the new meter/level/scalar to clients.
+            Net.ForgeNetSync.BroadcastState();
         }
         catch (System.Exception e)
         {

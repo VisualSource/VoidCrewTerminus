@@ -59,6 +59,7 @@ internal class SetDifficultyCommand : PublicCommand
             return;
         }
         ForgeMeterController.SetDifficultyScalar(value);
+        Net.ForgeNetSync.BroadcastState(); // host dev-set → propagate (no-ops off-authority)
         Messaging.Notification($"DifficultyScalar set to {value}. Next sector's loot table will reshape on entry.");
     }
 }
@@ -79,6 +80,7 @@ internal class SetBossesCommand : PublicCommand
             return;
         }
         Escalation.SectorEscalation.SetBossesDefeated(value);
+        Net.ForgeNetSync.BroadcastState(); // host dev-set → propagate (no-ops off-authority)
         Messaging.Notification($"BossesDefeated set to {value}. Next sector's loot table will reshape on entry.");
     }
 }
