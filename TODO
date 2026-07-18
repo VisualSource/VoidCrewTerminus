@@ -53,7 +53,11 @@ In Progress:
                 8-B cursed marker live sync:
                  ✔ CODE @done(26-07-17) (CursedRelicMessage {viewID[],burden[]}. Host rolls in CursedRelicSpawnPatch + BroadcastCursed; clients ApplyIncomingCursed via PhotonView.Find, buffer in _pendingCursed if object not spawned yet, drain from client OnPhotonInstantiate (TryApplyPendingCursed). Join snapshot: SendCursedSnapshotTo enumerates FindObjectsOfType<CursedRelicMarker>. Awareness-only (outcomes still host-auth til 8-C). !cursedstatus client warning removed (now synced); !forcecursed client warning updated to 'local-only'. Solo unchanged.)
                  [] VERIFY 2-CLIENT (handoff/phase-8b-test-plan.md) — client [Net] ←applied/←buffered matches host →sent cursed; T1 live, T2 spawn-order race, T3 join snapshot, T4 forcecursed local-only
-                [] 8-C authoritative commit (client→host request, host rolls, broadcast result+seed) + overlay snapshot for late joiners
+                8-C authoritative commit + overlay sync:
+                 ✔ CODE @done(26-07-17) (CommitRequestMessage {boxViewID,relicViewIDs} client→host; host resolves BOX by ViewID (its own forge instance has no _moduleBox — docking is local!) + relics by ViewID, re-derives tier/cursed itself, ComputeAndPersist made STATIC (box-based), rolls once, SaveSnapshot + BroadcastCommitResult. CommitResultMessage {box,level,perkSlots[],burdens[],relicsConsumed} = full-snapshot overwrite (no delta drift); operator (has _relics) consumes + notifies, others no-op. DoCommit routes client→request, host/solo→TryCommit inline. Late joiner: SendOverlaySnapshotTo enumerates ForgeStateStore.AllSnapshots. Off-host commit warning removed (now handled). Solo unchanged.)
+                 [] VERIFY 2-CLIENT (handoff/phase-8c-test-plan.md) — T1 client-operated commit converges, T2 host-operated, T3 cursed→burden authoritative, T4 late-joiner overlay
+                 [] LIMITATIONS noted: overlay-on-join race (snapshot vs module reconstruct), operator notification basic (full detail+causal logs on host), one-operator-per-commit (docking is local), consume needs operator ownership
+        [] 8-* full-run 2-client soak once A/B/C individually verified
         Cleanup:
                 [] modal exterior for module
                 [] update caryable hover module to reflect mod level

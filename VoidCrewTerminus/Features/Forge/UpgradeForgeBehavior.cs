@@ -65,25 +65,24 @@ public class UpgradeForgeBehavior : MonoBehaviour
 
     // Current effective level of the box in the module socket. Reads any pending level
     // stashed by prior upgrades / deconstructions; falls back to vanilla L3.
-    public int CurrentBoxLevel
+    public int CurrentBoxLevel => LevelOfBox(_moduleBox);
+
+    // Static so the host can compute a client-operated box's level from the box
+    // resolved by ViewID (the host's own forge instance has no _moduleBox when a
+    // client docked — docking is a local interaction).
+    internal static int LevelOfBox(BuildBox box)
     {
-        get
-        {
-            if (_moduleBox == null || _moduleBox.photonView == null) return 0;
+        if (box == null || box.photonView == null) return 0;
 
-            // Only a module at its final vanilla mark may be forged; below that the
-            // vanilla upgrade-chip path still applies. The mark comes from the
-            // game's UpgradableAssetDataTable chain (the same data the vanilla
-            // chips walk) — NOT from tags: the BuildBox carryable carries no mark
-            // CsTags, and Component.CompareTag compares Unity GameObject tags,
-            // never CsTags.
-            int mark = GetBoxMark(out bool isFinalMark);
-            if (!isFinalMark) return mark; // 1 or 2 → below MinLevel → InvalidModuleLevel on commit
+        // Only a module at its final vanilla mark may be forged; below that the
+        // vanilla upgrade-chip path still applies. The mark comes from the game's
+        // UpgradableAssetDataTable chain (the same data the vanilla chips walk).
+        int mark = GetBoxMark(box, out bool isFinalMark);
+        if (!isFinalMark) return mark; // 1 or 2 → below MinLevel → InvalidModuleLevel on commit
 
-            return ForgeStateStore.TryPeekSnapshot(_moduleBox.photonView.ViewID, out var snap)
-                ? snap.Level
-                : ForgeCostCurve.MinLevel;
-        }
+        return ForgeStateStore.TryPeekSnapshot(box.photonView.ViewID, out var snap)
+            ? snap.Level
+            : ForgeCostCurve.MinLevel;
     }
 
     // Vanilla mark (1-based position in the module's upgrade chain) of the module
@@ -97,10 +96,12 @@ public class UpgradeForgeBehavior : MonoBehaviour
     // delivered via instantiation data — and their upgrade chains are keyed by
     // that CompositeData guid (see ModuleUpgraderEffects). Plain module boxes
     // chain by their moduleRef guid.
-    private int GetBoxMark(out bool isFinalMark)
+    private int GetBoxMark(out bool isFinalMark) => GetBoxMark(_moduleBox, out isFinalMark);
+
+    private static int GetBoxMark(BuildBox box, out bool isFinalMark)
     {
         isFinalMark = false;
-        if (!TryGetBoxIdentity(out var guid)) return 1;
+        if (!TryGetBoxIdentity(box, out var guid)) return 1;
 
         var table = DataTable<UpgradableAssetDataTable>.Instance;
         if (table?.UpgradableAssets == null)
@@ -130,19 +131,21 @@ public class UpgradeForgeBehavior : MonoBehaviour
     }
 
     // The guid the upgrade chains key this box's module by.
-    private bool TryGetBoxIdentity(out GUIDUnion guid)
+    private bool TryGetBoxIdentity(out GUIDUnion guid) => TryGetBoxIdentity(_moduleBox, out guid);
+
+    private static bool TryGetBoxIdentity(BuildBox box, out GUIDUnion guid)
     {
         guid = GUIDUnion.Empty();
-        if (_moduleBox == null) return false;
+        if (box == null) return false;
 
-        if (_moduleBox is CompositeWeaponBuildBox weaponBox)
+        if (box is CompositeWeaponBuildBox weaponBox)
         {
             if (weaponBox.WeaponDataRef == null || weaponBox.WeaponDataRef.IsNull) return false;
             guid = weaponBox.WeaponDataRef.AssetGuid;
             return true;
         }
 
-        var moduleRef = _moduleBox.moduleRef;
+        var moduleRef = box.moduleRef;
         if (moduleRef == null || moduleRef.IsNull) return false;
         guid = moduleRef.AssetGuid;
         return true;
@@ -221,35 +224,45 @@ public class UpgradeForgeBehavior : MonoBehaviour
     // The pure algorithm (cost walk, tie-break, perk roll) lives in
     // UpgradeCommitCalculator; this method builds the request from scene state,
     // guards the Unity-entangled cases, and applies the outcome.
+    // Local operator entry (host / solo). Computes the authoritative outcome,
+    // persists + broadcasts it, then consumes OUR relics (we own them, so the
+    // networked destroy propagates). A client operator never reaches here — its
+    // DoCommit routes a request to the host instead (Phase 8-C).
     public CommitOutcome TryCommit()
     {
-        if (_moduleBox == null) return CommitOutcome.Failure(CommitStatus.NoModule);
-        if (_moduleBox.photonView == null) return CommitOutcome.Failure(CommitStatus.MissingViewId);
+        var outcome = ComputeAndPersist(_moduleBox, _relics);
+        if (outcome.Status != CommitStatus.Ok) return outcome;
+        ConsumeOwnedRelics(outcome.RelicsConsumed);
+        return outcome;
+    }
 
-        var relicTiers = new Loot.RelicTier[_relics.Count];
-        var relicNames = new string[_relics.Count];
-        var relicCursedBurden = new BurdenType[_relics.Count];
-        for (int i = 0; i < _relics.Count; i++)
+    // Compute the commit from an explicit box + relic list, persist the resulting
+    // snapshot, and broadcast it to clients. Does NOT consume relics — the
+    // operator (whoever holds them) does that. Runs on the authority only:
+    // the local operator passes its _moduleBox/_relics; the host resolving a
+    // remote request passes the box + relics found by ViewID (its own forge
+    // instance has no _moduleBox when a client docked). Static for exactly that
+    // reason.
+    internal static CommitOutcome ComputeAndPersist(BuildBox box, IReadOnlyList<UnityEngine.GameObject> relics)
+    {
+        if (box == null) return CommitOutcome.Failure(CommitStatus.NoModule);
+        if (box.photonView == null) return CommitOutcome.Failure(CommitStatus.MissingViewId);
+
+        int n = relics.Count;
+        var relicTiers = new Loot.RelicTier[n];
+        var relicNames = new string[n];
+        var relicCursedBurden = new BurdenType[n];
+        for (int i = 0; i < n; i++)
         {
-            relicTiers[i] = _relics[i] != null ? Loot.RelicTierData.Get(_relics[i].name).Tier : Loot.RelicTier.Common;
-            relicNames[i] = _relics[i] != null ? _relics[i].name : null;
-            relicCursedBurden[i] = _relics[i] != null ? Loot.CursedRelicMarker.GetBurden(_relics[i]) : BurdenType.None;
+            relicTiers[i] = relics[i] != null ? Loot.RelicTierData.Get(relics[i].name).Tier : Loot.RelicTier.Common;
+            relicNames[i] = relics[i] != null ? relics[i].name : null;
+            relicCursedBurden[i] = relics[i] != null ? Loot.CursedRelicMarker.GetBurden(relics[i]) : BurdenType.None;
         }
 
-        var category = PerkPool.CategoryOf(_moduleBox.moduleRef?.Asset as CellModule);
-        int viewId = _moduleBox.photonView.ViewID;
+        var category = PerkPool.CategoryOf(box.moduleRef?.Asset as CellModule);
+        int viewId = box.photonView.ViewID;
         var current = ForgeStateStore.TryPeekSnapshot(viewId, out var s) ? s : ForgeSnapshot.Empty;
-        int currentLevel = CurrentBoxLevel;
-
-        // Cursed state lives in a host-only marker component and DifficultyScalar
-        // isn't networked yet, so an off-host commit reads every relic as
-        // un-cursed and can never produce a burden. The whole commit path is
-        // unsynced until Phase 8 (perk rolls diverge too) — log it rather than
-        // let the divergence be silent.
-        if (!Photon.Pun.PhotonNetwork.IsMasterClient)
-            BepinPlugin.Log.LogWarning(
-                "[Forge] Commit running OFF-HOST — cursed relics read as un-cursed and the perk roll is " +
-                "not authoritative. Outcome will diverge from the host (known gap; Phase 8 syncs the commit path).");
+        int currentLevel = LevelOfBox(box);
 
         var request = new CommitRequest(currentLevel, relicTiers, relicNames, relicCursedBurden, category, current.PerkSlots);
         var outcome = UpgradeCommitCalculator.Calculate(request);
@@ -262,22 +275,63 @@ public class UpgradeForgeBehavior : MonoBehaviour
             updated = updated.WithBurdenAdded(outcome.AppliedBurden); // idempotent
         ForgeStateStore.SaveSnapshot(viewId, updated);
 
-        for (int i = 0; i < outcome.RelicsConsumed && _relics.Count > 0; i++)
-        {
-            var relic = _relics[0];
-            _relics.RemoveAt(0);
-            DestroyRelic(relic);
-        }
-
         BepinPlugin.Log.LogInfo(
-            $"[Forge] Committed L{currentLevel}→L{outcome.NewLevel} on ViewID={_moduleBox.photonView.ViewID} " +
-            $"(consumed {outcome.RelicsConsumed} relic{(outcome.RelicsConsumed == 1 ? "" : "s")}, {_relics.Count} remain, " +
+            $"[Forge] Committed L{currentLevel}→L{outcome.NewLevel} on ViewID={viewId} " +
+            $"(consumed {outcome.RelicsConsumed} relic{(outcome.RelicsConsumed == 1 ? "" : "s")}, " +
             $"tier={outcome.BestTier}, perk={DescribePerkResult(outcome)})");
 
         LogPerkCausalChain(outcome, relicNames);
         LogBurdenCausalChain(outcome, relicCursedBurden);
 
+        // Push the authoritative snapshot to clients (no-ops in solo / no peers).
+        Net.ForgeNetSync.BroadcastCommitResult(viewId, updated, outcome.RelicsConsumed);
+
         return outcome;
+    }
+
+    private void ConsumeOwnedRelics(int count)
+    {
+        for (int i = 0; i < count && _relics.Count > 0; i++)
+        {
+            var relic = _relics[0];
+            _relics.RemoveAt(0);
+            DestroyRelic(relic);
+        }
+    }
+
+    // Phase 8-C — ViewIDs of the relics currently docked here (for a client's
+    // commit request to the host).
+    internal int[] RelicViewIds()
+    {
+        var ids = new List<int>(_relics.Count);
+        foreach (var r in _relics)
+        {
+            var pv = r != null ? r.GetComponent<Photon.Pun.PhotonView>() : null;
+            if (pv != null && pv.ViewID > 0) ids.Add(pv.ViewID);
+        }
+        return ids.ToArray();
+    }
+
+    // Phase 8-C — the host's authoritative commit result arrived. If we're the
+    // operator (we hold the relics), consume our share and notify; non-operators
+    // (empty tubes) no-op. The snapshot itself is applied by ForgeNetSync.
+    internal void OnNetworkCommitResult(int relicsConsumed)
+    {
+        if (_relics.Count == 0) return; // not the operator
+        int before = _relics.Count;
+        ConsumeOwnedRelics(relicsConsumed);
+        Messaging.Notification(
+            $"Upgrade committed by the host (consumed {before - _relics.Count} relic{(before - _relics.Count == 1 ? "" : "s")}). Rebuild the module to apply.");
+    }
+
+    // Phase 8-C — find the forge behaviour operating a given module box (by its
+    // Photon ViewID), across all installed forges.
+    internal static UpgradeForgeBehavior FindByBoxViewId(int boxViewId)
+    {
+        foreach (var b in FindObjectsOfType<UpgradeForgeBehavior>())
+            if (b._moduleBox != null && b._moduleBox.photonView != null && b._moduleBox.photonView.ViewID == boxViewId)
+                return b;
+        return null;
     }
 
     // 7-A causal log: proves whether the perk came from a flagship relic's
@@ -548,6 +602,21 @@ public class UpgradeForgeBehavior : MonoBehaviour
 
     private void DoCommit()
     {
+        // Phase 8-C: the commit roll is host-authoritative (cursed markers + RNG
+        // live on the host). A client sends a request and the host resolves it,
+        // rolls, and broadcasts the result. Host/solo runs inline.
+        if (!Net.ForgeNetSync.IsAuthority)
+        {
+            if (_moduleBox == null || _moduleBox.photonView == null)
+            { Messaging.Notification("Load a deconstructed module box into the Forge first."); return; }
+            if (_relics.Count == 0)
+            { Messaging.Notification("Insert relics into the tubes before committing."); return; }
+
+            Net.ForgeNetSync.RequestCommit(_moduleBox.photonView.ViewID, RelicViewIds());
+            Messaging.Notification("Requesting upgrade from the host…");
+            return;
+        }
+
         var outcome = TryCommit();
         switch (outcome.Status)
         {

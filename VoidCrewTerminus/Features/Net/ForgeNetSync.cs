@@ -208,12 +208,123 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         BepinPlugin.Log.LogDebug($"[Net] ← applied buffered cursed relic viewID={pv.ViewID} ({burden}).");
     }
 
+    // ---- authoritative commit (Phase 8-C) ---------------------------------
+    //
+    // The commit ROLL is host-authoritative (cursed markers + RNG live on the
+    // host). A client sends {boxViewID, relicViewIDs}; the host resolves the
+    // relics itself (never trusting client-reported tier/cursed), rolls, persists,
+    // and broadcasts the full resulting box snapshot. Every client overwrites its
+    // snapshot; the operator (the client holding the relics) also consumes them.
+
+    // Client → host.
+    internal static void RequestCommit(int boxViewId, int[] relicViewIds)
+    {
+        ModMessage.Send(MyPluginInfo.PLUGIN_GUID,
+            ModMessage.GetIdentifier(typeof(CommitRequestMessage)),
+            ReceiverGroup.MasterClient,
+            new object[] { boxViewId, relicViewIds ?? Array.Empty<int>() }, reliable: true);
+        BepinPlugin.Log.LogDebug($"[Net] → sent commit request box={boxViewId} ({relicViewIds?.Length ?? 0} relics) to host.");
+    }
+
+    // Host resolves + computes. UpgradeForgeBehavior.ComputeAndPersist saves the
+    // host snapshot and broadcasts the result; the operator consumes on receipt.
+    internal static void HandleCommitRequest(object[] a, Player sender)
+    {
+        if (!PhotonNetwork.IsMasterClient) return;
+        if (a == null || a.Length < 2) return;
+
+        int boxViewId = Convert.ToInt32(a[0]);
+        var relicViewIds = a[1] as int[] ?? Array.Empty<int>();
+
+        // Resolve the box directly by ViewID — the host's own forge instance has no
+        // _moduleBox when a client docked (docking is a local interaction), so we
+        // compute from the box object, not from a behaviour.
+        var boxPv = PhotonView.Find(boxViewId);
+        var box = boxPv != null ? boxPv.GetComponent<CG.Ship.Object.BuildBox>() : null;
+        if (box == null)
+        {
+            BepinPlugin.Log.LogWarning($"[Net] ← commit request from #{sender?.ActorNumber} for box={boxViewId}: box not found — ignored.");
+            return;
+        }
+
+        var relics = new List<GameObject>();
+        foreach (var vid in relicViewIds)
+        {
+            var pv = PhotonView.Find(vid);
+            if (pv != null && pv.gameObject != null) relics.Add(pv.gameObject);
+        }
+        BepinPlugin.Log.LogDebug($"[Net] ← commit request from #{sender?.ActorNumber} box={boxViewId} ({relics.Count}/{relicViewIds.Length} relics resolved).");
+
+        UpgradeForgeBehavior.ComputeAndPersist(box, relics); // saves host snapshot + broadcasts result
+    }
+
+    // Host → all: authoritative box snapshot (also the late-joiner overlay push,
+    // with relicsConsumed = 0).
+    internal static void BroadcastCommitResult(int boxViewId, ForgeSnapshot snap, int relicsConsumed)
+    {
+        if (!ShouldBroadcast) return;
+        ModMessage.Send(MyPluginInfo.PLUGIN_GUID,
+            ModMessage.GetIdentifier(typeof(CommitResultMessage)),
+            ReceiverGroup.Others, SnapshotPayload(boxViewId, snap, relicsConsumed), reliable: true);
+        BepinPlugin.Log.LogDebug($"[Net] → sent commit result box={boxViewId} L{snap.Level} (consumed {relicsConsumed}) to all.");
+    }
+
+    // Client applies the authoritative snapshot + (if operator) consumes.
+    internal static void ApplyCommitResult(object[] a)
+    {
+        if (IsAuthority) return; // host already persisted inline
+        if (a == null || a.Length < 5) return;
+
+        int boxViewId = Convert.ToInt32(a[0]);
+        int level = Convert.ToInt32(a[1]);
+        var perkSlots = a[2] as string[] ?? Array.Empty<string>();
+        var burdensInt = a[3] as int[] ?? Array.Empty<int>();
+        int relicsConsumed = Convert.ToInt32(a[4]);
+
+        var slots = new string[perkSlots.Length];
+        for (int i = 0; i < perkSlots.Length; i++)
+            slots[i] = string.IsNullOrEmpty(perkSlots[i]) ? null : perkSlots[i]; // "" ← empty slot
+
+        var burdens = new BurdenType[burdensInt.Length];
+        for (int i = 0; i < burdensInt.Length; i++)
+            burdens[i] = (BurdenType)burdensInt[i];
+
+        ForgeStateStore.SaveSnapshot(boxViewId, ForgeSnapshot.Create(level, slots, burdens));
+        BepinPlugin.Log.LogDebug($"[Net] ← applied commit result box={boxViewId} L{level} (consumed {relicsConsumed}).");
+
+        UpgradeForgeBehavior.FindByBoxViewId(boxViewId)?.OnNetworkCommitResult(relicsConsumed);
+    }
+
+    private static object[] SnapshotPayload(int boxViewId, ForgeSnapshot snap, int relicsConsumed)
+    {
+        var perks = new string[snap.PerkSlots.Count];
+        for (int i = 0; i < snap.PerkSlots.Count; i++) perks[i] = snap.PerkSlots[i] ?? ""; // null → "" for transport
+        var burdens = new int[snap.Burdens.Count];
+        for (int i = 0; i < snap.Burdens.Count; i++) burdens[i] = (int)snap.Burdens[i];
+        return new object[] { boxViewId, snap.Level, perks, burdens, relicsConsumed };
+    }
+
+    // Host → joiner: every upgraded box's overlay so their modules reconstruct
+    // with the right level/perks/burdens.
+    private static void SendOverlaySnapshotTo(Player player)
+    {
+        if (!PhotonNetwork.IsMasterClient || player == null) return;
+        var all = ForgeStateStore.AllSnapshots();
+        if (all.Count == 0) return;
+        foreach (var kv in all)
+            ModMessage.Send(MyPluginInfo.PLUGIN_GUID,
+                ModMessage.GetIdentifier(typeof(CommitResultMessage)),
+                player, SnapshotPayload(kv.Key, kv.Value, 0), reliable: true);
+        BepinPlugin.Log.LogDebug($"[Net] → sent overlay snapshot ({all.Count} boxes) to joiner #{player.ActorNumber}.");
+    }
+
     // ---- IInRoomCallbacks -------------------------------------------------
 
     public void OnPlayerEnteredRoom(Player newPlayer)
     {
         SendStateTo(newPlayer);
         SendCursedSnapshotTo(newPlayer);
+        SendOverlaySnapshotTo(newPlayer);
     }
 
     public void OnMasterClientSwitched(Player newMasterClient)

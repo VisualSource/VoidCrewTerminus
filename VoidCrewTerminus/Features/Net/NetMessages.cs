@@ -33,3 +33,23 @@ public class CursedRelicMessage : ModMessage
     public override void Handle(object[] arguments, Player sender)
         => ForgeNetSync.ApplyIncomingCursed(arguments);
 }
+
+// Phase 8-C — Client → host (MasterClient): "I'm committing this box with these
+// relics." Host re-derives tier/cursed itself and rolls authoritatively.
+// arguments: [int boxViewID, int[] relicViewIDs]
+public class CommitRequestMessage : ModMessage
+{
+    public override void Handle(object[] arguments, Player sender)
+        => ForgeNetSync.HandleCommitRequest(arguments, sender);
+}
+
+// Phase 8-C — Host → all: authoritative commit result as a full box snapshot.
+// Every client overwrites its snapshot for the box; the operator (the client
+// holding the relics) also consumes them. Also reused for the late-joiner overlay
+// push (relicsConsumed = 0).
+// arguments: [int boxViewID, int level, string[] perkSlots, int[] burdens, int relicsConsumed]
+public class CommitResultMessage : ModMessage
+{
+    public override void Handle(object[] arguments, Player sender)
+        => ForgeNetSync.ApplyCommitResult(arguments);
+}

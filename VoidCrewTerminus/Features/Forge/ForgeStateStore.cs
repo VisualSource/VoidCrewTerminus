@@ -53,6 +53,15 @@ public static class ForgeStateStore
     public static bool TryPeekSnapshot(int boxViewId, out ForgeSnapshot snapshot) =>
         _snapshots.TryGetValue(boxViewId, out snapshot);
 
+    // Phase 8-C — all live box snapshots, for the late-joiner overlay push. Copy
+    // so callers can't mutate the store while enumerating.
+    public static IReadOnlyList<KeyValuePair<int, ForgeSnapshot>> AllSnapshots()
+    {
+        var list = new List<KeyValuePair<int, ForgeSnapshot>>(_snapshots.Count);
+        foreach (var kv in _snapshots) list.Add(kv);
+        return list;
+    }
+
     // ---- run reset ----------------------------------------------------------
 
     public static void ClearAll()
