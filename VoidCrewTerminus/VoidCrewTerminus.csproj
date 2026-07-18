@@ -4,7 +4,7 @@
     <AssemblyName>VoidCrewTerminus</AssemblyName>
     <Description>
     </Description>
-    <Version>0.0.9</Version>
+    <Version>0.0.10</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
     <RestoreAdditionalProjectSources>
@@ -13,7 +13,7 @@
       https://nuget.samboy.dev/v3/index.json
     </RestoreAdditionalProjectSources>
     <RootNamespace>VoidCrewTerminus</RootNamespace>
-    <AssemblyTitle>VoidCrewTerminus</AssemblyTitle>
+    <AssemblyTitle>Expansion mod for void crew</AssemblyTitle>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <DebugType>embedded</DebugType>

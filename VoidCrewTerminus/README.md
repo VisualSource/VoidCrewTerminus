@@ -17,7 +17,7 @@ Requires: BepInEx-BepInExPack-5.4.2100, NihilityShift-VoidManager-1.2.10
 
 ### 💡 Function(s)
 
-- VoidCrewTerminus
+- Expansion mod for void crew
 
 ### 🎮 Client Usage
 
