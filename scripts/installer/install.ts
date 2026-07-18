@@ -63,7 +63,7 @@ const TMM_RELATIVE = join("Thunderstore Mod Manager", "DataFolder", "VoidCrew");
 // ---- small helpers ----------------------------------------------------------
 
 /** Thrown by bail() so the entry point can still pause before the window closes. */
-class BailError extends Error {}
+class BailError extends Error { }
 
 function bail(message: string): never {
   cancel(message);
@@ -278,7 +278,7 @@ async function install(profileDir: string) {
   // Extract into plugins/<MOD_NAME>, replacing any previous copy but leaving the
   // config folder (BepInEx/config) and everything else untouched.
   const pluginsDir = join(profileDir, "BepInEx", "plugins");
-  const modDir = join(pluginsDir, MOD_NAME);
+  const modDir = join(pluginsDir, PACKAGE_NAME); // use package name so manager can load mod icon
 
   let files: Record<string, Uint8Array>;
   try {
