@@ -32,6 +32,8 @@ Custom NuGet sources are configured in the `.csproj` (BepInEx feed, samboy.dev f
 
 **Multiplayer:** `VoidManagerPlugin.MPType` is set to `MultiplayerType.All`, meaning all players in a session must have the mod installed. Change this in `Plugins.cs` if the mod becomes host-only or optional.
 
+**Never touch `PhotonNetwork` from plugin `Awake()`.** BepInEx's chainloader finishes long before the game runs its own Photon setup (`Chainloader startup complete` precedes `Starting photon connect` in the logs). Referencing `PhotonNetwork` at load time forces PUN's static initializer to construct the `LoadBalancingClient` *before* the game applies its `ServerSettings`, which silently breaks matchmaking — the server list renders as raw region codes and lobby creation hangs on "connecting". This cost a bisect to find (Phase 8-A, `bd4c6f2`). Defer any PUN work — `AddCallbackTarget` included — behind VoidManager's room events (`JoinedRoom` / `HostCreateRoom` / `LeftRoom`); `VoidManager.Events.Instance` *is* safe at `Awake`. See `Features/Net/ForgeNetSync.Init()` for the pattern.
+
 **Asset bundles / Blender files:** `Assets/` and `Blend/` directories are present for future use but currently empty.
 
 ## Mod Setup Checklist

@@ -46,6 +46,23 @@ In Progress:
                   ✔ T2 signature-vs-pool @done(26-07-16) (passed w/ PerkRollChanceRare=1.0 + flagship relic; the ONLY proof since 7-A has no automated coverage)
                  [] note: BurdenAffinity is inert until a 2nd burden type exists (all 29 relics default [RandomShutoff]) — kept as forward-looking data
         phase 8 (MP sync — grilled 26-07-17; host-authoritative, split 8-A/B/C):
+                ✔ 8-REGRESSION: could not create a lobby @done(26-07-18) (FIXED + confirmed in game.
+                   Symptom: server select rendered raw codes, status stuck on "connecting"; disabling
+                   the mod fixed it. Bisected to bd4c6f2 (8-A) — 6dd9462 good, and the commit between
+                   them (1b51472) touched only TODO, so 8-A was the first functional change. Cause:
+                   ForgeNetSync.Init() called PhotonNetwork.AddCallbackTarget from BepInEx plugin
+                   Awake, which runs before the game's own Photon setup ("Chainloader startup
+                   complete" precedes "Starting photon connect"). That forces PUN's static init to
+                   build the LoadBalancingClient before ServerSettings are applied. It was the ONLY
+                   load-time Photon touch in the mod — every other PhotonNetwork reference sits in
+                   gameplay methods. Fix: Init() no longer touches Photon at all; the PUN callback
+                   target attaches on VoidManager JoinedRoom/HostCreateRoom and detaches on LeftRoom,
+                   idempotent via _registered. VoidManager.Events.Instance was already used at Awake
+                   in the known-good build, so it's proven safe there. Logs "[Net] PUN callback target
+                   attached/detached" to make the timing visible.
+                   LESSON: recorded in CLAUDE.md — never touch PhotonNetwork from Awake.
+                   NOTE: this would have been caught by the pending 2-client verification below —
+                   worth running T1-T7 before building further on the net layer.)
                 8-A meter/escalation state + alloy hop:
                  ✔ CODE @done(26-07-17) (Net/ForgeNetSync + Net/NetMessages via VoidManager ModMessage. Host-only increment in ForgeSectorHook/BossDefeatHook + broadcast; clients pure receivers via ApplyNetworkState/ApplyNetworkBosses. Syncs DifficultyScalar+BossesDefeated+Meter+Level. Client→host AlloySpendRequest. Late joiner: SendStateTo on OnPlayerEnteredRoom. Host migration: re-assert on OnMasterClientSwitched (authority live-derived from IsMasterClient). Solo unchanged (not-in-room=authority, broadcast no-ops). Paired [Net] →sent/←applied logging. ScriptEngine self-registers ModMessages via reflection.)
                  [] VERIFY 2-CLIENT (handoff/phase-8-test-plan.md T1,T2,T6,T7) — done only when client [Net] ←applied matches host →sent in BOTH captured logs
