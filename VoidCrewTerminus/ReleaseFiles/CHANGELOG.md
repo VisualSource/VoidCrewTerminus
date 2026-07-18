@@ -1,3 +1,5 @@
+## 0.0.10
+- forge features done, testing version
 ## 0.0.9
 - phase 3 forge mvp
 ## 0.0.8
