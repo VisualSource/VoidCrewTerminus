@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CG.Ship.Modules;
 using Photon.Pun;
 using Photon.Realtime;
 using UnityEngine;
@@ -325,7 +326,8 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         ModMessage.Send(MyPluginInfo.PLUGIN_GUID,
             ModMessage.GetIdentifier(typeof(CommitResultMessage)),
             ReceiverGroup.Others, SnapshotPayload(boxViewId, snap, relicsConsumed), reliable: true);
-        BepinPlugin.Log.LogDebug($"[Net] → sent commit result box={boxViewId} L{snap.Level} (consumed {relicsConsumed}) to all.");
+        BepinPlugin.Log.LogDebug($"[Net] → sent commit result box={boxViewId} L{snap.Level} " +
+            $"({DescribeOverlay(snap.PerkSlots, snap.Burdens)}, consumed {relicsConsumed}) to all.");
     }
 
     // Client applies the authoritative snapshot + (if operator) consumes.
@@ -349,9 +351,28 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
             burdens[i] = (BurdenType)burdensInt[i];
 
         ForgeStateStore.SaveSnapshot(boxViewId, ForgeSnapshot.Create(level, slots, burdens));
-        BepinPlugin.Log.LogDebug($"[Net] ← applied commit result box={boxViewId} L{level} (consumed {relicsConsumed}).");
+        BepinPlugin.Log.LogDebug($"[Net] ← applied commit result box={boxViewId} L{level} " +
+            $"({DescribeOverlay(slots, burdens)}, consumed {relicsConsumed}).");
 
         UpgradeForgeBehavior.FindByBoxViewId(boxViewId)?.OnNetworkCommitResult(relicsConsumed);
+    }
+
+    // Compact perk/burden summary for the paired →sent / ←applied log lines.
+    // Both sides format through here so a 2-client verification can diff them
+    // directly: the level alone can't prove burdens crossed the wire, which is
+    // exactly the gap that left burden sync unverifiable in the 26-07-18 session.
+    private static string DescribeOverlay(IReadOnlyList<string> perkSlots, IReadOnlyList<BurdenType> burdens)
+    {
+        int filled = 0;
+        if (perkSlots != null)
+            foreach (var id in perkSlots)
+                if (!string.IsNullOrEmpty(id)) filled++;
+
+        string burdenText = burdens == null || burdens.Count == 0
+            ? "none"
+            : string.Join("+", burdens);
+
+        return $"perks={filled}, burdens={burdenText}";
     }
 
     private static object[] SnapshotPayload(int boxViewId, ForgeSnapshot snap, int relicsConsumed)
@@ -377,6 +398,96 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         BepinPlugin.Log.LogDebug($"[Net] → sent overlay snapshot ({all.Count} boxes) to joiner #{player.ActorNumber}.");
     }
 
+    // ---- installed-module overlay (Phase 8-D) -----------------------------
+    //
+    // BuildBox.BuildModule ends in PhotonNetwork.Instantiate, so it runs ONLY on
+    // the machine that placed the box. Every remote client receives the module
+    // through Photon's own instantiation path and never executes BuildModule —
+    // which is why the snapshot restore (and the forge's interactables) were
+    // missing entirely on the other player's screen.
+    //
+    // The box snapshot is already replicated everywhere by BroadcastCommitResult,
+    // but only the placer knows which module ViewID that box turned into. So the
+    // placer announces the mapping. It isn't inventing state: the snapshot it
+    // relays originated from the host-authoritative commit.
+
+    // moduleViewID → snapshot, for overlays that arrived before the module spawned.
+    private static readonly Dictionary<int, ForgeSnapshot> _pendingModuleOverlay = new();
+
+    // Placer → everyone else: "this module ViewID carries this overlay."
+    internal static void BroadcastModuleOverlay(int moduleViewId, ForgeSnapshot snap)
+    {
+        // Deliberately not ShouldBroadcast: the placer may be a client, and this
+        // is a relay of already-authoritative state rather than a new decision.
+        if (!PhotonNetwork.InRoom || PhotonNetwork.CurrentRoom.PlayerCount <= 1) return;
+        if (moduleViewId <= 0 || snap == null) return;
+
+        ModMessage.Send(MyPluginInfo.PLUGIN_GUID,
+            ModMessage.GetIdentifier(typeof(ModuleOverlayMessage)),
+            ReceiverGroup.Others, SnapshotPayload(moduleViewId, snap, 0), reliable: true);
+        BepinPlugin.Log.LogDebug($"[Net] → sent module overlay module={moduleViewId} L{snap.Level} " +
+            $"({DescribeOverlay(snap.PerkSlots, snap.Burdens)}) to all.");
+    }
+
+    // Host → joiner: every installed module's overlay, so a late joiner sees
+    // forged modules already welded into the ship.
+    private static void SendModuleOverlaysTo(Player player)
+    {
+        if (!PhotonNetwork.IsMasterClient || player == null) return;
+        var all = ForgeStateStore.AllModuleStates();
+        if (all.Count == 0) return;
+        foreach (var (viewId, snap) in all)
+            ModMessage.Send(MyPluginInfo.PLUGIN_GUID,
+                ModMessage.GetIdentifier(typeof(ModuleOverlayMessage)),
+                player, SnapshotPayload(viewId, snap, 0), reliable: true);
+        BepinPlugin.Log.LogDebug($"[Net] → sent module overlays ({all.Count}) to joiner #{player.ActorNumber}.");
+    }
+
+    internal static void ApplyIncomingModuleOverlay(object[] a)
+    {
+        if (a == null || a.Length < 4) return;
+
+        int moduleViewId = Convert.ToInt32(a[0]);
+        var snap = ForgeSnapshot.Create(
+            Convert.ToInt32(a[1]),
+            a[2] as string[] ?? Array.Empty<string>(),
+            ToBurdens(a[3] as int[]));
+
+        var pv = PhotonView.Find(moduleViewId);
+        var module = pv != null ? pv.GetComponent<CellModule>() : null;
+        if (module == null)
+        {
+            // The overlay can outrun the module's own instantiation; drained from
+            // OnPhotonInstantiate once it appears.
+            _pendingModuleOverlay[moduleViewId] = snap;
+            BepinPlugin.Log.LogDebug($"[Net] ← buffered module overlay module={moduleViewId} — module not spawned yet.");
+            return;
+        }
+
+        ForgeStateStore.GetOrCreate(module).ApplySnapshot(snap);
+        BepinPlugin.Log.LogDebug($"[Net] ← applied module overlay module={moduleViewId} L{snap.Level} " +
+            $"({DescribeOverlay(snap.PerkSlots, snap.Burdens)}).");
+    }
+
+    // Called from OnPhotonInstantiate for a module that has now appeared.
+    internal static void TryApplyPendingModuleOverlay(PhotonView pv, CellModule module)
+    {
+        if (pv == null || module == null) return;
+        if (!_pendingModuleOverlay.TryGetValue(pv.ViewID, out var snap)) return;
+        _pendingModuleOverlay.Remove(pv.ViewID);
+        ForgeStateStore.GetOrCreate(module).ApplySnapshot(snap);
+        BepinPlugin.Log.LogDebug($"[Net] ← applied buffered module overlay module={pv.ViewID} L{snap.Level} " +
+            $"({DescribeOverlay(snap.PerkSlots, snap.Burdens)}).");
+    }
+
+    private static List<BurdenType> ToBurdens(int[] raw)
+    {
+        var list = new List<BurdenType>();
+        if (raw != null)
+            foreach (var b in raw) list.Add((BurdenType)b);
+        return list;
+    }
+
     // ---- IInRoomCallbacks -------------------------------------------------
 
     public void OnPlayerEnteredRoom(Player newPlayer)
@@ -384,6 +495,7 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         SendStateTo(newPlayer);
         SendCursedSnapshotTo(newPlayer);
         SendOverlaySnapshotTo(newPlayer);
+        SendModuleOverlaysTo(newPlayer);
     }
 
     public void OnMasterClientSwitched(Player newMasterClient)

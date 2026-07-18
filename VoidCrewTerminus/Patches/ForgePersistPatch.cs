@@ -123,5 +123,11 @@ internal static class ForgePersistPatchHelper
         if (module == null) return;
         if (!ForgeStateStore.TryTakeSnapshot(box.photonView.ViewID, out var snap)) return;
         ForgeStateStore.GetOrCreate(module).ApplySnapshot(snap);
+
+        // Only THIS machine ran BuildModule (it ends in PhotonNetwork.Instantiate),
+        // so nobody else can make the box→module connection. Announce it, keyed by
+        // the module's ViewID, or every remote client shows a vanilla module.
+        if (module.photonView != null)
+            Net.ForgeNetSync.BroadcastModuleOverlay(module.photonView.ViewID, snap);
     }
 }

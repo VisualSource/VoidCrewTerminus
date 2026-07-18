@@ -46,7 +46,11 @@ In Progress:
                   ✔ T2 signature-vs-pool @done(26-07-16) (passed w/ PerkRollChanceRare=1.0 + flagship relic; the ONLY proof since 7-A has no automated coverage)
                  [] note: BurdenAffinity is inert until a 2nd burden type exists (all 29 relics default [RandomShutoff]) — kept as forward-looking data
         phase 8 (MP sync — grilled 26-07-17; host-authoritative, split 8-A/B/C):
-                ✔ 8-REGRESSION: could not create a lobby @done(26-07-18) (FIXED + confirmed in game.
+            [] game lag for other player with selecting a ship in the lobby
+            [] module did not register placement area
+            [] module cell info did not get info  
+         
+         ✔ 8-REGRESSION: could not create a lobby @done(26-07-18) (FIXED + confirmed in game.
                    Symptom: server select rendered raw codes, status stuck on "connecting"; disabling
                    the mod fixed it. Bisected to bd4c6f2 (8-A) — 6dd9462 good, and the commit between
                    them (1b51472) touched only TODO, so 8-A was the first functional change. Cause:
@@ -63,16 +67,71 @@ In Progress:
                    LESSON: recorded in CLAUDE.md — never touch PhotonNetwork from Awake.
                    NOTE: this would have been caught by the pending 2-client verification below —
                    worth running T1-T7 before building further on the net layer.)
+                8-D placer-local hooks (from 2-client test 26-07-18) — CODE ONLY, NOT VERIFIED:
+                 ✔ ROOT CAUSE: BuildBox.BuildModule (+ CompositeWeaponBuildBox override) end in
+                    ObjectFactory.InstantiateSpaceObjectByGUID → PhotonNetwork.Instantiate, so they
+                    run ONLY on the machine that placed the box. Remote clients get the module via
+                    Photon instantiation and never execute BuildModule. EVERY forge hook hung off
+                    BuildModule (TryAttach for interactables, RestoreSnapshot for overlay), so on a
+                    remote client the forge was inert geometry. Confirmed in logs: host has
+                    "Attached UpgradeForgeBehavior"/"Built interactables", client has neither.
+                 ✔ FIX #2 client forge had no hit targets @done(26-07-18) (new ForgeModuleSpawnPatch:
+                    OrbitObject.OnPhotonInstantiate postfix → ForgeAttachHelper.TryAttach for any
+                    CellModule. Fires on every client incl. the placer. CellModule overrides
+                    OnPhotonInstantiate but calls base, so the OrbitObject patch reaches it — same
+                    hook the cursed-relic sync already uses. Safe to double-run: TryAttach only adds
+                    a missing component, BuildInteractables guards on _interactablesBuilt.)
+                 ✔ FIX #3 overlay lost on place / reset on pickup @done(26-07-18) (client-side only —
+                    host retained it, confirmed with user. New ModuleOverlayMessage keyed by MODULE
+                    ViewID: the placer is the only machine that knows which box became which module,
+                    so it announces the mapping after RestoreSnapshot. Broadcast is NOT gated on
+                    IsMasterClient — the placer may be a client, and it's relaying host-authoritative
+                    commit state, not deciding anything. Receivers buffer in _pendingModuleOverlay if
+                    the module hasn't instantiated yet, drained from the same OnPhotonInstantiate
+                    hook. Late joiners: SendModuleOverlaysTo enumerates ForgeStateStore.AllModuleStates()
+                    (new, keyed by ForgeModuleState.ModuleViewId).)
+                 [] VERIFY 2-CLIENT: client sees forge hit targets; client sees Mk/perks/burdens on a
+                    module the HOST placed; client-placed module shows correctly on host; late joiner
+                    sees already-installed forged modules
+                 [] NOT YET TESTED (from 26-07-18 session): escalation sync; non-host operating the
+                    forge (was blocked by #2); burden sync to other player; multiple different curses
+                    on one module (only single-curse case seen)
                 8-A meter/escalation state + alloy hop:
                  ✔ CODE @done(26-07-17) (Net/ForgeNetSync + Net/NetMessages via VoidManager ModMessage. Host-only increment in ForgeSectorHook/BossDefeatHook + broadcast; clients pure receivers via ApplyNetworkState/ApplyNetworkBosses. Syncs DifficultyScalar+BossesDefeated+Meter+Level. Client→host AlloySpendRequest. Late joiner: SendStateTo on OnPlayerEnteredRoom. Host migration: re-assert on OnMasterClientSwitched (authority live-derived from IsMasterClient). Solo unchanged (not-in-room=authority, broadcast no-ops). Paired [Net] →sent/←applied logging. ScriptEngine self-registers ModMessages via reflection.)
-                 [] VERIFY 2-CLIENT (handoff/phase-8-test-plan.md T1,T2,T6,T7) — done only when client [Net] ←applied matches host →sent in BOTH captured logs
-                 [] RISK to watch: loot-reshape determinism depends on state broadcast arriving before next sector's loot setup (T2 !lootdump divergence would reveal it)
+                 ~ PARTIAL 2-CLIENT @26-07-18 (transport proven, VALUE FIDELITY NOT. Host →sent forge
+                    state {scalar=0,bosses=0,meter=0,level=1} to joiner #2, client ←applied the same.
+                    Paired lines match, so the wire works — BUT every value is a DEFAULT, so an
+                    identical log would appear if nothing propagated at all. Re-test with a non-zero
+                    scalar (!setdifficulty on host, then check client !difficulty) before calling
+                    T1/T7 done. T6 join-push fired for state only; no cursed/overlay existed yet.)
+                 ✔ RISK CLEARED: loot-reshape determinism @done(26-07-18) (both machines independently
+                    produced the IDENTICAL seed -1434881419 and identical result C7/R17/L1 →
+                    C25/R0/L0, downgraded 18. State did arrive before loot setup. Caveat: this was
+                    the scalar=0 trivial case — worth one more look once escalation is active.)
                 8-B cursed marker live sync:
                  ✔ CODE @done(26-07-17) (CursedRelicMessage {viewID[],burden[]}. Host rolls in CursedRelicSpawnPatch + BroadcastCursed; clients ApplyIncomingCursed via PhotonView.Find, buffer in _pendingCursed if object not spawned yet, drain from client OnPhotonInstantiate (TryApplyPendingCursed). Join snapshot: SendCursedSnapshotTo enumerates FindObjectsOfType<CursedRelicMarker>. Awareness-only (outcomes still host-auth til 8-C). !cursedstatus client warning removed (now synced); !forcecursed client warning updated to 'local-only'. Solo unchanged.)
-                 [] VERIFY 2-CLIENT (handoff/phase-8-test-plan.md T3, +T6 join snapshot) — client ←applied/←buffered matches host →sent cursed
+                 ✔ VERIFIED 2-CLIENT (T3) @done(26-07-18) (host "→ sent cursed relic viewID=2043
+                    (RandomShutoff) to all" / client "← applied cursed relic viewID=2043
+                    (RandomShutoff)" — matching ViewID AND burden type, non-trivial data both sides.
+                    Host roll logged upstream: Relic_11_A_WeaponFireRateForDefects, chance 25.0%.)
+                 [] STILL OPEN: T6 join snapshot for cursed — the joiner arrived before any cursed
+                    relic existed, so SendCursedSnapshotTo never ran. Needs a join AFTER a curse spawns.
                 8-C authoritative commit + overlay sync:
                  ✔ CODE @done(26-07-17) (CommitRequestMessage {boxViewID,relicViewIDs} client→host; host resolves BOX by ViewID (its own forge instance has no _moduleBox — docking is local!) + relics by ViewID, re-derives tier/cursed itself, ComputeAndPersist made STATIC (box-based), rolls once, SaveSnapshot + BroadcastCommitResult. CommitResultMessage {box,level,perkSlots[],burdens[],relicsConsumed} = full-snapshot overwrite (no delta drift); operator (has _relics) consumes + notifies, others no-op. DoCommit routes client→request, host/solo→TryCommit inline. Late joiner: SendOverlaySnapshotTo enumerates ForgeStateStore.AllSnapshots. Off-host commit warning removed (now handled). Solo unchanged.)
-                 [] VERIFY 2-CLIENT (handoff/phase-8-test-plan.md T4,T5, +T6 overlay) — client-operated + host-operated commit converge, cursed→burden authoritative
+                 ✔ VERIFIED 2-CLIENT — HOST-OPERATED commit (T5) @done(26-07-18) (host "Committed
+                    L3→L4 on ViewID=2055 (consumed 1 relic, tier=Rare)" → "sent commit result
+                    box=2055 L4 (consumed 1) to all"; client "← applied commit result box=2055 L4
+                    (consumed 1)". Box ViewID, level and consumed count all match. Bonus: the client
+                    then logged "[Forge/UI] raw vanilla header" — that line only fires when
+                    HasOverlay is true, so it's positive proof the client RENDERED the synced box
+                    overlay, independently corroborating "other player could see it on the box".)
+                 [] STILL OPEN: T4 CLIENT-operated commit — no "→ sent commit request" line in either
+                    log; was blocked by the 8-D placer-local bug. This is the untested half of 8-C.
+                 [] STILL OPEN: burden sync to client — the payload carries burdens but the old log
+                    lines printed only level+consumed, so it was unverifiable. FIXED 26-07-18:
+                    →sent/←applied now both print "(perks=N, burdens=X+Y)" via DescribeOverlay, so
+                    the next 2-client run can diff burdens directly.
+                 [] STILL OPEN: T6 overlay join-push — nothing was installed at join time.
                  [] LIMITATIONS noted: overlay-on-join race (snapshot vs module reconstruct), operator notification basic (full detail+causal logs on host), one-operator-per-commit (docking is local), consume needs operator ownership
         [] 8-* full-run 2-client soak once A/B/C individually verified
         Cleanup:
@@ -108,15 +167,26 @@ In Progress:
                    FabricatorRecyclePatch was already applying — a MkX box showed base but paid +105%.
                    Both patches swallow exceptions after one WARN: a throwing hover getter would spam
                    and could break tooltips wholesale. 30 new xunit tests on ForgeLabels, 148 passing.)
-                 [] VERIFY IN-GAME — hover a forged box + installed module + cursed relic; recycle a
-                    forged box and check the panel number matches the alloys actually paid
-                 [] OPEN: vanilla Header format unconfirmed (display names live in asset bundles, not
-                    inspectable offline). RewriteMark is case-insensitive + append-fallback so it can
-                    never corrupt a name, worst case duplicates a mark on a localised string.
-                    ForgeHoverUiPatch LogDebugs each distinct raw header once — grep
-                    "raw vanilla header" in the first playtest log to settle it.
-                 [] doubles as a Phase 8 diagnostic: a CLIENT seeing the right Mk on a forged module
-                    is direct visual proof 8-C overlay sync landed (adds zero network surface itself)
+                 ✔ VERIFIED IN-GAME @done(26-07-18) (hover tooltips render on relic/box/module, the Mk
+                    override reads correctly, and the fabricator recycle number now matches the
+                    scaled payout. Host-side confirmed; client-side hover was blocked by the 8-D
+                    placer-local bug and is covered by that verification instead.)
+                 ✔ RESOLVED: vanilla Header format @done(26-07-18) (was the one open risk — display
+                    names live in asset bundles and weren't inspectable offline. Playtest log settled
+                    it: raw header is "Benediction Cannon MkIII" — vanilla DOES embed the mark, with
+                    NO space before the numeral. The case-insensitive regex matches "MkIII" and the
+                    strip-then-append rewrite produces "Benediction Cannon Mk IV" correctly, so the
+                    append-fallback path is never taken for English names. Keep the LogDebug: it's
+                    the cheapest early warning if a game update changes the naming convention.)
+                ✔ hangar load hitch / lag spike on ship select @done(26-07-18) (CODE ONLY. PreloadAll
+                   iterated every ShipLoadoutDataDef — that's every LOADOUT PRESET, not every ship —
+                   and loaded the referenced prefab per preset. ~19 Destroyer presets all point at
+                   MTM_Destroyer_01, so it built that ship 19 times (455-618 renderers each) and
+                   discarded all but the last, since _cache is keyed by ship type. Log showed
+                   19x Destroyer + 20x Frigate + 19x Striker = ~58 full ship builds. Fixed with a
+                   HashSet dedupe on shipType, first path wins — also skips variant prefabs like
+                   MTM_Frigate_01_Awakening that map onto an already-queued type. Predates phase 8;
+                   the HubShipManagerPatch guard was fine, only one controller ever existed.)
                 [] modal exterior for module
                 [] reuse or create new BuildBox asset
                 [] fab: GameSessionSuppliesManager.GetPlayerShipRecycledAlloyValue sums raw

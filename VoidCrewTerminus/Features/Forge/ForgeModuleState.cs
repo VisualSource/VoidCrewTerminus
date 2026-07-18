@@ -27,6 +27,12 @@ public class ForgeModuleState : IModifierSource
     public IReadOnlyList<string> PerkSlots => _perkSlots;
     public IReadOnlyList<BurdenType> Burdens => _burdens;
 
+    // PhotonView ViewID of the module this state is attached to, or 0 when the
+    // module is gone or not networked. Used by the late-joiner overlay push,
+    // which has to key installed modules by something the receiver can resolve.
+    public int ModuleViewId =>
+        _module != null && _module.photonView != null ? _module.photonView.ViewID : 0;
+
     public void Attach(CellModule module)
     {
         _module = module;

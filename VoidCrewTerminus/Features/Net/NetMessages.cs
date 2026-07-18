@@ -16,6 +16,16 @@ public class ForgeStateSyncMessage : ModMessage
         => ForgeNetSync.ApplyIncomingState(arguments);
 }
 
+// Placer → everyone else: an installed module's forge overlay, keyed by the
+// MODULE's ViewID. Needed because BuildBox.BuildModule only runs on the machine
+// that placed the box, so remote clients otherwise never restore the snapshot.
+// arguments: [int moduleViewID, int level, string[] perkSlots, int[] burdens, int unused]
+public class ModuleOverlayMessage : ModMessage
+{
+    public override void Handle(object[] arguments, Player sender)
+        => ForgeNetSync.ApplyIncomingModuleOverlay(arguments);
+}
+
 // Client → host (MasterClient): "spend alloys on my behalf." No payload — the
 // host runs the spend against its own authoritative supplies and the resulting
 // meter/level reaches the requester via the state broadcast.

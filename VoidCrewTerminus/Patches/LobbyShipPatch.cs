@@ -73,11 +73,21 @@ internal class HangarShipController : MonoBehaviour
     {
         var container = ResourceAssetContainer<ShipLoadoutDataContainer, ShipLoadoutData, ShipLoadoutDataDef>.Instance;
         var pending = new List<(string shipType, ResourceRequest req)>();
+
+        // GetAllItems returns every LOADOUT PRESET, not every ship — ~19 presets
+        // all reference the same MTM_Destroyer_01 prefab. Loading per preset built
+        // the same ship 19 times (455-618 renderers each) and threw away all but
+        // the last, since _cache is keyed by ship type. That was the hangar's
+        // load hitch. Preload one prefab per ship type instead; first path wins,
+        // which also skips variant prefabs like MTM_Frigate_01_Awakening that map
+        // onto a type already queued.
+        var queued = new HashSet<string>();
         foreach (var item in container.GetAllItems())
         {
             if (item is not ShipLoadoutDataDef def) continue;
             var shipType = GetShipType(def);
             if (shipType == null) continue;
+            if (!queued.Add(shipType)) continue;
             var path = def.Asset?.ShipLoadout?.ReferenceShip?.Path;
             if (string.IsNullOrEmpty(path)) continue;
             BepinPlugin.Log.LogDebug($"[HangarShip] Async loading {shipType}: {path}");

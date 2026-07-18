@@ -62,6 +62,21 @@ public static class ForgeStateStore
         return list;
     }
 
+    // Phase 8-D — every INSTALLED module's overlay keyed by its PhotonView ViewID,
+    // for the late-joiner push. Modules whose view is gone (destroyed, or not yet
+    // networked) are skipped rather than sent with a bogus key.
+    public static IReadOnlyList<(int ViewId, ForgeSnapshot Snapshot)> AllModuleStates()
+    {
+        var list = new List<(int, ForgeSnapshot)>();
+        foreach (var state in _allStates)
+        {
+            int viewId = state.ModuleViewId;
+            if (viewId <= 0) continue;
+            list.Add((viewId, state.Snapshot()));
+        }
+        return list;
+    }
+
     // ---- run reset ----------------------------------------------------------
 
     public static void ClearAll()
