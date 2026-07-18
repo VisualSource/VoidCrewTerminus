@@ -1,3 +1,6 @@
+## 0.0.11
+- update buildbox,relic,module's have hover ui to display mod info
+- update fab to display correct modded bulidbox recyle amount
 ## 0.0.10
 - forge features done, testing version
 ## 0.0.9
