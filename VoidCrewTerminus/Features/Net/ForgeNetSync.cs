@@ -31,6 +31,14 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
     private static readonly ForgeNetSync _callbacks = new();
     private static bool _initialized;
 
+    // Whether our IInRoomCallbacks target is currently attached to PUN.
+    private static bool _registered;
+
+    // Stored so Shutdown can unsubscribe — a bare lambda can't be removed, and a
+    // leaked handler would survive ScriptEngine hot-reload into the new assembly.
+    private static EventHandler _onJoinedRoom;
+    private static EventHandler _onLeftRoom;
+
     // True when this client owns the authoritative state. Solo (not in a room)
     // counts as authority so single-player behaves exactly as before.
     internal static bool IsAuthority => !PhotonNetwork.InRoom || PhotonNetwork.IsMasterClient;
@@ -40,18 +48,69 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
     private static bool ShouldBroadcast =>
         PhotonNetwork.InRoom && PhotonNetwork.IsMasterClient && PhotonNetwork.CurrentRoom.PlayerCount > 1;
 
+    // Init runs from BepInEx plugin Awake, which is FAR earlier than the game's
+    // own Photon setup — the chainloader finishes before "Starting photon
+    // connect". Calling PhotonNetwork.AddCallbackTarget here forces PUN's static
+    // initializer to construct the LoadBalancingClient before the game has
+    // applied its ServerSettings, which leaves matchmaking unable to create a
+    // lobby (region list renders as raw codes, status hangs on "connecting").
+    //
+    // So this method must touch NOTHING in Photon. We subscribe to VoidManager's
+    // room events instead — Events.Instance is safe at Awake, it was already
+    // being used there before any of this net code existed — and only attach the
+    // PUN callback target once we're genuinely in a room, long after the game has
+    // configured Photon itself.
     internal static void Init()
     {
         if (_initialized) return;
         _initialized = true;
+
+        _onJoinedRoom = (_, _) => RegisterCallbacks();
+        _onLeftRoom = (_, _) => UnregisterCallbacks();
+
+        // Both paths are covered because a host and a joining client don't
+        // necessarily raise the same event; RegisterCallbacks is idempotent, so
+        // overlapping delivery is harmless.
+        VoidManager.Events.Instance.JoinedRoom += _onJoinedRoom;
+        VoidManager.Events.Instance.HostCreateRoom += _onJoinedRoom;
+        VoidManager.Events.Instance.LeftRoom += _onLeftRoom;
+    }
+
+    private static void RegisterCallbacks()
+    {
+        if (_registered) return;
+        _registered = true;
         PhotonNetwork.AddCallbackTarget(_callbacks);
+        BepinPlugin.Log.LogDebug("[Net] PUN callback target attached (in room).");
+    }
+
+    private static void UnregisterCallbacks()
+    {
+        if (!_registered) return;
+        _registered = false;
+        PhotonNetwork.RemoveCallbackTarget(_callbacks);
+        _pendingCursed.Clear();
+        BepinPlugin.Log.LogDebug("[Net] PUN callback target detached (left room).");
     }
 
     internal static void Shutdown()
     {
         if (!_initialized) return;
         _initialized = false;
-        PhotonNetwork.RemoveCallbackTarget(_callbacks);
+
+        if (_onJoinedRoom != null)
+        {
+            VoidManager.Events.Instance.JoinedRoom -= _onJoinedRoom;
+            VoidManager.Events.Instance.HostCreateRoom -= _onJoinedRoom;
+            _onJoinedRoom = null;
+        }
+        if (_onLeftRoom != null)
+        {
+            VoidManager.Events.Instance.LeftRoom -= _onLeftRoom;
+            _onLeftRoom = null;
+        }
+
+        UnregisterCallbacks();
         _pendingCursed.Clear();
     }
 
