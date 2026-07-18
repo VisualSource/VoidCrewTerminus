@@ -41,8 +41,11 @@ import {
 // ---- mod identity (stable) --------------------------------------------------
 
 const REPO = "VisualSource/VoidCrewTerminus"; // GitHub owner/repo
-const MOD_NAME = "VoidCrewTerminus"; // plugins/<this> folder + mods.yml identity
+const MOD_NAME = "VoidCrewTerminus"; // plugins/<this> folder + mods.yml displayName
 const AUTHOR = "VisualSource";
+// Thunderstore package identity "<Author>-<Package>". It MUST be present in
+// mods.yml as `name` (missing it is what makes TMM throw "Path undefined").
+const PACKAGE_NAME = `${AUTHOR}-${MOD_NAME}`;
 const WEBSITE = `https://github.com/${REPO}`;
 // Substring that tags this mod's lines in BepInEx/LogOutput.log, e.g.
 // "[Info   :VoidCrewTerminus] …". Used to extract just the mod's log lines.
@@ -59,9 +62,21 @@ const TMM_RELATIVE = join("Thunderstore Mod Manager", "DataFolder", "VoidCrew");
 
 // ---- small helpers ----------------------------------------------------------
 
+/** Thrown by bail() so the entry point can still pause before the window closes. */
+class BailError extends Error {}
+
 function bail(message: string): never {
   cancel(message);
-  process.exit(1);
+  throw new BailError(message);
+}
+
+/**
+ * Keep the console window open until the user acknowledges — important for
+ * testers who double-click the .exe, where the window would otherwise vanish
+ * (taking any success/error message with it) the instant we exit.
+ */
+async function pause(): Promise<void> {
+  await text({ message: "Press Enter to close this window…", placeholder: "" });
 }
 
 /** Abort cleanly if the user hit Ctrl+C / Esc at a prompt. */
@@ -314,6 +329,7 @@ async function install(profileDir: string) {
 
 interface ModEntry {
   manifestVersion: number;
+  name: string;
   authorName: string;
   websiteUrl: string;
   displayName: string;
@@ -348,11 +364,12 @@ function updateModsYml(
     }
   }
 
-  const idx = list.findIndex((e) => e?.displayName === MOD_NAME || (e as any)?.name === MOD_NAME);
+  const idx = list.findIndex((e) => e?.name === PACKAGE_NAME || e?.displayName === MOD_NAME);
   const existing = idx >= 0 ? list[idx] : null;
 
   const entry: ModEntry = {
     manifestVersion: 1,
+    name: PACKAGE_NAME,
     authorName: AUTHOR,
     websiteUrl: info.website,
     displayName: MOD_NAME,
@@ -460,6 +477,17 @@ async function main() {
   outro("Done.");
 }
 
-main().catch((e) => {
-  bail(`Unexpected error: ${e instanceof Error ? e.message : e}`);
-});
+let failed = false;
+main()
+  .catch((e) => {
+    failed = true;
+    // BailError has already been shown to the user via cancel(); only surface
+    // genuinely unexpected failures here.
+    if (!(e instanceof BailError)) {
+      cancel(`Unexpected error: ${e instanceof Error ? e.message : e}`);
+    }
+  })
+  .finally(async () => {
+    await pause();
+    process.exit(failed ? 1 : 0);
+  });
