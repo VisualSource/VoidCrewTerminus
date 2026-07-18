@@ -1,8 +1,11 @@
 using System;
+using System.Collections.Generic;
 using Photon.Pun;
 using Photon.Realtime;
+using UnityEngine;
 using VoidCrewTerminus.Escalation;
 using VoidCrewTerminus.Forge;
+using VoidCrewTerminus.Loot;
 using VoidManager.ModMessages;
 
 namespace VoidCrewTerminus.Net;
@@ -49,6 +52,7 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         if (!_initialized) return;
         _initialized = false;
         PhotonNetwork.RemoveCallbackTarget(_callbacks);
+        _pendingCursed.Clear();
     }
 
     // ---- outbound (authority → clients) -----------------------------------
@@ -123,9 +127,94 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         if (ok) BroadcastState(); // push the new meter/level to everyone incl. the requester
     }
 
+    // ---- cursed relic sync (Phase 8-B) ------------------------------------
+    //
+    // Cursed state is host-authoritative (rolled at spawn in CursedRelicSpawnPatch)
+    // and purely for client AWARENESS — 8-C's authoritative commit reads the host's
+    // own markers, so a client mis-seeing cursed can't change an outcome. Relics
+    // are keyed by PhotonView.ViewID. A live broadcast can beat the relic's own
+    // instantiation on the client, so unresolved ViewIDs are buffered and drained
+    // from the client's OnPhotonInstantiate (see CursedRelicSpawnPatch).
+
+    // ViewID → burden, for cursed flags that arrived before the object existed.
+    private static readonly Dictionary<int, BurdenType> _pendingCursed = new();
+
+    // Host: announce one freshly-cursed relic to all clients.
+    internal static void BroadcastCursed(PhotonView pv, BurdenType burden)
+    {
+        if (!ShouldBroadcast) return;
+        if (pv == null || pv.ViewID <= 0) return;
+        ModMessage.Send(MyPluginInfo.PLUGIN_GUID,
+            ModMessage.GetIdentifier(typeof(CursedRelicMessage)),
+            ReceiverGroup.Others,
+            new object[] { new[] { pv.ViewID }, new[] { (int)burden } }, reliable: true);
+        BepinPlugin.Log.LogDebug($"[Net] → sent cursed relic viewID={pv.ViewID} ({burden}) to all.");
+    }
+
+    // Host: full cursed set for a joining player.
+    private static void SendCursedSnapshotTo(Player player)
+    {
+        if (!PhotonNetwork.IsMasterClient || player == null) return;
+
+        var ids = new List<int>();
+        var burdens = new List<int>();
+        foreach (var marker in UnityEngine.Object.FindObjectsOfType<CursedRelicMarker>())
+        {
+            var pv = marker != null ? marker.GetComponent<PhotonView>() : null;
+            if (pv == null || pv.ViewID <= 0) continue;
+            ids.Add(pv.ViewID);
+            burdens.Add((int)marker.BakedBurden);
+        }
+        if (ids.Count == 0) return;
+
+        ModMessage.Send(MyPluginInfo.PLUGIN_GUID,
+            ModMessage.GetIdentifier(typeof(CursedRelicMessage)),
+            player, new object[] { ids.ToArray(), burdens.ToArray() }, reliable: true);
+        BepinPlugin.Log.LogDebug($"[Net] → sent cursed snapshot ({ids.Count} relics) to joiner #{player.ActorNumber}.");
+    }
+
+    // Client: apply (or buffer) cursed flags from host.
+    internal static void ApplyIncomingCursed(object[] a)
+    {
+        if (IsAuthority) return; // host already has its own markers
+        if (a == null || a.Length < 2 || a[0] is not int[] ids || a[1] is not int[] burdens) return;
+
+        for (int i = 0; i < ids.Length && i < burdens.Length; i++)
+        {
+            int viewID = ids[i];
+            var burden = (BurdenType)burdens[i];
+            var pv = PhotonView.Find(viewID);
+            if (pv != null && pv.gameObject != null)
+            {
+                CursedRelicMarker.MarkCursed(pv.gameObject, burden);
+                BepinPlugin.Log.LogDebug($"[Net] ← applied cursed relic viewID={viewID} ({burden}).");
+            }
+            else
+            {
+                _pendingCursed[viewID] = burden;
+                BepinPlugin.Log.LogDebug($"[Net] ← buffered cursed relic viewID={viewID} ({burden}) — object not spawned yet.");
+            }
+        }
+    }
+
+    // Client: called from OnPhotonInstantiate to drain a buffered cursed flag for
+    // a relic that has now appeared.
+    internal static void TryApplyPendingCursed(PhotonView pv, GameObject go)
+    {
+        if (pv == null || go == null) return;
+        if (!_pendingCursed.TryGetValue(pv.ViewID, out var burden)) return;
+        _pendingCursed.Remove(pv.ViewID);
+        CursedRelicMarker.MarkCursed(go, burden);
+        BepinPlugin.Log.LogDebug($"[Net] ← applied buffered cursed relic viewID={pv.ViewID} ({burden}).");
+    }
+
     // ---- IInRoomCallbacks -------------------------------------------------
 
-    public void OnPlayerEnteredRoom(Player newPlayer) => SendStateTo(newPlayer);
+    public void OnPlayerEnteredRoom(Player newPlayer)
+    {
+        SendStateTo(newPlayer);
+        SendCursedSnapshotTo(newPlayer);
+    }
 
     public void OnMasterClientSwitched(Player newMasterClient)
     {

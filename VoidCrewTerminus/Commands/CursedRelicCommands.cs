@@ -28,12 +28,9 @@ internal class CursedStatusCommand : PublicCommand
         if (player == null) { Messaging.Notification("No local player."); return; }
         var origin = player.transform.position;
 
-        // Cursed state lives in a host-only marker component (Phase 8 syncs it).
-        // On a client every relic reads clean whatever its real state is — say so,
-        // otherwise this command quietly lies to whoever is testing.
-        if (!Photon.Pun.PhotonNetwork.IsMasterClient)
-            Messaging.Notification(
-                "NOTE: cursed state is host-only until Phase 8 — on a client every relic reads CLEAN regardless of its real state. Check on the host.");
+        // Phase 8-B: cursed state is now mirrored from the host to clients, so this
+        // reads correctly on a client too. (Outcomes are still host-authoritative —
+        // 8-C — but display is accurate everywhere.)
 
         // The relic in your hands is almost always the one you're asking about.
         var held = player.Carrier != null ? player.Payload : null;
@@ -157,10 +154,12 @@ internal class ForceCursedCommand : PublicCommand
             return;
         }
 
-        // The marker is host-only; cursing on a client writes state the commit
-        // path (which reads host markers) will never see.
+        // !forcecursed is a local dev override — it is NOT synced client→host
+        // (only the host's spawn roll is authoritative and broadcast). Forcing it
+        // on a client changes only that client's local marker; the host, which
+        // decides commit outcomes, won't see it.
         if (!Photon.Pun.PhotonNetwork.IsMasterClient)
-            Messaging.Notification("NOTE: cursed state is host-only until Phase 8 — forcing it on a client has no effect on the host's commit outcome.");
+            Messaging.Notification("NOTE: !forcecursed is local-only on a client — the host won't see it, so it won't affect commit outcomes. Force it on the host.");
 
         if (target.Value)
         {

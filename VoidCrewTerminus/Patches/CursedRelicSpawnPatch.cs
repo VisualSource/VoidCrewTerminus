@@ -20,11 +20,9 @@ namespace VoidCrewTerminus.Patches;
 // rolled relics when some enemy happened to drop loot, and missed relics from
 // non-drop sources entirely.
 //
-// Host-only: the marker is a local component and DifficultyScalar isn't networked
-// yet, so the host is the authority. Clients therefore don't see cursed state — a
-// known gap that lands with the rest of the commit-path sync in Phase 8. The
-// commit path logs loudly when it runs off-host, so the divergence is visible
-// rather than silent.
+// Host rolls + marks + broadcasts (Phase 8-B); clients drain any buffered cursed
+// flag that arrived before this relic instantiated. The host is authoritative for
+// the roll; clients only mirror it for awareness (!cursedstatus / future hover UI).
 [HarmonyPatch(typeof(OrbitObject), nameof(OrbitObject.OnPhotonInstantiate))]
 internal static class CursedRelicSpawnPatch
 {
@@ -33,8 +31,6 @@ internal static class CursedRelicSpawnPatch
         try
         {
             if (__instance == null) return;
-            if (!PhotonNetwork.IsMasterClient) return;
-
             var go = __instance.gameObject;
             if (go == null) return;
 
@@ -44,6 +40,15 @@ internal static class CursedRelicSpawnPatch
             var name = RelicTierData.NormalizeName(go.name);
             if (!RelicTierData.TryGet(name, out var entry)) return;
 
+            if (!PhotonNetwork.IsMasterClient)
+            {
+                // Client: the host owns the roll. If its cursed message already
+                // arrived for this relic, apply the buffered flag now.
+                Net.ForgeNetSync.TryApplyPendingCursed(__instance.photonView, go);
+                return;
+            }
+
+            // Host: roll cursed authoritatively.
             float chance = CursedRelicRoll.ChanceFor(
                 entry,
                 Forge.ForgeMeterController.DifficultyScalar,
@@ -65,6 +70,9 @@ internal static class CursedRelicSpawnPatch
             // Causal log (7-B): proves the roll fired and what it decided.
             BepinPlugin.Log?.LogDebug(
                 $"[Escalation] Relic {name} spawned CURSED with {burden} (chance {chance:P1})");
+
+            // Mirror it to clients (Phase 8-B). No-ops in solo / with no peers.
+            Net.ForgeNetSync.BroadcastCursed(__instance.photonView, burden);
         }
         catch (System.Exception e)
         {

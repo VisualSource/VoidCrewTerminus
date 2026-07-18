@@ -24,3 +24,12 @@ public class AlloySpendRequestMessage : ModMessage
     public override void Handle(object[] arguments, Player sender)
         => ForgeNetSync.HandleAlloySpendRequest(sender);
 }
+
+// Phase 8-B — Host → clients: which relics are cursed, keyed by PhotonView.ViewID.
+// Sent length-1 live at each cursed spawn, and as a full batch to a joiner.
+// arguments: [int[] viewIDs, int[] burdenTypes]
+public class CursedRelicMessage : ModMessage
+{
+    public override void Handle(object[] arguments, Player sender)
+        => ForgeNetSync.ApplyIncomingCursed(arguments);
+}
