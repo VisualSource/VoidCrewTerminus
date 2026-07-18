@@ -1,0 +1,21 @@
+{
+  "name": "voidcrewterminus-installer",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Installs/updates the VoidCrewTerminus mod into a Thunderstore Mod Manager profile, and collects logs.",
+  "scripts": {
+    "build:win": "bun build ./install.ts --compile --outfile VoidCrewTerminusLocal.exe --target=bun-windows-x64",
+    "start": "bun run install.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^7"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.7.0",
+    "fflate": "^0.8.2"
+  }
+}
