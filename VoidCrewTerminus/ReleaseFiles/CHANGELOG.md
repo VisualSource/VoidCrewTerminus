@@ -1,7 +1,9 @@
 ## 0.0.12
-- lobby ship fix for non host playeres
-- fix forge module missing interaction targets
-- fix overlay missing on placed modules
+- lobby ship fix for non host players
+- Photon fixes
+  - fix forge module missing interaction targets
+  - fix overlay missing on placed modules
+- add some more logging
 ## 0.0.11
 - update buildbox,relic,module's have hover ui to display mod info
 - update fab to display correct modded bulidbox recyle amount
