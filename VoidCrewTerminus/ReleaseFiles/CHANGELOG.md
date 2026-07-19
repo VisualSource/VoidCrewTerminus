@@ -1,3 +1,6 @@
+## 0.0.13
+- fixed floating but?
+- fix metam assets not being included in the asset bundle
 ## 0.0.12
 - lobby ship fix for non host players
 - Photon fixes

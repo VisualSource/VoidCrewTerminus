@@ -23,6 +23,31 @@ jobs:
       run: dotnet restore
     - name: Build
       run: dotnet build VoidCrewTerminus.slnx --no-restore -c Release
+    # The asset bundles are appended to the zip by a separate MSBuild target after
+    # ZipBuilder.ps1 has already created it. A release shipped without them looks
+    # completely normal, so verify the artifact's CONTENTS rather than trusting the
+    # build succeeded — a green build is not evidence the bundles made it in.
+    - name: Verify asset bundles are in the release zip
+      shell: pwsh
+      run: |
+        $zip = Get-ChildItem -Path "VoidCrewTerminus/bin/Release/net472/Releases/*.zip" -ErrorAction SilentlyContinue
+        if (-not $zip) { Write-Error "No release zip was produced."; exit 1 }
+        if ($zip.Count -ne 1) { Write-Error "Expected 1 release zip, found $($zip.Count): $($zip.Name -join ', ')"; exit 1 }
+
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        $archive = [System.IO.Compression.ZipFile]::OpenRead($zip.FullName)
+        try   { $names = $archive.Entries | ForEach-Object { $_.Name } }
+        finally { $archive.Dispose() }
+
+        Write-Output "Zip: $($zip.Name)"
+        Write-Output "Contents:`n$($names -join "`n")"
+
+        $bundles = @($names | Where-Object { $_ -match '\.metem(_ext)?$' })
+        if ($bundles.Count -eq 0) {
+            Write-Error "Release zip contains NO .metem/.metem_ext asset bundles - the mod would ship without its Forge prefab."
+            exit 1
+        }
+        Write-Output "OK - $($bundles.Count) asset bundle(s) present: $($bundles -join ', ')"
     - name: Extract release notes from CHANGELOG.md
       shell: pwsh
       run: |
@@ -51,4 +76,8 @@ jobs:
         prerelease: false
         name: VoidCrewTerminus ${{ github.ref_name }}
         body_path: release-body.md
-        files: ./VoidCrewTerminus/bin/Release/net472/Releases/VoidCrewTerminus-${{ github.ref_name }}.zip
+        # Globbed rather than built from the tag: the zip is named from
+        # PluginVersion in PluginInfo.config, so a tag like "v0.0.12" against
+        # PluginVersion "0.0.12" would silently upload nothing. The verify step
+        # above already guarantees exactly one zip exists and that it has bundles.
+        files: ./VoidCrewTerminus/bin/Release/net472/Releases/*.zip

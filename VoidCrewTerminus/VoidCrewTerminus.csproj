@@ -4,7 +4,7 @@
     <AssemblyName>VoidCrewTerminus</AssemblyName>
     <Description>
     </Description>
-    <Version>0.0.12</Version>
+    <Version>0.0.13</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
     <RestoreAdditionalProjectSources>
@@ -86,14 +86,30 @@
        already packs Assets/*.metem into the release zip. On Windows the DocBuilder
        package's own ZipBuilder.ps1 runs instead and doesn't know about asset
        bundles, so this target appends them to the produced zip afterwards. -->
+  <!--
+    The zip is LOCATED BY GLOB, not rebuilt from $(Version). ZipBuilder.ps1 names
+    it from PluginVersion in PluginInfo.config, while MSBuild's $(Version) is
+    evaluated at project-load time — two independent sources for one filename. If
+    they ever disagree, a reconstructed path simply doesn't exist.
+
+    Every failure here is now a hard Error. The previous version guarded the Exec
+    with Condition="Exists(...) And '@(MetemBundles)' != ''", so when either was
+    false the step vanished silently and shipped a release with no asset bundles
+    and no indication anything had gone wrong.
+  -->
   <Target Name="AppendAssetBundlesToZip" AfterTargets="ExecPostBuild" Condition="$([MSBuild]::IsOSPlatform('Windows'))">
-    <PropertyGroup>
-      <ReleaseZipPath>$(OutDir)Releases\$(AssemblyName)-$(Version).zip</ReleaseZipPath>
-    </PropertyGroup>
     <ItemGroup>
-      <MetemBundles Include="$(ProjectDir)..\Assets\*.metem" />
-      <MetemBundles Include="$(ProjectDir)..\Assets\*.metem_ext" />
+      <MetemBundles Include="$(MSBuildProjectDirectory)\..\Assets\*.metem" />
+      <MetemBundles Include="$(MSBuildProjectDirectory)\..\Assets\*.metem_ext" />
+      <ReleaseZips Include="$(OutDir)Releases\*.zip" />
     </ItemGroup>
-    <Exec Condition="Exists('$(ReleaseZipPath)') And '@(MetemBundles)' != ''" Command="%25WINDIR%25\System32\WindowsPowerShell\v1.0\powershell.exe -NonInteractive -NoProfile -ExecutionPolicy Unrestricted -Command &quot;Compress-Archive -Path '%(MetemBundles.FullPath)' -DestinationPath '$(ReleaseZipPath)' -Update&quot;" />
+    <Error Condition="'@(MetemBundles)' == ''"
+           Text="No asset bundles found in $(MSBuildProjectDirectory)\..\Assets — the release zip would ship without them." />
+    <Error Condition="'@(ReleaseZips)' == ''"
+           Text="No release zip found in $(OutDir)Releases — cannot append asset bundles. Did ExecPostBuild run, and is ZipOutput=true in PluginInfo.config?" />
+    <Error Condition="'@(ReleaseZips->Count())' != '1'"
+           Text="Expected exactly 1 release zip in $(OutDir)Releases but found @(ReleaseZips->Count()): @(ReleaseZips). Clean the output directory — appending to the wrong zip would ship assets against a stale version." />
+    <Exec Command="%25WINDIR%25\System32\WindowsPowerShell\v1.0\powershell.exe -NonInteractive -NoProfile -ExecutionPolicy Unrestricted -Command &quot;Compress-Archive -Path '%(MetemBundles.FullPath)' -DestinationPath '@(ReleaseZips)' -Update&quot;" />
+    <Message Importance="high" Text="Appended @(MetemBundles->Count()) asset bundle(s) to @(ReleaseZips): @(MetemBundles->'%(Filename)%(Extension)', ', ')" />
   </Target>
 </Project>
