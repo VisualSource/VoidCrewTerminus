@@ -46,9 +46,9 @@ In Progress:
                   ✔ T2 signature-vs-pool @done(26-07-16) (passed w/ PerkRollChanceRare=1.0 + flagship relic; the ONLY proof since 7-A has no automated coverage)
                  [] note: BurdenAffinity is inert until a 2nd burden type exists (all 29 relics default [RandomShutoff]) — kept as forward-looking data
         phase 8 (MP sync — grilled 26-07-17; host-authoritative, split 8-A/B/C):
-            [] game lag for other player with selecting a ship in the lobby
-            [] module did not register placement area
-            [] module cell info did not get info  
+            ✔ game lag for other player with selecting a ship in the lobby @done(26-07-19 11:59)
+            ✔ module did not register placement area @done(26-07-19 11:59)
+            ✔ module cell info did not get info @done(26-07-19 11:59)
          
          ✔ 8-REGRESSION: could not create a lobby @done(26-07-18) (FIXED + confirmed in game.
                    Symptom: server select rendered raw codes, status stuck on "connecting"; disabling
