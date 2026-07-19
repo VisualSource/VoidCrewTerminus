@@ -178,6 +178,40 @@ In Progress:
                     strip-then-append rewrite produces "Benediction Cannon Mk IV" correctly, so the
                     append-fallback path is never taken for English names. Keep the LogDebug: it's
                     the cheapest early warning if a game update changes the naming convention.)
+                ✔ BuildBox "floats away" REGRESSED in MP @done(26-07-18) (CODE ONLY — bug is rare and
+                   was NOT reproduced on demand, so this is verified by reasoning + logging, not by
+                   repro. Reported: picking a box off the forge, it drifted out of the HOLDER's own
+                   hands; intermittent ("does not happen often"); solo not re-checked.
+                   ROOT CAUSE: CarryableObject is an ISimulatedBody — while riding a MovingSpacePlatform
+                   (the ship) its real physics lives on SimulationRigidbody in a SEPARATE physics
+                   scene, not on MainRigidbody. Note Rigidbody and MainRigidbody both return the same
+                   field, so there is no "active body" accessor. The 26-07-14 fix wrote velocity
+                   straight to MainRigidbody, so whenever platform simulation was active the
+                   accumulated velocity survived on the simulation body and the box drifted anyway —
+                   which is exactly why it was intermittent rather than constant. Dock() froze only
+                   MainRigidbody for the same reason, leaving the sim body integrating the whole time
+                   it was docked.
+                   ALSO FOUND: the Velocity property's non-simulated branch is
+                   `else if (!rigidBody.isKinematic)` — writing velocity to a still-kinematic body is
+                   SILENTLY DROPPED. Order now is clear-kinematic THEN zero; the old code's ordering
+                   may be why it appeared to work at all.
+                   FIX: new SetDockedKinematic freezes/unfreezes BOTH bodies (unconditionally — the
+                   IsBeingSimulated flag can flip while an item sits docked); release zeroes through
+                   the Velocity/AngularVelocity properties so it hits whichever body is live (zero is
+                   space-invariant: the simulated branch applies an inverse platform rotation).
+                   DELIBERATELY NOT CHANGED: PlaceAtAnchor still pins the visual transform directly.
+                   Driving it through co.Position/co.Rotation would be "correct by the interface", but
+                   the simulated branch writes into a separate scene and the decompile is ambiguous
+                   about whether it wants world or platform-local coords — feeding it the wrong space
+                   would teleport the box every frame, far worse than a rare drift. Freezing the sim
+                   body removes the accumulation at its source without needing to resolve that.
+                   RESIDUAL RISK: sim body position may be stale on release. That would present as a
+                   SNAP, not a drift — distinguishable in play, and the new log line calls it out.
+                   [] VERIFY: new "[Forge] undock <name>: simulated=T/F, was=(x,y,z)" LogDebug on every
+                      undock. simulated=True with a non-zero `was=` is the signature of the old bug;
+                      seeing simulated=True with the box behaving = fix holding. Watch for a snap-back.
+                   [] STILL UNKNOWN: does it repro in SOLO? Never checked. If it does, MP was a red
+                      herring and this fix is still right (simulation is active in solo too).)
                 ✔ hangar load hitch / lag spike on ship select @done(26-07-18) (CODE ONLY. PreloadAll
                    iterated every ShipLoadoutDataDef — that's every LOADOUT PRESET, not every ship —
                    and loaded the referenced prefab per preset. ~19 Destroyer presets all point at
