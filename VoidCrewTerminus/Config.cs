@@ -91,6 +91,9 @@ internal static class TerminusConfig
     [BindConfig("forge", 20f, "RandomShutoff burden — minimum seconds of uptime after the crew restores power before the burden may cut it again. Guards against a shutoff landing immediately after someone walks over and switches the module back on")]
     internal static ConfigEntry<float> BurdenRestoreGraceSeconds;
 
+    [BindConfig("fixes", true, "Work around two vanilla chat bugs: the chat text field is never blurred/deselected when cleared (which makes Unity throw on every later keypress and 'eat' input), and the 'TextChatting' state can latch on so chat never reopens. Turn off if it interferes with anything. See docs/chat-bug-research.md")]
+    internal static ConfigEntry<bool> EnableChatInputFix;
+
     [BindConfig("forge", 3, "DifficultyScalar at which Rare relics start dropping (below this, Rares in the loot pool are downgraded to Common)")]
     internal static ConfigEntry<int> EscalationRareUnlockScalar;
 

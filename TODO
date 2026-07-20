@@ -273,6 +273,40 @@ In Progress:
                    HashSet dedupe on shipType, first path wins — also skips variant prefabs like
                    MTM_Frigate_01_Awakening that map onto an already-queued type. Predates phase 8;
                    the HubShipManagerPatch guard was fine, only one controller ever existed.)
+                ✔ chat bug researched + input-eating fix @done(26-07-19) (CODE ONLY — no repro found,
+                   so reasoned from source rather than validated. Full write-up with citations:
+                   docs/chat-bug-research.md. BOTH reported symptoms are VANILLA bugs; VoidCrewTerminus
+                   is not implicated (it only consumes VoidManager's chat router) and VoidManager does
+                   NOT fix them — its README claims only mouse-unlock, input history and tab-complete,
+                   all postfix-only additions.
+                   SYMPTOM 2 (input eaten) — FIXED: TextChatVE.GetMessage blanks the field while it
+                   still holds focus with a live cursor, and HideInput only toggles CSS classes — there
+                   is no Blur()/SelectNone() anywhere in the chat code. The stale selection range then
+                   indexes past the end of an empty string and Unity throws
+                   ArgumentOutOfRangeException in TextEditingUtilities.ReplaceSelection on EVERY later
+                   keypress (Unity issue tracker confirms that behaviour; the exact stack is in our
+                   captured log). Permanence comes from TextChat's "TextChatting" state, which only
+                   RemoveInput() clears and which silently fails to clear when LocalPlayer.I is null.
+                   FIX (Patches/ChatInputFixPatch.cs): postfix GetMessage + HideInput → SelectNone() +
+                   Blur(), mirroring the game's OWN correct pattern in UIToolkitNavigationExtensions;
+                   prefix OpenChat → clear a stale "TextChatting" via the game's own RemoveInput (works
+                   there because OpenChat dereferences LocalPlayer.I, so it's alive by then). All
+                   members via AccessTools with one-shot resolve logging — a game update that moves the
+                   vanilla UI makes it inert and SAYS so rather than failing CreateAndPatchAll.
+                   Config EnableChatInputFix (default on).
+                   SYMPTOM 1 (chat sends nothing) — DOCUMENTED, NOT FIXED: VoipBoostrap.OnJoinedRoom
+                   discards the Task from LeaveChannels() then immediately JoinChannels(); a late leave
+                   tears down the channels just joined (our log shows exactly that order), leaving
+                   textChannel empty so VivoxAdapter.SendTextMessage hits a silent return. A local echo
+                   masks it from the sender. Not fixed: reordering async Vivox lifecycle from a Harmony
+                   patch risks breaking voice chat too. Candidate upstream report.
+                   [] VERIFY: open chat, send, alt-tab away and back, type again. Look for "[ChatFix]
+                      resolved:" in the log (proves the patch attached) and confirm
+                      ArgumentOutOfRangeException/ReplaceSelection is GONE — we prevent the stale-index
+                      state rather than swallowing its throw. "[ChatFix] cleared a stale 'TextChatting'"
+                      means the latch recovery fired.
+                   [] KNOCK-ON: if the client can now run !difficulty, that unblocks the escalation /
+                      loot-drop testing that this bug prevented last session.
                 [] modal exterior for module
                 [] reuse or create new BuildBox asset
                 [] fab: GameSessionSuppliesManager.GetPlayerShipRecycledAlloyValue sums raw
