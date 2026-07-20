@@ -429,6 +429,17 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
             $"({DescribeOverlay(snap.PerkSlots, snap.Burdens)}) to all.");
     }
 
+    // Convenience for any path that mutates an installed module's state OUTSIDE
+    // the commit flow — the dev commands (!setlevel, !forceperk) in particular.
+    // Without this the change lands only on the machine that typed it and every
+    // other player keeps rendering the old overlay.
+    internal static void BroadcastModuleOverlayFor(CellModule module)
+    {
+        if (module == null || module.photonView == null) return;
+        if (!ForgeStateStore.TryGet(module, out var state)) return;
+        BroadcastModuleOverlay(module.photonView.ViewID, state.Snapshot());
+    }
+
     // Host → joiner: every installed module's overlay, so a late joiner sees
     // forged modules already welded into the ship.
     private static void SendModuleOverlaysTo(Player player)
@@ -486,6 +497,51 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         if (raw != null)
             foreach (var b in raw) list.Add((BurdenType)b);
         return list;
+    }
+
+    // ---- forge docking (Phase 8-E) ----------------------------------------
+    //
+    // HandleInteraction only runs for the player who clicked, so docking a relic
+    // or a build box was invisible to everyone else — the 26-07-19 session's
+    // "forge module placement of relics and buildbox do not sync" report.
+    //
+    // Relayed from the operator rather than routed through the host: docking is a
+    // presentation/staging concern, and the commit that consumes these items is
+    // still host-authoritative and re-resolves everything from ViewIDs.
+    internal static void BroadcastDock(int forgeViewId, int itemViewId, int anchorIndex, bool docked)
+    {
+        if (!PhotonNetwork.InRoom || PhotonNetwork.CurrentRoom.PlayerCount <= 1) return;
+        if (forgeViewId <= 0 || itemViewId <= 0) return;
+
+        ModMessage.Send(MyPluginInfo.PLUGIN_GUID,
+            ModMessage.GetIdentifier(typeof(ForgeDockMessage)),
+            ReceiverGroup.Others,
+            new object[] { forgeViewId, itemViewId, anchorIndex, docked }, reliable: true);
+        BepinPlugin.Log.LogDebug(
+            $"[Net] → sent {(docked ? "dock" : "undock")} item={itemViewId} anchor={anchorIndex} forge={forgeViewId} to all.");
+    }
+
+    internal static void ApplyIncomingDock(object[] a)
+    {
+        if (a == null || a.Length < 4) return;
+
+        int forgeViewId = Convert.ToInt32(a[0]);
+        int itemViewId = Convert.ToInt32(a[1]);
+        int anchorIndex = Convert.ToInt32(a[2]);
+        bool docked = Convert.ToBoolean(a[3]);
+
+        var forge = UpgradeForgeBehavior.FindByViewId(forgeViewId);
+        if (forge == null)
+        {
+            // Unlike cursed markers and overlays this isn't buffered: a dock is a
+            // transient staging state, and replaying a stale one against a Forge
+            // that appears later would be worse than showing nothing.
+            BepinPlugin.Log.LogDebug($"[Net] ← dock for forge={forgeViewId} ignored — forge not found here.");
+            return;
+        }
+
+        if (docked) forge.ApplyRemoteDock(itemViewId, anchorIndex);
+        else forge.ApplyRemoteUndock(itemViewId);
     }
 
     // ---- IInRoomCallbacks -------------------------------------------------

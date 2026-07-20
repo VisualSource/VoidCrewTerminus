@@ -88,6 +88,9 @@ internal static class TerminusConfig
     [BindConfig("forge", 90f, "RandomShutoff burden — maximum seconds between shutoff events")]
     internal static ConfigEntry<float> BurdenIntervalMaxSeconds;
 
+    [BindConfig("forge", 20f, "RandomShutoff burden — minimum seconds of uptime after the crew restores power before the burden may cut it again. Guards against a shutoff landing immediately after someone walks over and switches the module back on")]
+    internal static ConfigEntry<float> BurdenRestoreGraceSeconds;
+
     [BindConfig("forge", 3, "DifficultyScalar at which Rare relics start dropping (below this, Rares in the loot pool are downgraded to Common)")]
     internal static ConfigEntry<int> EscalationRareUnlockScalar;
 

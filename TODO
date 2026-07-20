@@ -46,7 +46,14 @@ In Progress:
                   ✔ T2 signature-vs-pool @done(26-07-16) (passed w/ PerkRollChanceRare=1.0 + flagship relic; the ONLY proof since 7-A has no automated coverage)
                  [] note: BurdenAffinity is inert until a 2nd burden type exists (all 29 relics default [RandomShutoff]) — kept as forward-looking data
         phase 8 (MP sync — grilled 26-07-17; host-authoritative, split 8-A/B/C):
-            ✔ game lag for other player with selecting a ship in the lobby @done(26-07-19 11:59)
+         [] forge module placement not synced between players
+         [] caused timing
+         [] cause: eject battery/ammo
+         [] curse: eject player   
+         [] commands don't work in multiplayer
+         [] commands don't sync state
+         
+         ✔ game lag for other player with selecting a ship in the lobby @done(26-07-19 11:59)
             ✔ module did not register placement area @done(26-07-19 11:59)
             ✔ module cell info did not get info @done(26-07-19 11:59)
          
@@ -67,6 +74,51 @@ In Progress:
                    LESSON: recorded in CLAUDE.md — never touch PhotonNetwork from Awake.
                    NOTE: this would have been caught by the pending 2-client verification below —
                    worth running T1-T7 before building further on the net layer.)
+                8-E round-2 findings (2-client test 26-07-19) — CODE ONLY, NOT VERIFIED:
+                 ✔ VERIFIED FROM LOGS: 8-A value fidelity (the gap flagged 26-07-18). Host
+                    '!setbosses 2' → "→ sent {scalar=0,bosses=2}"; client "← applied {scalar=0,bosses=2}".
+                    Then '!setdifficulty 2' → "→ sent {scalar=2,bosses=2}" / "← applied {scalar=2,bosses=2}".
+                    NON-DEFAULT values crossed the wire both times. T1/T7 state sync is now genuinely
+                    verified, not just "transport works".
+                 ✔ NOT A BUG: "commands do not seem to sync state between players". The client log has
+                    ZERO "attempted by CaptiveJester" lines — the client never ran a command at all.
+                    Root cause is the broken in-game chat (noted separately by the user), not sync.
+                 ✔ FIX: relic/buildbox docking not synced @done(26-07-19) (HandleInteraction runs only
+                    for the clicking player, so docking was invisible to everyone else. New
+                    ForgeDockMessage {forgeViewID, itemViewID, anchorIndex, docked}; operator relays,
+                    others mirror via ApplyRemoteDock/ApplyRemoteUndock. anchorIndex -1 = module socket,
+                    >=0 indexes _tubeAnchors (name-sorted in BuildInteractables, so the index means the
+                    same thing on every client). _applyingRemoteDock suppresses re-broadcast so two
+                    clients can't echo each other. Observers mirror _relics/_moduleBox too so
+                    RelicCount/HasModule read right; commit stays host-authoritative and re-resolves
+                    from ViewIDs, so a mirrored list can't change an outcome.)
+                 ✔ FIX: !setlevel / !forceperk didn't reach other players @done(26-07-19) (dev commands
+                    mutate ForgeModuleState outside the commit flow, so nothing broadcast. New
+                    ForgeNetSync.BroadcastModuleOverlayFor(module) called from both.)
+                 ✔ FIX: burden double-exec guard + log spam @done(26-07-19) (per user request. Update()
+                    no longer runs the countdown while the module is dark — the old code rescheduled
+                    every cycle against an already-off module, producing dozens of "already off" lines
+                    and letting the interval elapse invisibly. Schedule now restarts from
+                    OnPowerStateChanged when power actually returns, so the interval measures UPTIME.
+                    New BurdenRestoreGraceSeconds=20 blocks a shutoff landing immediately after the
+                    crew switches the module back on. Randomization confirmed present and unchanged:
+                    per-instance System.Random seeded TickCount^GetInstanceID, interval RandRange(30,90).)
+                 [] OPEN — possible burden double-exec: BOTH machines logged "Core_S shutoff applied"
+                    for the same module. Update() gates on photonView.AmOwner, so that implies two
+                    owners. Could NOT be resolved from the logs. Added a one-shot
+                    "[Burden] <name> shutoff schedule OWNED here (viewID=, owner=#N)" LogDebug — the
+                    next 2-client run either shows exactly ONE machine claiming it, or names the desync.
+                 [] KNOWN GAP: docks are NOT in the late-joiner push (OnPlayerEnteredRoom sends state /
+                    cursed / box overlays / module overlays, but not _docked contents). Someone joining
+                    mid-session sees an empty Forge until items are re-docked. Deliberately not built
+                    yet — deferred rather than adding more unverified surface in one pass.
+                 [] NOTE: burden's ModuleName() reports the composite weapon's CORE ELEMENT prefab name
+                    ("Core_S"), not the player-facing weapon name ("Benediction Cannon") — because
+                    CompositeWeaponBuildBox.BuildModule instantiates data.CoreElement. Cosmetic, but it
+                    makes burden log lines and notifications hard to match to the weapon on screen.
+                 [] UNRELATED (user-reported, not mod): in-game chat doesn't work, and a known vanilla
+                    bug blocks chat after a player goes AFK briefly. This is what blocked client-side
+                    command testing.
                 8-D placer-local hooks (from 2-client test 26-07-18) — CODE ONLY, NOT VERIFIED:
                  ✔ ROOT CAUSE: BuildBox.BuildModule (+ CompositeWeaponBuildBox override) end in
                     ObjectFactory.InstantiateSpaceObjectByGUID → PhotonNetwork.Instantiate, so they

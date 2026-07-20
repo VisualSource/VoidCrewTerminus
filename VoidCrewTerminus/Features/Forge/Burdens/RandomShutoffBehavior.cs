@@ -34,6 +34,12 @@ public sealed class RandomShutoffBehavior : MaintenanceBurdenBehavior
     private float _nextShutoffAt;
     private bool _triggerNextImmediately;
 
+    // Earliest Time.time at which a shutoff may land. Set when the crew restores
+    // power, so a shutoff can't fire the instant someone walks over and switches
+    // the module back on — that reads as the burden trolling the player rather
+    // than as a maintenance tax.
+    private float _graceUntil;
+
     // True only for the instant we apply our own IsOn change, so the OnChange
     // handler can tell "we shut it off" from "the crew changed power".
     private bool _applyingOwnChange;
@@ -63,6 +69,15 @@ public sealed class RandomShutoffBehavior : MaintenanceBurdenBehavior
     {
         if (_applyingOwnChange && !isOn)
             Messaging.Notification($"{ModuleName()} powered down — switch it back on manually.");
+
+        // Crew (or anything that isn't us) restored power: start the grace window
+        // and re-roll the interval from now, so the countdown measures UPTIME
+        // rather than having elapsed invisibly while the module sat dark.
+        if (isOn && !_applyingOwnChange)
+        {
+            _graceUntil = Time.time + (TerminusConfig.BurdenRestoreGraceSeconds?.Value ?? 20f);
+            ScheduleNextShutoff();
+        }
     }
 
     // Called by !triggerburden — forces the next shutoff on the next Update tick.
@@ -78,19 +93,56 @@ public sealed class RandomShutoffBehavior : MaintenanceBurdenBehavior
         if (Module == null) return;
         if (!IsOwner) return; // owner drives; PowerDrain sync carries it to clients
 
-        if (!_triggerNextImmediately && Time.time < _nextShutoffAt) return;
-        _triggerNextImmediately = false;
-        ScheduleNextShutoff();
+        LogOwnershipOnce();
 
-        // Only cut power when the module is actually running. If it's already off,
-        // there's nothing to do — and we never turn it back on.
+        // Nothing to do while the module is dark, and crucially we do NOT run the
+        // countdown here. The old code rescheduled every cycle against an
+        // already-off module, which logged "already off" every 30-90s forever
+        // (dozens of lines in the 26-07-19 session) and meant the interval elapsed
+        // invisibly while the module sat dark. The schedule now restarts from
+        // OnPowerStateChanged when power actually comes back.
         if (!IsPowered())
         {
-            BepinPlugin.Log?.LogDebug($"[Burden] {ModuleName()} already off — nothing to shut off this cycle.");
+            LogIdleOnce();
             return;
         }
+        _loggedIdle = false;
 
+        bool forced = _triggerNextImmediately;
+        if (!forced)
+        {
+            // Grace window after a crew restore — see _graceUntil.
+            if (Time.time < _graceUntil) return;
+            if (Time.time < _nextShutoffAt) return;
+        }
+
+        _triggerNextImmediately = false;
+        ScheduleNextShutoff();
         RequestPowerOff();
+    }
+
+    private bool _loggedIdle;
+    private bool _loggedOwnership;
+
+    private void LogIdleOnce()
+    {
+        if (_loggedIdle) return;
+        _loggedIdle = true;
+        BepinPlugin.Log?.LogDebug(
+            $"[Burden] {ModuleName()} is off — burden idle until the crew restores power.");
+    }
+
+    // Both machines logged a shutoff for the same module in the 26-07-19 session,
+    // which would mean two owners driving one schedule. Ownership is the gate, so
+    // record it once per instance: the next 2-client run either shows exactly one
+    // machine claiming ownership, or names the desync.
+    private void LogOwnershipOnce()
+    {
+        if (_loggedOwnership) return;
+        _loggedOwnership = true;
+        BepinPlugin.Log?.LogDebug(
+            $"[Burden] {ModuleName()} shutoff schedule OWNED here (viewID={Module.photonView?.ViewID}, " +
+            $"owner=#{Module.photonView?.OwnerActorNr}, next in {SecondsUntilNextShutoff:0}s).");
     }
 
     private bool IsPowered() => Module != null && Module.PowerDrain != null && Module.PowerDrain.IsOn.Value;

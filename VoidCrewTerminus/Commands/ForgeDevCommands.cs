@@ -49,6 +49,9 @@ internal class SetLevelCommand : PublicCommand
 
         var state = ForgeStateStore.GetOrCreate(module);
         state.SetLevel(level);
+        // Dev mutations bypass the commit flow, so nothing else would tell the
+        // other players about this — they'd keep rendering the old overlay.
+        Net.ForgeNetSync.BroadcastModuleOverlayFor(module);
         Messaging.Notification($"{module.name}: level set to {level}");
     }
 }

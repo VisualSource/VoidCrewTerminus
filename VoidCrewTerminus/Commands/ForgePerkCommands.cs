@@ -82,6 +82,7 @@ internal class ForcePerkCommand : PublicCommand
         if (module == null) { Messaging.Notification("No module found nearby."); return; }
 
         ForgeStateStore.GetOrCreate(module).SetPerk(slot - 1, perk.Id);
+        Net.ForgeNetSync.BroadcastModuleOverlayFor(module); // dev path bypasses commit sync
         Messaging.Notification($"{module.name}: slot {slot} ← {perk.Name} ({perk.Description})");
     }
 }

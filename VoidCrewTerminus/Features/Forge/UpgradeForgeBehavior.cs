@@ -326,6 +326,108 @@ public class UpgradeForgeBehavior : MonoBehaviour
 
     // Phase 8-C — find the forge behaviour operating a given module box (by its
     // Photon ViewID), across all installed forges.
+    // ---- remote dock mirroring (Phase 8-E) ---------------------------------
+    //
+    // Docking is a LOCAL interaction: HandleInteraction runs only for the player
+    // who clicked, so before this every other player saw an empty Forge no matter
+    // how many relics were loaded. The operator announces each dock/undock and
+    // everyone else mirrors it.
+    //
+    // Suppresses re-broadcast while applying a remote change, or two clients
+    // would echo each other forever.
+    private bool _applyingRemoteDock;
+
+    internal static UpgradeForgeBehavior FindByViewId(int forgeViewId)
+    {
+        var pv = Photon.Pun.PhotonView.Find(forgeViewId);
+        return pv != null ? pv.GetComponent<UpgradeForgeBehavior>() : null;
+    }
+
+    internal int ForgeViewId
+    {
+        get
+        {
+            var module = GetComponent<CellModule>();
+            return module != null && module.photonView != null ? module.photonView.ViewID : 0;
+        }
+    }
+
+    // -1 = the module socket; >= 0 indexes _tubeAnchors. Anchors are ordered by
+    // name (BuildInteractables sorts them), so the index means the same thing on
+    // every client running the same prefab.
+    private int AnchorIndexOf(Transform anchor)
+    {
+        if (anchor == null) return -1;
+        if (anchor == _inputAnchor) return -1;
+        for (int i = 0; i < _tubeAnchors.Length; i++)
+            if (_tubeAnchors[i] == anchor) return i;
+        return -1;
+    }
+
+    private Transform AnchorFromIndex(int index)
+    {
+        if (index < 0) return _inputAnchor != null ? _inputAnchor : transform;
+        return index < _tubeAnchors.Length ? _tubeAnchors[index] : null;
+    }
+
+    internal void ApplyRemoteDock(int itemViewId, int anchorIndex)
+    {
+        var pv = Photon.Pun.PhotonView.Find(itemViewId);
+        if (pv == null) return;
+        var go = pv.gameObject;
+        if (go == null || _docked.ContainsKey(go)) return;
+
+        var anchor = AnchorFromIndex(anchorIndex);
+        if (anchor == null) return;
+
+        _applyingRemoteDock = true;
+        try
+        {
+            // Mirror the bookkeeping so RelicCount / HasModule read correctly for
+            // observers too. The commit itself stays host-authoritative and is
+            // resolved from ViewIDs, so a mirrored list can't affect an outcome.
+            var box = go.GetComponent<BuildBox>();
+            if (box != null) _moduleBox ??= box;
+            else if (!_relics.Contains(go)) _relics.Add(go);
+
+            Dock(go, anchor);
+        }
+        finally { _applyingRemoteDock = false; }
+
+        BepinPlugin.Log.LogDebug($"[Net] ← applied dock item={itemViewId} anchor={anchorIndex} on forge={ForgeViewId}.");
+    }
+
+    internal void ApplyRemoteUndock(int itemViewId)
+    {
+        var pv = Photon.Pun.PhotonView.Find(itemViewId);
+        if (pv == null) return;
+        var go = pv.gameObject;
+        if (go == null || !_docked.TryGetValue(go, out var anchor)) return;
+
+        _applyingRemoteDock = true;
+        try
+        {
+            _docked.Remove(go);
+            SetAnchorFilled(anchor, false);
+            ReleaseRigidbody(go);
+
+            var box = go.GetComponent<BuildBox>();
+            if (box != null && box == _moduleBox) _moduleBox = null;
+            else _relics.Remove(go);
+        }
+        finally { _applyingRemoteDock = false; }
+
+        BepinPlugin.Log.LogDebug($"[Net] ← applied undock item={itemViewId} on forge={ForgeViewId}.");
+    }
+
+    private void BroadcastDock(GameObject item, Transform anchor, bool docked)
+    {
+        if (_applyingRemoteDock) return;
+        var pv = item != null ? item.GetComponent<Photon.Pun.PhotonView>() : null;
+        if (pv == null) return;
+        Net.ForgeNetSync.BroadcastDock(ForgeViewId, pv.ViewID, AnchorIndexOf(anchor), docked);
+    }
+
     internal static UpgradeForgeBehavior FindByBoxViewId(int boxViewId)
     {
         foreach (var b in FindObjectsOfType<UpgradeForgeBehavior>())
@@ -671,6 +773,7 @@ public class UpgradeForgeBehavior : MonoBehaviour
     {
         if (item == null || anchor == null) return;
         _docked[item] = anchor;
+        BroadcastDock(item, anchor, docked: true); // no-op while mirroring a remote dock
         var co = item.GetComponent<CarryableObject>();
         // Freeze the simulation body too, not just the main one — otherwise it
         // keeps integrating in the platform's physics scene the whole time the
@@ -759,6 +862,9 @@ public class UpgradeForgeBehavior : MonoBehaviour
             _docked.Remove(go);
             SetAnchorFilled(kv.Value, false);
             if (go == null) continue;
+
+            // A player grabbed it: tell everyone else so their copy undocks too.
+            BroadcastDock(go, kv.Value, docked: false);
 
             ReleaseRigidbody(go);
 

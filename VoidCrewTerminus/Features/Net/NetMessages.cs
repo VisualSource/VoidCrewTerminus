@@ -26,6 +26,16 @@ public class ModuleOverlayMessage : ModMessage
         => ForgeNetSync.ApplyIncomingModuleOverlay(arguments);
 }
 
+// Operator → everyone else: a relic or build box was docked into / pulled out of
+// a Forge. Docking is a local interaction, so without this every other player
+// sees an empty Forge regardless of what's loaded.
+// arguments: [int forgeViewID, int itemViewID, int anchorIndex (-1 = module socket), bool docked]
+public class ForgeDockMessage : ModMessage
+{
+    public override void Handle(object[] arguments, Player sender)
+        => ForgeNetSync.ApplyIncomingDock(arguments);
+}
+
 // Client → host (MasterClient): "spend alloys on my behalf." No payload — the
 // host runs the spend against its own authoritative supplies and the resulting
 // meter/level reaches the requester via the state broadcast.
