@@ -125,7 +125,6 @@ public class AssetLoader
                 go.GetComponent<CarryableBaseAsset>() == null &&
                 go.GetComponent<PlayerShipVisuals>() == null)
             {
-                RemapShaders(go);
                 GraftModuleComponents(go);
                 _modulePrefabs[go.name] = go;
                 RegisterModulePrefab(go, vca);
@@ -250,26 +249,5 @@ public class AssetLoader
             guid, prefab, SessionModificationEffect.IsNetworkSpawned,
             new RuntimeAssetInfo { Name = prefab.name, DisplayName = vca.Name });
         BepinPlugin.Log.LogInfo($"[AssetLoader] Registered module prefab: {prefab.name} ({guid.AsHex()})");
-    }
-
-    // Bundle-embedded shaders are compiled for the build target the bundle was
-    // exported on; when that doesn't match the game (e.g. a Linux-editor export vs
-    // the D3D11 game build → "Desired shader compiler platform 4 is not available"),
-    // materials render broken. Rebinding each material to the game's own copy of the
-    // same-named shader fixes rendering regardless of export platform.
-    private static void RemapShaders(GameObject prefab)
-    {
-        foreach (var renderer in prefab.GetComponentsInChildren<Renderer>(true))
-        {
-            foreach (var mat in renderer.sharedMaterials)
-            {
-                if (mat == null || mat.shader == null) continue;
-                var gameShader = Shader.Find(mat.shader.name);
-                if (gameShader != null && gameShader != mat.shader)
-                    mat.shader = gameShader;
-                else if (gameShader == null)
-                    BepinPlugin.Log.LogWarning($"[AssetLoader] No game shader named '{mat.shader.name}' for material '{mat.name}' — it may render broken.");
-            }
-        }
     }
 }
