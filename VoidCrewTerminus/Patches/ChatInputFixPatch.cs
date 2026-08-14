@@ -69,7 +69,7 @@ internal static class ChatInputFix
     private static bool _loggedReleaseFailure;
     private static bool _loggedStateFailure;
 
-    internal static bool Enabled => TerminusConfig.EnableChatInputFix?.Value ?? true;
+    internal static bool Enabled => TerminusConfig.ChatInputFixEnabled;
 
     // One-shot so a playtest log says plainly whether this patch is live. If the
     // vanilla UI moves in a game update the members stop resolving and the fix goes

@@ -27,7 +27,7 @@ internal class RelicTierCommand : PublicCommand
 
     public override void Execute(string arguments, int sender)
     {
-        if (!TerminusConfig.EnableDevMode.Value) return;
+        if (!TerminusConfig.DevMode) return;
 
         if (string.IsNullOrWhiteSpace(arguments) || arguments.Trim().Equals("list", System.StringComparison.OrdinalIgnoreCase))
         {

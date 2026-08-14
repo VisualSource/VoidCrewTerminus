@@ -172,9 +172,9 @@ public static class PerkPool
 
     public static float RollChance(Loot.RelicTier tier) => tier switch
     {
-        Loot.RelicTier.Legendary => TerminusConfig.PerkRollChanceLegendary?.Value ?? 0.75f,
-        Loot.RelicTier.Rare => TerminusConfig.PerkRollChanceRare?.Value ?? 0.40f,
-        _ => TerminusConfig.PerkRollChanceCommon?.Value ?? 0.25f,
+        Loot.RelicTier.Legendary => TerminusConfig.PerkChanceLegendary,
+        Loot.RelicTier.Rare => TerminusConfig.PerkChanceRare,
+        _ => TerminusConfig.PerkChanceCommon,
     };
 
     // Resolve a module's Forge category from its CsTags (checked against the

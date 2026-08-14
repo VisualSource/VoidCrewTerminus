@@ -75,7 +75,7 @@ public sealed class RandomShutoffBehavior : MaintenanceBurdenBehavior
         // rather than having elapsed invisibly while the module sat dark.
         if (isOn && !_applyingOwnChange)
         {
-            _graceUntil = Time.time + (TerminusConfig.BurdenRestoreGraceSeconds?.Value ?? 20f);
+            _graceUntil = Time.time + TerminusConfig.BurdenRestoreGrace;
             ScheduleNextShutoff();
         }
     }
@@ -172,8 +172,8 @@ public sealed class RandomShutoffBehavior : MaintenanceBurdenBehavior
     private void ScheduleNextShutoff()
     {
         _nextShutoffAt = Time.time + RandRange(
-            TerminusConfig.BurdenIntervalMinSeconds?.Value ?? 30f,
-            TerminusConfig.BurdenIntervalMaxSeconds?.Value ?? 90f);
+            TerminusConfig.BurdenMinInterval,
+            TerminusConfig.BurdenMaxInterval);
     }
 
     private float RandRange(float min, float max)

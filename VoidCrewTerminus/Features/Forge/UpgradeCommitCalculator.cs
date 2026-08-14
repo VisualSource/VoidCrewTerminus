@@ -153,7 +153,7 @@ public static class UpgradeCommitCalculator
         }
         if (baked == BurdenType.None) return BurdenType.None;
 
-        float chance = TerminusConfig.BurdenApplicationChance?.Value ?? 0.75f;
+        float chance = TerminusConfig.BurdenChance;
         if (nextRandom() >= chance) return BurdenType.None;
         return baked;
     }

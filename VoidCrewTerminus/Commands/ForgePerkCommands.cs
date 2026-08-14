@@ -18,7 +18,7 @@ internal class PerksCommand : PublicCommand
 
     public override void Execute(string arguments, int sender)
     {
-        if (!TerminusConfig.EnableDevMode.Value) return;
+        if (!TerminusConfig.DevMode) return;
 
         var module = ModuleFinder.NearestToPlayer();
         if (module != null && ForgeStateStore.TryGet(module, out var state))
@@ -56,7 +56,7 @@ internal class ForcePerkCommand : PublicCommand
 
     public override void Execute(string arguments, int sender)
     {
-        if (!TerminusConfig.EnableDevMode.Value) return;
+        if (!TerminusConfig.DevMode) return;
 
         var parts = (arguments ?? "").Trim().Split(' ', System.StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length == 1 && parts[0].Equals("list", System.StringComparison.OrdinalIgnoreCase))
@@ -96,7 +96,7 @@ internal class PerkOddsCommand : PublicCommand
 
     public override void Execute(string arguments, int sender)
     {
-        if (!TerminusConfig.EnableDevMode.Value) return;
+        if (!TerminusConfig.DevMode) return;
 
         var parts = (arguments ?? "").Trim().Split(' ', System.StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length < 1 || !System.Enum.TryParse<Loot.RelicTier>(parts[0], true, out var tier))

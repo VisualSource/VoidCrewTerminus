@@ -20,7 +20,7 @@ internal class ListBurdensCommand : PublicCommand
 
     public override void Execute(string arguments, int sender)
     {
-        if (!TerminusConfig.EnableDevMode.Value) return;
+        if (!TerminusConfig.DevMode) return;
 
         var burdens = Object.FindObjectsOfType<MaintenanceBurdenBehavior>();
         if (burdens.Length == 0)
@@ -55,7 +55,7 @@ internal class TriggerBurdenCommand : PublicCommand
 
     public override void Execute(string arguments, int sender)
     {
-        if (!TerminusConfig.EnableDevMode.Value) return;
+        if (!TerminusConfig.DevMode) return;
 
         var triggered = 0;
         foreach (var rs in Object.FindObjectsOfType<RandomShutoffBehavior>())

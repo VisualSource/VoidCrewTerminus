@@ -52,9 +52,9 @@ internal static class CursedRelicSpawnPatch
             float chance = CursedRelicRoll.ChanceFor(
                 entry,
                 Forge.ForgeMeterController.DifficultyScalar,
-                TerminusConfig.RelicBaseCurseChance?.Value ?? 0.15f,
-                TerminusConfig.EscalationCurseChancePerScalar?.Value ?? 0.03f,
-                TerminusConfig.RelicMaxCurseChance?.Value ?? 0.50f);
+                TerminusConfig.BaseCurseChance,
+                TerminusConfig.CurseChancePerScalar,
+                TerminusConfig.MaxCurseChance);
 
             if (!CursedRelicRoll.ShouldBeCursed(chance, Random.value)) return;
 

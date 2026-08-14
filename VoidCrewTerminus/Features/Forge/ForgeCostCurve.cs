@@ -64,7 +64,7 @@ public static class ForgeCostCurve
 
     private static int[] Parse()
     {
-        var raw = TerminusConfig.ForgeCostCurve?.Value;
+        var raw = TerminusConfig.CostCurveRaw;
         if (string.IsNullOrWhiteSpace(raw)) return Default;
 
         var parts = raw.Split(',');

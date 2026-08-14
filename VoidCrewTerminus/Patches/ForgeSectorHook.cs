@@ -120,7 +120,7 @@ internal static class ForgeSectorHook
             }
 
             ForgeMeterController.AddMeter(
-                TerminusConfig.ForgeMeterPerSectorJump?.Value ?? 20f, "sector jump");
+                TerminusConfig.MeterPerSectorJump, "sector jump");
 
             // Phase 6: sector-jump scalar bumps only start counting AFTER the
             // escalation activation threshold has been crossed. Sector exits

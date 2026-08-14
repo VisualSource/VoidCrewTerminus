@@ -86,7 +86,7 @@ internal static class BossDefeatHook
             bool wasActive = SectorEscalation.IsScalingActive;
 
             SectorEscalation.IncrementBossesDefeated();
-            int bump = System.Math.Max(1, TerminusConfig.EscalationBossScalarBonus?.Value ?? 1);
+            int bump = System.Math.Max(1, TerminusConfig.BossScalarBonus);
             // Deliberately not gated on Forge presence — escalation state
             // accumulates in the background even without a Forge installed, so
             // installing one mid-run picks up whatever scalar has built up.
@@ -110,7 +110,7 @@ internal static class BossDefeatHook
 
     private static string DescribeUnlock(int bossesBeforeThisOne)
     {
-        int threshold = TerminusConfig.EscalationBossActivationThreshold?.Value ?? 2;
+        int threshold = TerminusConfig.BossActivationThreshold;
         int bossesAfterThisOne = bossesBeforeThisOne + 1;
 
         // The activation threshold gates all escalation systems. Boss defeats

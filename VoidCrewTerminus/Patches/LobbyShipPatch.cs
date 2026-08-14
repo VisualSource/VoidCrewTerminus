@@ -113,7 +113,7 @@ internal class HangarShipController : MonoBehaviour
     {
         if (prefab == null) { BepinPlugin.Log.LogWarning($"[HangarShip] Load failed for {shipType}"); yield break; }
 
-        float budgetMs = Mathf.Max(0.5f, TerminusConfig.LobbyShipBuildBudgetMs?.Value ?? 3f);
+        float budgetMs = Mathf.Max(0.5f, TerminusConfig.ShipBuildBudgetMs);
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         // Pass 1 — LOD sets (same rules as before).
@@ -356,7 +356,7 @@ internal class HangarShipController : MonoBehaviour
     private IEnumerator Fade(GameObject go, float target)
     {
         if (go == null) yield break;
-        float duration = TerminusConfig.LobbyShipFadeDuration?.Value ?? 0.6f;
+        float duration = TerminusConfig.ShipFadeDuration;
 
         ApplyPerMaterial(go, MakeTransparent);
 

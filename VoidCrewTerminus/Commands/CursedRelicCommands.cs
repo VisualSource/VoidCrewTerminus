@@ -22,7 +22,7 @@ internal class CursedStatusCommand : PublicCommand
 
     public override void Execute(string arguments, int sender)
     {
-        if (!TerminusConfig.EnableDevMode.Value) return;
+        if (!TerminusConfig.DevMode) return;
 
         var player = LocalPlayer.Instance;
         if (player == null) { Messaging.Notification("No local player."); return; }
@@ -68,9 +68,9 @@ internal class CursedStatusCommand : PublicCommand
     // and the chance breakdown that produced it.
     private static string Describe(CarryableObject co)
     {
-        float baseChance = TerminusConfig.RelicBaseCurseChance?.Value ?? 0.15f;
-        float scalarBonus = TerminusConfig.EscalationCurseChancePerScalar?.Value ?? 0.03f;
-        float maxChance = TerminusConfig.RelicMaxCurseChance?.Value ?? 0.50f;
+        float baseChance = TerminusConfig.BaseCurseChance;
+        float scalarBonus = TerminusConfig.CurseChancePerScalar;
+        float maxChance = TerminusConfig.MaxCurseChance;
         int scalar = Forge.ForgeMeterController.DifficultyScalar;
 
         var name = RelicTierData.NormalizeName(co.gameObject.name);
@@ -99,7 +99,7 @@ internal class ForceCursedCommand : PublicCommand
 
     public override void Execute(string arguments, int sender)
     {
-        if (!TerminusConfig.EnableDevMode.Value) return;
+        if (!TerminusConfig.DevMode) return;
 
         var parts = (arguments ?? "").Trim().Split(' ', System.StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length < 1)

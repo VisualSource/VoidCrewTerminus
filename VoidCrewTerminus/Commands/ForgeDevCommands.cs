@@ -32,7 +32,7 @@ internal class SetLevelCommand : PublicCommand
 
     public override void Execute(string arguments, int sender)
     {
-        if (!TerminusConfig.EnableDevMode.Value) return;
+        if (!TerminusConfig.DevMode) return;
 
         if (!int.TryParse(arguments?.Trim(), out int level) || level < 3 || level > 10)
         {
@@ -65,7 +65,7 @@ internal class GetLevelCommand : PublicCommand
 
     public override void Execute(string arguments, int sender)
     {
-        if (!TerminusConfig.EnableDevMode.Value) return;
+        if (!TerminusConfig.DevMode) return;
 
         var module = ModuleFinder.NearestToPlayer();
         if (module == null)
@@ -90,7 +90,7 @@ internal class DumpTagsCommand : PublicCommand
 
     public override void Execute(string arguments, int sender)
     {
-        if (!TerminusConfig.EnableDevMode.Value) return;
+        if (!TerminusConfig.DevMode) return;
 
         var module = ModuleFinder.NearestToPlayer();
         if (module == null)
@@ -124,7 +124,7 @@ internal class ResetOverlayCommand : PublicCommand
 
     public override void Execute(string arguments, int sender)
     {
-        if (!TerminusConfig.EnableDevMode.Value) return;
+        if (!TerminusConfig.DevMode) return;
         ForgeStateStore.ClearAll();
         Messaging.Notification("All forge overlays cleared — modules restored to vanilla L3.");
     }

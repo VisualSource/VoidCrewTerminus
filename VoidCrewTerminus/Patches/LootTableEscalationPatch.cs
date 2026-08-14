@@ -55,9 +55,7 @@ internal static class LootTableEscalationPatch
             int bosses = SectorEscalation.BossesDefeated;
             int seed = ResolveSeed();
 
-            int rareUnlock = TerminusConfig.EscalationRareUnlockScalar?.Value ?? 3;
-            int legendaryUnlock = TerminusConfig.EscalationLegendaryUnlockScalar?.Value ?? 6;
-            var ceiling = SectorEscalation.MaxAllowedTier(scalar, bosses, rareUnlock, legendaryUnlock);
+            var ceiling = SectorEscalation.MaxAllowedTier(scalar, bosses);
 
             var bucketSummaries = new List<string>();
             int totalDowngraded = 0, totalDropped = 0;

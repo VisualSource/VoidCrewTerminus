@@ -16,7 +16,7 @@ internal class ForgeMeterCommand : PublicCommand
 
     public override void Execute(string arguments, int sender)
     {
-        if (!TerminusConfig.EnableDevMode.Value) return;
+        if (!TerminusConfig.DevMode) return;
         Messaging.Notification(ForgeMeterController.Describe());
     }
 }
@@ -30,7 +30,7 @@ internal class SetMeterCommand : PublicCommand
 
     public override void Execute(string arguments, int sender)
     {
-        if (!TerminusConfig.EnableDevMode.Value) return;
+        if (!TerminusConfig.DevMode) return;
         if (!float.TryParse((arguments ?? "").Trim(), out float value) || value < 0f)
         {
             Messaging.Notification("Usage: !setmeter <value>");
@@ -51,7 +51,7 @@ internal class SetForgeLevelCommand : PublicCommand
 
     public override void Execute(string arguments, int sender)
     {
-        if (!TerminusConfig.EnableDevMode.Value) return;
+        if (!TerminusConfig.DevMode) return;
         if (!int.TryParse((arguments ?? "").Trim(), out int level))
         {
             Messaging.Notification($"Usage: !setforgelevel <{ForgeMeterController.MinLevel}-{ForgeMeterController.MaxLevel}>");

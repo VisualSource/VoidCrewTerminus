@@ -25,14 +25,14 @@ internal class DifficultyCommand : PublicCommand
 
     public override void Execute(string arguments, int sender)
     {
-        if (!TerminusConfig.EnableDevMode.Value) return;
+        if (!TerminusConfig.DevMode) return;
 
         int scalar = ForgeMeterController.DifficultyScalar;
         int bosses = Escalation.SectorEscalation.BossesDefeated;
-        int rareUnlock = TerminusConfig.EscalationRareUnlockScalar?.Value ?? 3;
-        int legendaryUnlock = TerminusConfig.EscalationLegendaryUnlockScalar?.Value ?? 6;
-        int threshold = TerminusConfig.EscalationBossActivationThreshold?.Value ?? 2;
-        var maxTier = Escalation.SectorEscalation.MaxAllowedTier(scalar, bosses, rareUnlock, legendaryUnlock);
+        int rareUnlock = TerminusConfig.RareUnlockScalar;
+        int legendaryUnlock = TerminusConfig.LegendaryUnlockScalar;
+        int threshold = TerminusConfig.BossActivationThreshold;
+        var maxTier = Escalation.SectorEscalation.MaxAllowedTier(scalar, bosses);
         string status = Escalation.SectorEscalation.IsScalingActive
             ? "ACTIVE"
             : $"DORMANT (needs {threshold - bosses} more boss defeat{(threshold - bosses == 1 ? "" : "s")})";
@@ -52,7 +52,7 @@ internal class SetDifficultyCommand : PublicCommand
 
     public override void Execute(string arguments, int sender)
     {
-        if (!TerminusConfig.EnableDevMode.Value) return;
+        if (!TerminusConfig.DevMode) return;
         if (!int.TryParse((arguments ?? "").Trim(), out int value) || value < 0)
         {
             Messaging.Notification("Usage: !setdifficulty <n>  (n >= 0)");
@@ -73,7 +73,7 @@ internal class SetBossesCommand : PublicCommand
 
     public override void Execute(string arguments, int sender)
     {
-        if (!TerminusConfig.EnableDevMode.Value) return;
+        if (!TerminusConfig.DevMode) return;
         if (!int.TryParse((arguments ?? "").Trim(), out int value) || value < 0)
         {
             Messaging.Notification("Usage: !setbosses <n>  (n >= 0)");
@@ -98,7 +98,7 @@ internal class LootDumpCommand : PublicCommand
 
     public override void Execute(string arguments, int sender)
     {
-        if (!TerminusConfig.EnableDevMode.Value) return;
+        if (!TerminusConfig.DevMode) return;
 
         var lm = LootManager.Instance;
         if (lm == null) { Messaging.Notification("No LootManager in the active session."); return; }
@@ -182,18 +182,17 @@ internal class SpawnersDumpCommand : PublicCommand
 
     public override void Execute(string arguments, int sender)
     {
-        if (!TerminusConfig.EnableDevMode.Value) return;
+        if (!TerminusConfig.DevMode) return;
 
         var director = Singleton<AIDirector>.I;
         if (director == null) { Messaging.Notification("No AIDirector in the active session."); return; }
         if (SpawnersField == null) { Messaging.Notification("Spawners: reflection lookup failed."); return; }
 
-        int scalar = ForgeMeterController.DifficultyScalar;
-        int capped = Escalation.EnemyScalingHelpers.CapScalar(scalar, TerminusConfig.EscalationScalarCap?.Value ?? 10);
-        float rate = TerminusConfig.EscalationDensityScalarPerJump?.Value ?? 0.12f;
+        var escalation = Escalation.EscalationIntensity.Current;
         Messaging.Notification(
-            $"Spawners — escalation {(Escalation.SectorEscalation.IsScalingActive ? "ACTIVE" : "DORMANT")}, " +
-            $"scalar={scalar} (capped {capped}), density x{1f + capped * rate:0.00}");
+            $"Spawners — escalation {(escalation.Active ? "ACTIVE" : "DORMANT")}, " +
+            $"scalar={escalation.RawScalar} (capped {escalation.Scalar}), " +
+            $"density x{escalation.DensityMultiplier:0.00}");
 
         var all = new List<Spawner>();
         if (DefaultSpawnerField?.GetValue(director) is Spawner def && def != null) all.Add(def);

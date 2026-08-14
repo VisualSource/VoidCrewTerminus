@@ -34,7 +34,7 @@ internal class SpawnItemCommand : PublicCommand
 
     public override void Execute(string arguments, int sender)
     {
-        if (!TerminusConfig.EnableDevMode.Value)
+        if (!TerminusConfig.DevMode)
         {
             return;
         }

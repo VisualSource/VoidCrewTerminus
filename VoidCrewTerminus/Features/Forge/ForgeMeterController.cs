@@ -37,8 +37,8 @@ public static class ForgeMeterController
     // Base × Multiplier^(level−1) → defaults 100, 150, 225 for L1→2→3→4.
     public static float ThresholdFor(int level)
     {
-        float baseThreshold = TerminusConfig.ForgeMeterBaseThreshold?.Value ?? 100f;
-        float multiplier = TerminusConfig.ForgeMeterLevelMultiplier?.Value ?? 1.5f;
+        float baseThreshold = TerminusConfig.MeterBaseThreshold;
+        float multiplier = TerminusConfig.MeterLevelMultiplier;
         return baseThreshold * (float)Math.Pow(multiplier, level - MinLevel);
     }
 
@@ -141,7 +141,7 @@ public static class ForgeMeterController
             return false;
         }
 
-        int spend = Math.Max(1, TerminusConfig.AlloyTerminalSpendPerUse?.Value ?? 10);
+        int spend = Math.Max(1, TerminusConfig.AlloySpendPerUse);
         if (supplies.AlloyAmount < spend)
         {
             message = $"Not enough alloys ({supplies.AlloyAmount}/{spend}).";
@@ -149,7 +149,7 @@ public static class ForgeMeterController
         }
 
         supplies.ModifyAlloyCount(-spend, ResourceChangeAlloy.FABRICATORUPGRADE, GUIDUnion.Empty());
-        AddMeter(spend * (TerminusConfig.ForgeMeterPerAlloy?.Value ?? 1f), $"{spend} alloys");
+        AddMeter(spend * TerminusConfig.MeterPerAlloy, $"{spend} alloys");
         message = null;
         return true;
     }
