@@ -223,71 +223,16 @@ public class UpgradeForgeBehavior : MonoBehaviour
     // Forge. On success the new pending state (level + any rolled perk) is written
     // to ForgeStateStore so reconstruction picks it up automatically.
     //
-    // The pure algorithm (cost walk, tie-break, perk roll) lives in
-    // UpgradeCommitCalculator; this method builds the request from scene state,
-    // guards the Unity-entangled cases, and applies the outcome.
-    // Local operator entry (host / solo). Computes the authoritative outcome,
-    // persists + broadcasts it, then consumes OUR relics (we own them, so the
-    // networked destroy propagates). A client operator never reaches here — its
-    // DoCommit routes a request to the host instead (Phase 8-C).
+    // Local operator entry (host / solo): ForgeCommit computes, persists and
+    // broadcasts the authoritative outcome; consuming OUR relics is what is left
+    // over, and stays here because we own them (which is what makes the networked
+    // destroy propagate). A client operator never reaches this — the policy routes
+    // its click to RequestCommit instead (Phase 8-C).
     public CommitOutcome TryCommit()
     {
-        var outcome = ComputeAndPersist(_moduleBox, _relics);
+        var outcome = ForgeCommit.Execute(_moduleBox, _relics);
         if (outcome.Status != CommitStatus.Ok) return outcome;
         ConsumeOwnedRelics(outcome.RelicsConsumed);
-        return outcome;
-    }
-
-    // Compute the commit from an explicit box + relic list, persist the resulting
-    // snapshot, and broadcast it to clients. Does NOT consume relics — the
-    // operator (whoever holds them) does that. Runs on the authority only:
-    // the local operator passes its _moduleBox/_relics; the host resolving a
-    // remote request passes the box + relics found by ViewID (its own forge
-    // instance has no _moduleBox when a client docked). Static for exactly that
-    // reason.
-    internal static CommitOutcome ComputeAndPersist(BuildBox box, IReadOnlyList<UnityEngine.GameObject> relics)
-    {
-        if (box == null) return CommitOutcome.Failure(CommitStatus.NoModule);
-        if (box.photonView == null) return CommitOutcome.Failure(CommitStatus.MissingViewId);
-
-        int n = relics.Count;
-        var relicTiers = new Loot.RelicTier[n];
-        var relicNames = new string[n];
-        var relicCursedBurden = new BurdenType[n];
-        for (int i = 0; i < n; i++)
-        {
-            relicTiers[i] = relics[i] != null ? Loot.RelicTierData.Get(relics[i].name).Tier : Loot.RelicTier.Common;
-            relicNames[i] = relics[i] != null ? relics[i].name : null;
-            relicCursedBurden[i] = relics[i] != null ? Loot.CursedRelicMarker.GetBurden(relics[i]) : BurdenType.None;
-        }
-
-        var category = PerkPool.CategoryOf(box.moduleRef?.Asset as CellModule);
-        int viewId = box.photonView.ViewID;
-        var current = ForgeStateStore.TryPeekSnapshot(viewId, out var s) ? s : ForgeSnapshot.Empty;
-        int currentLevel = LevelOfBox(box);
-
-        var request = new CommitRequest(currentLevel, relicTiers, relicNames, relicCursedBurden, category, current.PerkSlots);
-        var outcome = UpgradeCommitCalculator.Calculate(request);
-        if (outcome.Status != CommitStatus.Ok) return outcome;
-
-        var updated = current.WithLevel(outcome.NewLevel);
-        if (outcome.RolledPerk != null)
-            updated = updated.WithPerk(outcome.TargetSlot, outcome.RolledPerk.Id);
-        if (outcome.AppliedBurden != BurdenType.None)
-            updated = updated.WithBurdenAdded(outcome.AppliedBurden); // idempotent
-        ForgeStateStore.SaveSnapshot(viewId, updated);
-
-        BepinPlugin.Log.LogInfo(
-            $"[Forge] Committed L{currentLevel}→L{outcome.NewLevel} on ViewID={viewId} " +
-            $"(consumed {ForgeLabels.Plural(outcome.RelicsConsumed, "relic")}, " +
-            $"tier={outcome.BestTier}, perk={ForgeLabels.DescribePerkResult(outcome)})");
-
-        LogPerkCausalChain(outcome, relicNames);
-        LogBurdenCausalChain(outcome, relicCursedBurden);
-
-        // Push the authoritative snapshot to clients (no-ops in solo / no peers).
-        Net.ForgeNetSync.BroadcastCommitResult(viewId, updated, outcome.RelicsConsumed);
-
         return outcome;
     }
 
@@ -422,62 +367,6 @@ public class UpgradeForgeBehavior : MonoBehaviour
             if (b._moduleBox != null && b._moduleBox.photonView != null && b._moduleBox.photonView.ViewID == boxViewId)
                 return b;
         return null;
-    }
-
-    // 7-A causal log: proves whether the perk came from a flagship relic's
-    // signature or from the category pool. Without this the two are
-    // indistinguishable — !perks shows the resulting slot either way, and the
-    // signature-vs-pool unit test is skipped (StatType init), so this line is
-    // the only evidence 7-A actually works.
-    private static void LogPerkCausalChain(CommitOutcome outcome, IReadOnlyList<string> relicNames)
-    {
-        if (!outcome.RollAttempted)
-        {
-            BepinPlugin.Log.LogDebug("[Forge] Perk: no roll attempted (no eligible slot for this tier).");
-            return;
-        }
-
-        if (outcome.RolledPerk == null)
-        {
-            BepinPlugin.Log.LogDebug(
-                $"[Forge] Perk: roll FAILED at {outcome.RollChance:P0} ({outcome.BestTier}) — no perk.");
-            return;
-        }
-
-        string consumed = relicNames == null || relicNames.Count == 0
-            ? "?"
-            : string.Join(",", relicNames);
-
-        if (outcome.RolledPerk.IsSignature)
-            BepinPlugin.Log.LogDebug(
-                $"[Forge] Perk: SIGNATURE '{outcome.RolledPerk.Id}' preferred over category pool " +
-                $"(flagship relic {outcome.RolledPerk.SignatureRelicId}; consumed [{consumed}]) → slot {outcome.TargetSlot + 1}.");
-        else
-            BepinPlugin.Log.LogDebug(
-                $"[Forge] Perk: POOL draw '{outcome.RolledPerk.Id}' (no signature among consumed [{consumed}]) " +
-                $"→ slot {outcome.TargetSlot + 1}.");
-    }
-
-    // 7-C causal log: proves the cursed→burden chain end-to-end. A burden roll
-    // that never fires must be distinguishable from one that fired and failed.
-    private static void LogBurdenCausalChain(CommitOutcome outcome, IReadOnlyList<BurdenType> relicCursedBurden)
-    {
-        int cursedCount = 0;
-        if (relicCursedBurden != null)
-            for (int i = 0; i < relicCursedBurden.Count; i++)
-                if (relicCursedBurden[i] != BurdenType.None) cursedCount++;
-
-        if (cursedCount == 0)
-        {
-            BepinPlugin.Log.LogDebug("[Forge] Burden: no cursed relics consumed — no roll.");
-            return;
-        }
-
-        float chance = TerminusConfig.BurdenChance;
-        BepinPlugin.Log.LogInfo(
-            outcome.AppliedBurden != BurdenType.None
-                ? $"[Forge] Burden: cursed x{cursedCount} consumed, roll {chance:P0} → APPLIED {outcome.AppliedBurden}."
-                : $"[Forge] Burden: cursed x{cursedCount} consumed, roll {chance:P0} → none (roll failed).");
     }
 
     // ---- In-world interactables ----------------------------------------

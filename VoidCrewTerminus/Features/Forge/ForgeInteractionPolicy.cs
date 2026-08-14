@@ -179,7 +179,7 @@ public static class ForgeInteractionPolicy
     {
         // Checked here rather than once per path, so the host and a client refuse
         // on the same facts with the same words. On the host these are the same
-        // three guards ComputeAndPersist would have hit a moment later.
+        // three guards ForgeCommit.Execute would have hit a moment later.
         if (!forge.HasModule) return Refuse(CommitStatus.NoModule, forge);
         if (!forge.SocketedBoxHasViewId) return Refuse(CommitStatus.MissingViewId, forge);
         if (forge.RelicCount == 0) return Refuse(CommitStatus.NoRelics, forge);

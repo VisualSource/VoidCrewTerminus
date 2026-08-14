@@ -146,7 +146,7 @@ public static class ForgeLabels
     // StatTypes and so cannot run in the test host.
     //
     // The "no roll" string is only ever reached by the causal log line in
-    // ComputeAndPersist; DescribeCommit gates it out of player-facing text.
+    // ForgeCommit.Execute; DescribeCommit gates it out of player-facing text.
     public static string DescribePerkResult(CommitOutcome outcome)
     {
         if (outcome.RolledPerk != null)

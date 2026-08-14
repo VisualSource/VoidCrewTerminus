@@ -4,8 +4,8 @@ using System.Collections.Generic;
 namespace VoidCrewTerminus.Forge;
 
 // Opaque, immutable value carrying a module's forge overlay across the deconstruct
-// → reconstruct bridge. Also the shape that UpgradeForgeBehavior.TryCommit folds
-// commit outcomes into before saving.
+// → reconstruct bridge. Also the shape that ForgeCommit folds commit outcomes into
+// before saving.
 //
 // Any change to what a "forge overlay" contains happens here; the two conversion
 // points on ForgeModuleState (Snapshot / ApplySnapshot) then fail to compile until

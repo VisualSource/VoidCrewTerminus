@@ -319,8 +319,8 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         BepinPlugin.Log?.LogDebug($"[Net] → sent commit request box={boxViewId} ({relicViewIds?.Length ?? 0} relics) to host.");
     }
 
-    // Host resolves + computes. UpgradeForgeBehavior.ComputeAndPersist saves the
-    // host snapshot and broadcasts the result; the operator consumes on receipt.
+    // Host resolves + computes. ForgeCommit.Execute saves the host snapshot and
+    // broadcasts the result; the operator consumes on receipt.
     internal static void HandleCommitRequest(object[] a, int senderActor)
     {
         if (!IsAuthority) return;
@@ -348,7 +348,7 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         }
         BepinPlugin.Log?.LogDebug($"[Net] ← commit request from #{senderActor} box={boxViewId} ({relics.Count}/{relicViewIds.Length} relics resolved).");
 
-        UpgradeForgeBehavior.ComputeAndPersist(box, relics); // saves host snapshot + broadcasts result
+        ForgeCommit.Execute(box, relics); // saves host snapshot + broadcasts result
     }
 
     // Host → all: authoritative box snapshot (also the late-joiner overlay push,
