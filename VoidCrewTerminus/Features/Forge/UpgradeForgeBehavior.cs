@@ -625,55 +625,86 @@ public class UpgradeForgeBehavior : MonoBehaviour
 
     // Entry point for all Forge clicks, invoked by the CarryableInteract prefix in
     // ForgeInteractionPatch. Runs on the interacting player's client.
+    //
+    // The rules themselves live in ForgeInteractionPolicy, which is Unity-free and
+    // therefore testable; this reads the scene into facts, hands them over, and
+    // carries out the answer. Everything decidable is decided before anything in
+    // the world is touched.
     public void HandleInteraction(ForgeInteractable target, LocalPlayer player)
     {
+        // Captured before any mutation — ReleaseCarryable clears player.Payload.
         var payload = player.Payload;
-        if (payload != null)
+        var decision = ForgeInteractionPolicy.Decide(SnapshotView(), DescribeClick(target, payload));
+
+        Apply(decision.Action, target, player, payload);
+        if (!string.IsNullOrEmpty(decision.Message))
+            Messaging.Notification(decision.Message);
+    }
+
+    private ForgeView SnapshotView() => new(
+        hasModule: HasModule,
+        socketedBoxLevel: CurrentBoxLevel,
+        socketedBoxHasViewId: _moduleBox != null && _moduleBox.photonView != null,
+        relicCount: RelicCount,
+        capacity: Capacity,
+        isAuthority: Net.ForgeNetSync.IsAuthority);
+
+    private ForgeClick DescribeClick(ForgeInteractable target, CarryableObject payload)
+    {
+        var box = payload as BuildBox;
+        var carried = payload == null ? ForgePayload.None
+            : box != null ? ForgePayload.ModuleBox
+            : IsRelic(payload.gameObject) ? ForgePayload.Relic
+            : ForgePayload.Other;
+
+        return new ForgeClick(
+            payload: carried,
+            carriedBoxLevel: box != null ? LevelOfBox(box) : 0,
+            target: target.Kind,
+            targetOccupied: target.Anchor == null || IsAnchorOccupied(target.Anchor));
+    }
+
+    // Carry out a decision. Nothing here re-checks a rule the policy already
+    // applied, and nothing here decides what to say about a refusal.
+    private void Apply(ForgeAction action, ForgeInteractable target, LocalPlayer player, CarryableObject payload)
+    {
+        switch (action)
         {
-            if (payload is BuildBox box)
-            {
-                if (target.Kind != ForgeInteractableKind.ModuleSocket)
-                { Messaging.Notification("Place module boxes on the Forge's module socket."); return; }
-                if (HasModule)
-                { Messaging.Notification("The Forge already holds a module box."); return; }
-
+            case ForgeAction.LoadModule:
                 player.Carrier.ReleaseCarryable();
-                TryTakeModule(box);
-                Dock(box.gameObject, _inputAnchor != null ? _inputAnchor : transform);
-                Messaging.Notification($"Module loaded (L{CurrentBoxLevel}). Insert relics and commit to upgrade.");
-            }
-            else if (IsRelic(payload.gameObject))
-            {
-                // Relics go into the specific tube the player clicked.
-                if (target.Kind != ForgeInteractableKind.RelicTube)
-                { Messaging.Notification("Insert relics into the relic tubes."); return; }
-                if (target.Anchor == null || IsAnchorOccupied(target.Anchor))
-                { Messaging.Notification("That tube is occupied — pick an empty one."); return; }
+                TryTakeModule((BuildBox)payload);
+                Dock(payload.gameObject, _inputAnchor != null ? _inputAnchor : transform);
+                break;
 
+            case ForgeAction.InsertRelic:
+                // Capacity and the tube were both cleared by the policy, so a
+                // refusal here means the two disagree about the Forge's state.
+                // Drop it rather than reprint a message the policy owns.
                 if (!TryInsertRelic(payload.gameObject))
-                { Messaging.Notification($"The Forge is full ({RelicCount}/{Capacity} relics)."); return; }
-
+                {
+                    BepinPlugin.Log.LogWarning(
+                        "[Forge] Insert approved by policy but refused by the Forge — state disagreement, ignored.");
+                    break;
+                }
                 player.Carrier.ReleaseCarryable();
                 Dock(payload.gameObject, target.Anchor);
-                Messaging.Notification($"Relic inserted ({RelicCount}/{Capacity}). Projected level: L{ProjectedTargetLevel}.");
-            }
-            else
-            {
-                Messaging.Notification("The Forge only accepts relics and module boxes.");
-            }
-            return;
-        }
-
-        // Empty-handed: commit lives on the dedicated commit button. Docked relics
-        // and the docked box are retrieved by grabbing them directly — the module
-        // socket's IsInteractive steps aside while it holds a box, so an empty-hand
-        // click only reaches it when the socket is empty.
-        switch (target.Kind)
-        {
-            case ForgeInteractableKind.CommitButton:
-                DoCommit();
                 break;
-            case ForgeInteractableKind.AlloyTerminal:
+
+            case ForgeAction.Commit:
+                // Levels and counts are read back AFTER the attempt: on success
+                // the socketed box now reports its new level and the consumed
+                // relics are gone, which is what DescribeCommit reports.
+                var outcome = TryCommit();
+                foreach (var line in ForgeLabels.DescribeCommit(outcome, CurrentBoxLevel, RelicCount))
+                    Messaging.Notification(line);
+                break;
+
+            case ForgeAction.RequestCommit:
+                // Phase 8-C: the client asks, the host rolls and broadcasts back.
+                Net.ForgeNetSync.RequestCommit(_moduleBox.photonView.ViewID, RelicViewIds());
+                break;
+
+            case ForgeAction.FeedAlloy:
                 if (ForgeMeterController.TrySpendAlloys(out var alloyError))
                 {
                     Messaging.Notification(ForgeMeterController.Describe());
@@ -682,37 +713,7 @@ public class UpgradeForgeBehavior : MonoBehaviour
                 else
                     Messaging.Notification(alloyError);
                 break;
-            case ForgeInteractableKind.ModuleSocket:
-                Messaging.Notification("Deconstruct a module and place its build box here to upgrade it.");
-                break;
-            case ForgeInteractableKind.RelicTube:
-                Messaging.Notification(HasModule
-                    ? $"Forge: L{CurrentBoxLevel} module loaded, {RelicCount}/{Capacity} relics, projected L{ProjectedTargetLevel}."
-                    : $"Forge: no module loaded, {RelicCount}/{Capacity} relics.");
-                break;
         }
-    }
-
-    private void DoCommit()
-    {
-        // Phase 8-C: the commit roll is host-authoritative (cursed markers + RNG
-        // live on the host). A client sends a request and the host resolves it,
-        // rolls, and broadcasts the result. Host/solo runs inline.
-        if (!Net.ForgeNetSync.IsAuthority)
-        {
-            if (_moduleBox == null || _moduleBox.photonView == null)
-            { Messaging.Notification("Load a deconstructed module box into the Forge first."); return; }
-            if (_relics.Count == 0)
-            { Messaging.Notification("Insert relics into the tubes before committing."); return; }
-
-            Net.ForgeNetSync.RequestCommit(_moduleBox.photonView.ViewID, RelicViewIds());
-            Messaging.Notification("Requesting upgrade from the host…");
-            return;
-        }
-
-        var outcome = TryCommit();
-        foreach (var line in ForgeLabels.DescribeCommit(outcome, CurrentBoxLevel, RelicCount))
-            Messaging.Notification(line);
     }
 
     // Hot-reload teardown (ScriptEngine): a reloaded assembly brings its OWN
