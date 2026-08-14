@@ -380,10 +380,113 @@ Maybe:
    - power drain attack
    - interdiction event when leech on ship, leech leech pawn mini boss 
    - void recon sound track
-   - small aux ship
-      - small player fighter ship that docks to a custom module on the exterior of the ship (LIKE start wars phatom on B Wing)
-      - can only damage enemy fighters
-      - ejection on ship being destroyed? (player can wear jet pack?)
-      - can be left behind
-      - powered by relics?
-      - must buy ship?
+   - small aux ship — RFC + design DONE @26-08-14, NOT SCHEDULED
+      (docs/aux-fighter-rfc.html + docs/aux-fighter-design.html; vocabulary in
+       handoff/CONTEXT.md under "Aux Fighter feature". Grilled 26-08-14; every
+       open question below is now answered.)
+      ✔ can only damage enemy fighters — guns damage vanilla Drone ONLY, hard rule.
+         Survivability is NOT a damage rule: it's a small SignatureRadius, since
+         TargetSelector scores candidates by (distance - SignatureRadius). Big ships
+         ignore it while the main ship is in range; they engage it if it's close and
+         the ship isn't. Per-enemy-type preference is a tuning knob. No AI patching.
+      ✔ ejection on ship being destroyed — ALWAYS eject into EVA, same code path as
+         the manual bail. Oxygen, distance, jetpack fuel and swarm EVA intercepts
+         decide survival. Cockpit chair sets WorksWithJetpack=true so the pilot can
+         fly wearing one.
+      ✔ can be left behind — pilot dies, respawns at a clone tube, fighter lost.
+         Same rule for undocking mid-jump. Hooks VoidJumpSystem.StateChanged.
+      ✔ powered by relics? — NO. Alloys, at the bay panel. Relics are the Forge's
+         only currency (16 relics L3→L10); a second relic sink would mean every
+         sortie is a module upgrade forgone.
+      ✔ must buy ship? — YES. Module installs EMPTY; fighter bought per bay with
+         alloys. Hard cap of 2 fighters per run regardless of bays installed.
+      ✔ docking — EXTERIOR hardpoint, NOT a hangar; nothing lands inside. The
+         fighter clamps to the outside of the hull and its cockpit lines up with a
+         hull pass-through (the "Docking Collar") so the cockpit sits adjacent to the
+         module. The pilot does NOT walk in — they hold an interaction PROMPT and
+         are seated, exactly like taking over a turret. No hull traversal, no EVA
+         to board, so no character-pathing-across-the-hull risk at all. Modelled on CarryablesAirlock
+         (CellModule whose CarryablesSockets are input+output, SocketState.Open),
+         which is the vanilla module that passes things through the hull. NOT the
+         vanilla Airlock MonoBehaviour, which is the fixed crew EVA lock.
+         CAPTURE IS A PROCESS, NOT A SNAP, and it's interruptible. Three zones,
+         all of which already exist as CarryableAttractor fields:
+           MaxRange (50f)    — bay starts dragging + spinning the fighter into line
+           CatchRadius (3f)  — "the distance at which objects will be captured";
+                               point of no return, capture completes on its own
+           BufferRange (50f) — hysteresis, "so items aren't lost quickly after
+                               grabbing"; stops a break-away being re-grabbed
+                               on the next frame (the yo-yo case)
+           _pullVelocity     — drag speed
+         Pilot can BREAK AWAY under thrust anywhere outside CatchRadius. So a
+         powered bay can't yank you out of a dogfight, but it still does all the
+         fiddly attitude matching — you just fly at it.
+         FREE FORGE SYNERGY (verified): AttractorMaxRange and AttractorPullVelocity
+         are StatTypes, and the Forge's Utility group already boosts BOTH
+         (ForgeModuleState.BuildMods:240) as does the existing
+         utility_extended_manipulators perk (PerkPool.cs:63, +15% attractor range).
+         Tag the Fighter Bay as Utility → forging it widens the capture envelope
+         and speeds the pull with ZERO new code.
+         Boarding is gated by GEOMETRY not a rule: the Collar only lines up while
+         latched, so an undocked fighter is physically unreachable.
+         Power IS the mechanism. Powered+empty = grab state (like
+         GravityScoopModule); powered+occupied = latched; cutting power = launch.
+         Involuntary power loss (combat defect, or this mod's own RandomShutoff
+         Maintenance Burden on the bay) = alarm + Release Grace countdown, then
+         release. Launch needs TWO crew (pilot seated, crewmate cuts power) —
+         deliberately coop-only content, no solo path. Recovery needs the bay
+         re-powered; if the crew is dead the pilot ejects, EVAs home and does it.
+      ✔ RESOLVED ON INSPECTION — "can a player ride a craft under thrust?" was
+         flagged as the design-killing risk; it isn't. Vanilla turrets already seat
+         players on a thrusting ship, and the mechanism is more direct than that:
+         TakeoverChair has a `public SpacePlatform Platform` field, and
+         SittingInChair calls SetMovingPlatform(chair.Platform.transform) when you
+         sit. So riding a craft is a SUPPORTED CHAIR BEHAVIOUR, already network-
+         synced (CustomPunCharacterTransformMonitor stores position platform-
+         relative). Clincher: SittingInChair guards
+         `if (player.Platform == ClientGame.Current.PlayerShip.Platform)` before
+         applying seat modifiers — vanilla ALREADY anticipates a seated player on a
+         platform that is not the player ship.
+         Concrete requirement instead: the Aux Fighter needs a SpacePlatform on the
+         MovingPlatform layer (CustomCharacterLocomotion gates on that layer).
+         Residual risk is quality under fighter-scale accelerations, not feasibility.
+      [] LARGEST REMAINING UNKNOWN is now the flight model + follow camera — both
+         genuinely new code, and "is it fun?" can't be answered until it exists.
+         Prototype it throwaway straight after pre-flight, before the module, chair
+         or economy are built.
+         DECISION: model both on the vanilla implementations rather than inventing.
+         Neither can be REUSED (ShipEngine is a CellModule on the ship's grid;
+         ShipExternalCamera resolves ClientGame.Current.PlayerShip in Start) but
+         both are readable blueprints — details in aux-fighter-design.html:
+          ShipEngine — copy the ARCHITECTURE: named input channels summed per tick
+            (Dictionary<string,Vector3>, "PlayerInput" is one key), owner-gated
+            integration in FixedUpdate (if IsPowered && photonView.AmOwner), per-axis
+            power vectors, scaling by registered StatTypes (which is what makes it
+            forge-upgradeable), AddForce/AddTorque scaled by Time.fixedDeltaTime with
+            the "user is actively inputting" flag.
+          !! THE SHIP IS NOT 6DOF, IT IS 2.5D !! ApplyForce builds its heading from
+            ProjectOnPlane(transform.forward, Vector3.up) — forward FLATTENED to
+            horizontal — and EngineTorquePower is (0,50,0), YAW ONLY. No pitch, no
+            roll; vertical is a separate world-axis elevation input. Fine for a
+            capital ship, almost certainly wrong for a dogfighter. Plan: copy the
+            architecture exactly, change the axes deliberately (torque on all 3,
+            drop the flattening so thrust follows the nose). Prototype BOTH — full
+            6DOF vs the ship's model with pitch added — and fly them.
+          ShipExternalCamera — Cinemachine3rdPersonFollow rig. Offset is driven by
+            engine.AppliedThrust (the INPUT sum, not velocity — that's why it reacts
+            the instant you touch the throttle) * 0.5, rotated into the heading and
+            Lerped at Time.deltaTime*3; the ANCHOR is pushed backward by it so the
+            camera trails on accel and settles on coast. Free-look via
+            RotateCamera(mouseDelta) with a pitch clamp.
+          !! Camera implements IKinematicObject and registers with Opsive's
+            SimulationManager, so Move() runs in the CHARACTER-CONTROLLER SIM STEP,
+            not Update/LateUpdate. Our pilot is an Opsive character riding the
+            fighter as a moving platform — if the camera uses LateUpdate instead it
+            will jitter against the seated character.
+      [] NOTE: NOT a second player ship. ClientGame.Current.PlayerShip is a single
+         slot read in 244 files and is never reassigned — so no HUD, objectives,
+         cruise control or danger state come for free. Helm and ShipEngine are both
+         CellModules on the ship's grid, so the flight model is new code.
+      [] SEQUENCING: shares the Phase 8 net layer, which is only partially verified
+         and was refactored 26-08-14. Finish T1-T7 first or failures have two
+         candidate causes.

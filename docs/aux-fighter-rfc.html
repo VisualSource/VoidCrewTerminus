@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aux Fighter &amp; Fighter Bay — RFC</title>
+  <style>
+    :root {
+      --bg:      #0f1117;
+      --surface: #181c27;
+      --border:  #2a2f42;
+      --accent:  #5c8aff;
+      --accent2: #9b59f5;
+      --text:    #d4d8e8;
+      --muted:   #7a80a0;
+      --code-bg: #12151f;
+      --tag-bg:  #1e2436;
+      --danger:  #e05c5c;
+      --warn:    #e0a35c;
+      --ok:      #5ce08a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 15.5px;
+      line-height: 1.75;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    nav {
+      width: 260px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 28px 20px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+    nav .logo {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+    nav .subtitle {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 28px;
+    }
+    nav ul { list-style: none; }
+    nav ul li { margin-bottom: 2px; }
+    nav ul li a {
+      display: block;
+      padding: 5px 10px;
+      border-radius: 6px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 13px;
+    }
+    nav ul li a:hover { color: var(--text); background: var(--border); }
+    nav .section-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--accent2);
+      margin: 18px 0 6px 10px;
+    }
+
+    main {
+      flex: 1;
+      padding: 56px 72px;
+      max-width: 880px;
+    }
+
+    h1 {
+      font-size: 30px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    .page-meta {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 40px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .page-meta .pill {
+      display: inline-block;
+      background: var(--tag-bg);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 2px 10px;
+      font-size: 11px;
+      margin-right: 6px;
+      color: var(--accent);
+    }
+
+    h2 {
+      font-size: 22px;
+      font-weight: 700;
+      color: #fff;
+      margin: 56px 0 16px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    h3 {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--accent);
+      margin: 32px 0 10px;
+    }
+    p { margin-bottom: 16px; color: var(--text); }
+    p.lead {
+      font-size: 17px;
+      color: #e8ebf5;
+      line-height: 1.7;
+      margin-bottom: 22px;
+    }
+    ul.bullets, ol.bullets { margin: 0 0 16px 24px; }
+    ul.bullets li, ol.bullets li { margin-bottom: 8px; }
+
+    strong { color: #fff; }
+    em { color: var(--text); }
+
+    code {
+      font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+      font-size: 13px;
+      background: var(--tag-bg);
+      padding: 1px 6px;
+      border-radius: 4px;
+      color: #a8c0ff;
+    }
+
+    .callout {
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin: 20px 0;
+      font-size: 14px;
+      border-left: 4px solid;
+    }
+    .callout.note   { background: #1a2035; border-color: var(--accent);  color: #b8c8f0; }
+    .callout.warn   { background: #241e12; border-color: var(--warn);    color: #e8d3b0; }
+    .callout.danger { background: #241212; border-color: var(--danger);  color: #e8c0c0; }
+    .callout.ok     { background: #122414; border-color: var(--ok);      color: #b8e8c8; }
+    .callout strong { color: inherit; font-weight: 700; }
+    .callout .label {
+      display: inline-block;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      font-size: 11px;
+      margin-right: 8px;
+    }
+
+    table.data {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      margin: 14px 0 22px;
+    }
+    table.data th {
+      text-align: left;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      padding: 0 14px 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    table.data td {
+      padding: 10px 14px 10px 0;
+      border-bottom: 1px solid #1a1f2e;
+      vertical-align: top;
+      color: var(--text);
+    }
+    table.data tr:last-child td { border-bottom: none; }
+    table.data td.k {
+      font-weight: 700;
+      color: #9cdcfe;
+      white-space: nowrap;
+    }
+    table.data td.muted { color: var(--muted); }
+
+    .scene {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 22px 28px;
+      margin: 14px 0 22px;
+      font-size: 14.5px;
+    }
+    .scene .scene-label {
+      display: inline-block;
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--accent2);
+      margin-bottom: 10px;
+    }
+    .scene p:last-child { margin-bottom: 0; }
+
+    hr { border: none; border-top: 1px solid var(--border); margin: 48px 0; }
+
+    .footer {
+      font-size: 12px;
+      color: var(--muted);
+      text-align: center;
+      margin-top: 56px;
+    }
+    .footer a { color: var(--accent); text-decoration: none; }
+  </style>
+<body>
+
+<nav>
+  <div class="logo">VoidCrewTerminus</div>
+  <div class="subtitle">Aux Fighter &amp; Fighter Bay — RFC</div>
+
+  <div class="section-label">Proposal</div>
+  <ul>
+    <li><a href="#summary">Summary</a></li>
+    <li><a href="#motivation">Motivation</a></li>
+    <li><a href="#goals">Goals &amp; Non-Goals</a></li>
+  </ul>
+
+  <div class="section-label">The Design</div>
+  <ul>
+    <li><a href="#bay">Fighter Bay</a></li>
+    <li><a href="#fighter">Aux Fighter</a></li>
+    <li><a href="#launch">Launch &amp; Recovery</a></li>
+    <li><a href="#power">Power as the Mechanism</a></li>
+    <li><a href="#loss">Loss, Ejection &amp; the Jump</a></li>
+    <li><a href="#threat">Threat Model</a></li>
+    <li><a href="#economy">Economy</a></li>
+  </ul>
+
+  <div class="section-label">Player Experience</div>
+  <ul>
+    <li><a href="#flow">A Sample Sortie</a></li>
+    <li><a href="#reference">Reference</a></li>
+  </ul>
+
+  <div class="section-label">Discussion</div>
+  <ul>
+    <li><a href="#open">Open Questions</a></li>
+    <li><a href="#risks">Risks &amp; Mitigations</a></li>
+    <li><a href="#alternatives">Alternatives Considered</a></li>
+    <li><a href="#future">Future Variants</a></li>
+  </ul>
+</nav>
+
+<main>
+
+<h1>Aux Fighter &amp; Fighter Bay — RFC</h1>
+<div class="page-meta">
+  <span class="pill">RFC</span>
+  <span class="pill">VoidCrewTerminus mod</span>
+  <span class="pill">Design only</span>
+  <span class="pill">Not scheduled</span>
+  <br /><br />
+  Design-level proposal for a single-seat craft carried by the player ship. A new installable <strong>Fighter Bay</strong> module launches and recovers an <strong>Aux Fighter</strong> flown by one crewmember, whose guns engage enemy fighters while the ship handles everything larger. For the technical companion, see <a href="aux-fighter-design.html" style="color:var(--accent)">aux-fighter-design.html</a>. Vocabulary is defined in <code>handoff/CONTEXT.md</code>.
+</div>
+
+<h2 id="summary">Summary</h2>
+
+<p class="lead">One crewmember takes the seat of a small craft clamped to the ship's hull, a second cuts power to the bay, and the Fighter drops free to screen the ship from swarms. Power is the entire docking mechanism: powered and empty means the bay is grabbing, powered and occupied means Latched, and cutting power is how you launch. Get back before the jump or you are gone.</p>
+
+<p>The Aux Fighter is deliberately <em>not</em> a second player ship. It cannot hurt capital ships and capital ships largely ignore it. Its job is the fighter weight class — the swarms of <code>Drone</code>s that a big ship's turrets handle poorly — and its cost is that one crewmember is not aboard doing anything else.</p>
+
+<div class="callout note">
+  <span class="label">Scope</span>
+  This is a larger feature than the Upgrade Forge, which took eight phases. It needs a new <code>SpaceCraft</code>, a flight model, a follow camera, a cockpit chair, a module with panel UI, and a split-authority multiplayer model. Phase 8 multiplayer sync is <strong>still unverified in-game</strong> and the Leech Carrier RFC is unbuilt. This document exists to capture the design while it is fresh, not to claim a slot in the queue.
+</div>
+
+<h2 id="motivation">Motivation</h2>
+
+<p>Void Crew's crew roles all point inward: pilot, gunner, engineer, boarder. Every one of them is a job performed <em>inside</em> the ship, and the ship is the only thing that exists in space. The most interesting spatial decision available to a crew is which direction to point the hull.</p>
+
+<p>Enemy swarms already create a problem the ship answers badly. A <code>Swarm</code> of small, fast <code>Drone</code>s is annoying for turrets built to trade with capital ships, and the crew's only real response is to keep turning. A craft in the same weight class turns that stalemate into a fight someone can win — and it puts a player <em>outside</em>, watching their own ship from a distance, which no existing role does.</p>
+
+<p>The Upgrade Forge gave the crew a reason to care about relics. The Aux Fighter gives them a reason to care about alloys beyond the Forge Meter, and a reason to keep one module powered when power is scarce.</p>
+
+<h2 id="goals">Goals &amp; Non-Goals</h2>
+
+<h3>Goals</h3>
+<ul class="bullets">
+  <li>A single-seat craft one player flies, launched and recovered through an installable module.</li>
+  <li>Docking driven entirely by module power, so keeping the bay lit is a real crew job.</li>
+  <li>A clear, narrow combat role — enemy fighters — that never competes with the ship's own guns.</li>
+  <li>Hard consequences for poor timing: leave the jump too late and the craft, and its pilot, are gone.</li>
+  <li>Reuse of vanilla systems wherever they exist: <code>TakeoverChair</code> for entry, <code>SignatureRadius</code> for enemy attention, EVA and clone tubes for failure.</li>
+</ul>
+
+<h3>Non-Goals</h3>
+<ul class="bullets">
+  <li><strong>Not a second player ship.</strong> <code>ClientGame.Current.PlayerShip</code> is read in 244 files and is never reassigned. The Aux Fighter has no HUD, no objective tracking, no cruise control and no danger state.</li>
+  <li><strong>Not solo content.</strong> Launch requires two crewmembers by design. Solo players can install the bay and buy a Fighter; they cannot launch it.</li>
+  <li><strong>Not a damage dealer against capital ships.</strong> Its guns damage <code>Drone</code> only. This is a hard rule, not a tuning value.</li>
+  <li><strong>Not a boarding craft.</strong> No airlock, no docking with derelicts or enemy hulls.</li>
+  <li><strong>Not persistent.</strong> Like all mod state, the Fighter and its bay stock are per-run.</li>
+</ul>
+
+<hr />
+
+<h2 id="bay">Fighter Bay</h2>
+
+<p>An installable <code>CellModule</code>, occupying a grid cell like any other. It carries at most one Aux Fighter and exposes a control panel for the four out-of-cockpit jobs: <strong>buy</strong> a Fighter into an empty bay, <strong>refuel</strong> it, <strong>repair</strong> it, and <strong>release</strong> it.</p>
+
+<div class="callout note">
+  <span class="label">Not a hangar</span>
+  The Aux Fighter clamps to the bay's <strong>exterior hardpoint</strong>. Nothing lands inside. The bay is a hull pass-through with a clamp, closer to <code>CarryablesAirlock</code> — the vanilla <code>CellModule</code> that moves carryables through the hull via input/output sockets — than to any kind of hangar deck.
+</div>
+
+<p>While Latched, the Fighter's cockpit is aligned to the bay's <strong>Docking Collar</strong>, and that alignment is the only way in or out of the cockpit. The pilot steps directly from the ship's interior into the seat and back again, sealed, with no EVA involved. It also means the bay performs the final approach alignment itself — the pilot flies at it and the bay handles matching attitude, rather than demanding the player thread a precise docking manoeuvre under fire.</p>
+
+<p>Capture is a <strong>process, not a snap</strong>. The bay reaches out to a set range; once the Fighter is inside it, the bay begins dragging it in and spinning it into line with the hardpoint. Through that whole approach the pilot can still <strong>break away</strong> under thrust — right up until the Fighter crosses an inner threshold, at which point the capture is committed and completes on its own. That is what keeps a powered bay from yanking a pilot out of a dogfight against their will, while still doing all the fiddly alignment for them.</p>
+
+<p>Its power draw is what makes it interesting. The bay is not a passive rack — it clamps the Fighter actively, and a bay without power holds nothing.</p>
+
+<table class="data">
+  <tr><th>Bay state</th><th>Power</th><th>Behaviour</th></tr>
+  <tr><td class="k">Grab State</td><td>On</td><td>Hardpoint empty, bay reaching. An Aux Fighter entering range is dragged in and spun into alignment &mdash; interruptibly, until it crosses the inner commit threshold. Same three-zone model <code>CarryableAttractor</code> already uses for carryables.</td></tr>
+  <tr><td class="k">Latched</td><td>On</td><td>Fighter clamped to the exterior hardpoint, Docking Collar aligned, cockpit reachable from inside. The stable, safe state.</td></tr>
+  <tr><td class="k">Releasing</td><td>Cut deliberately</td><td>Crewmate cuts power at the panel. Latch drops. This is the launch.</td></tr>
+  <tr><td class="k">Release Grace</td><td>Lost involuntarily</td><td>Alarm sounds, countdown runs. Power restored in time re-latches; expiry releases the Fighter.</td></tr>
+  <tr><td class="k">Dark</td><td>Off</td><td>Bay does nothing. Cannot capture, cannot clamp. A Fighter outside stays outside, and the Collar is unaligned.</td></tr>
+</table>
+
+<h2 id="fighter">Aux Fighter</h2>
+
+<p>A one-seat craft. The pilot boards through a hold-prompt cockpit chair &mdash; the same interaction as taking over a turret, and it works the same way: the pilot is <em>placed</em> in the seat, they do not walk in. Available only while the Fighter is Latched, because only then is the cockpit aligned to the Docking Collar. Their character rides the seat; when the Fighter moves, they move with it.</p>
+
+<p>Docked and undocked are not two objects but two states of one: while Latched the Fighter is parented to the ship and inert; when released it becomes an independent craft under its own thrust. Vanilla turrets already work exactly this way, which is where the design borrows its shape.</p>
+
+<ul class="bullets">
+  <li><strong>Flight</strong> — its own thrust and torque, flown by the seated pilot. It does not inherit the ship's helm, cruise control, or thruster boost; none of those are transferable.</li>
+  <li><strong>Guns</strong> — damage enemy <code>Drone</code>s only. Against anything larger they do nothing at all.</li>
+  <li><strong>Fuel</strong> — alloys, spent at the bay panel. A Sortie is bounded by the tank as well as by the jump.</li>
+  <li><strong>Ejection</strong> — the pilot can bail at any time into EVA, and is ejected automatically if the Fighter is destroyed.</li>
+</ul>
+
+<h2 id="launch">Launch &amp; Recovery</h2>
+
+<div class="callout warn">
+  <span class="label">Coop-gated</span>
+  Launch takes <strong>two crewmembers</strong>: one in the cockpit, one at the panel. The pilot cannot reach the power control from inside. This is deliberate — it is the cost of the Fighter's power, and it is why the Aux Fighter is coop-only content.
+</div>
+
+<p><strong>Launch.</strong> Pilot goes to the bay and holds the boarding prompt &mdash; exactly as they would to take over a turret &mdash; and is seated in the cockpit on the other side of the hull. A crewmate cuts bay power. The clamp releases and the Fighter falls away.</p>
+
+<p><strong>Recovery.</strong> A crewmate powers the bay, putting it into Grab State. The pilot flies into the capture volume; the bay draws the Fighter onto the hardpoint and aligns the Collar. Once Latched, the pilot leaves the seat and is returned to the bay inside the ship.</p>
+
+<p><strong>Recovery with a dead crew.</strong> If nobody is alive to power the bay, the pilot ejects into EVA, flies home on the jetpack, enters through the ship's own crew airlock, powers the bay themselves, and the drifting Fighter is captured on the next pass. In practice the crew usually respawns at a clone tube long before this is needed — but the path exists, so a wipe does not permanently strand the pilot.</p>
+
+<h2 id="power">Power as the Mechanism</h2>
+
+<p>Everything above reduces to one rule: <strong>the bay holds the Fighter only while it has power.</strong> That single rule generates the launch mechanism, the recovery mechanism, the coop requirement, and a genuine hazard — because power is not always lost on purpose.</p>
+
+<div class="callout danger">
+  <span class="label">Cross-feature</span>
+  This mod already ships a system that turns modules off at random: the <strong>Maintenance Burden</strong> <code>RandomShutoff</code>, applied when a commit consumes a cursed relic. A Fighter Bay carrying that burden will periodically drop its own latch. Combat defects and power reroutes do the same. <strong>Release Grace</strong> exists so this is an emergency the crew can answer, not a silent theft.
+</div>
+
+<p>The grace window turns an outage into a legible event: an alarm sounds, a countdown runs, and someone has to get power back. Restore it and the Fighter re-latches. Miss it and the Fighter drifts free — and if the ship jumps before anyone notices, it is gone.</p>
+
+<h2 id="loss">Loss, Ejection &amp; the Jump</h2>
+
+<p>Three ways to lose a Fighter, and the pilot's fate differs in each.</p>
+
+<table class="data">
+  <tr><th>Event</th><th>Fighter</th><th>Pilot</th></tr>
+  <tr><td class="k">Destroyed by enemy fire</td><td>Lost. Bay empty; buy a replacement.</td><td>Ejected into EVA. Survival depends on oxygen, distance home, jetpack fuel, and whether swarms intercept them.</td></tr>
+  <tr><td class="k">Undocked when the jump completes</td><td>Left behind in the old sector. Lost.</td><td>Dies. Respawns at a clone tube.</td></tr>
+  <tr><td class="k">Undocking during the jump</td><td>Destroyed.</td><td>Dies. Respawns at a clone tube.</td></tr>
+</table>
+
+<p>The last two share one rule and one outcome, which keeps the fiction simple: <em>if the ship leaves without you, you do not survive it.</em> The cost is the Fighter and the alloys it took to buy, not the player's remaining play time — they are back on their feet at a clone tube rather than spectating.</p>
+
+<p>Ejection is the pilot's own tool as well as an automatic consequence. Bailing out of a doomed Fighter near the ship is survivable and smart; bailing three kilometres out is a slower death than staying aboard.</p>
+
+<h2 id="threat">Threat Model</h2>
+
+<p>The Aux Fighter's survivability does not come from armour. It comes from being an <strong>uninteresting target</strong>.</p>
+
+<p>Vanilla enemies choose targets by scoring candidates on <code>distance − SignatureRadius</code> and taking the smallest. The player ship has a large signature and is therefore the obvious target from a long way out. Giving the Aux Fighter a very small <strong>Signature Profile</strong> produces the intended behaviour with no new AI code:</p>
+
+<ul class="bullets">
+  <li>Large ships <strong>ignore the Fighter</strong> while the player ship is in range — the ship simply scores better.</li>
+  <li>They <strong>will fire on it</strong> if it comes close and the ship is not in range, because then it is the best target available.</li>
+  <li>Certain enemy types can be tuned to <strong>prefer</strong> the Fighter, making some encounters specifically dangerous to it.</li>
+</ul>
+
+<p>Against enemy <code>Drone</code>s the Fighter is in its own weight class and fights normally. This is the asymmetry the design wants: dangerous where it belongs, irrelevant where it does not.</p>
+
+<h2 id="economy">Economy</h2>
+
+<table class="data">
+  <tr><th>Item</th><th>Cost</th><th>Notes</th></tr>
+  <tr><td class="k">Fighter Bay</td><td>Normal module acquisition</td><td>Installs <strong>empty</strong>. No Fighter included.</td></tr>
+  <tr><td class="k">Aux Fighter</td><td>Alloys, at the panel</td><td>One per bay. Buying is a real decision, and a destroyed Fighter must be re-bought.</td></tr>
+  <tr><td class="k">Fuel</td><td>Alloys, at the panel</td><td>Competes directly with the Forge's Alloy Terminal for the same currency.</td></tr>
+  <tr><td class="k">Repair</td><td>Alloys, at the panel</td><td>Cheaper than replacement; the incentive is to bring it home damaged rather than fight to the death.</td></tr>
+  <tr><td class="k">Fighter Cap</td><td>&mdash;</td><td><strong>Hard limit of 2</strong> per run regardless of bays installed.</td></tr>
+</table>
+
+<p>Alloys were chosen over relics deliberately. Relics are the Upgrade Forge's only currency and its whole progression is sixteen relics from L3 to L10; a second relic sink would mean every Sortie is a module upgrade the crew did not get. Alloys already flow through the Forge's Alloy Terminal, so the Fighter competes with Forge <em>progression speed</em> rather than with the Forge's core loop.</p>
+
+<hr />
+
+<h2 id="flow">A Sample Sortie</h2>
+
+<div class="scene">
+  <div class="scene-label">Sector 7 &middot; two Swarms inbound &middot; crew of three</div>
+  <p>The scanner calls two swarms. <strong>Reza</strong> stops repairing the shield and heads for the Fighter Bay and holds the boarding prompt; the world cuts and she is in the cockpit, outside the hull, looking back down the ship's flank. <strong>Ilse</strong> steps to the panel and cuts bay power. The clamp bangs open and Reza falls away from the hull, thrusters lighting.</p>
+  <p>The dreadnought behind the swarms never looks at her. It has a whole ship to shoot at. Reza cuts into the first swarm from underneath and the Drones — the only things her guns can touch — break formation to answer, which is exactly the point: they are chasing her instead of chewing on the hull.</p>
+  <p>Halfway through the second swarm the bay alarm goes off aboard the ship. A defect has knocked the Fighter Bay dark and the <strong>Release Grace</strong> countdown is running — which matters not at all right now, because the bay is empty and Reza is already outside. It will matter in ninety seconds.</p>
+  <p>Fuel warning. Reza turns for home. Ilse has the bay lit again and it is sitting in <strong>Grab State</strong>; Reza drifts into the volume roughly nose-first and lets the bay do the rest &mdash; it hauls the Fighter onto the hardpoint, swings the cockpit into line with the Collar, and clamps. She leaves the seat and is back in the corridor as the void drive spins up.</p>
+  <p>Nobody says anything about the fact that she was eleven seconds from being left in sector 7.</p>
+</div>
+
+<h2 id="reference">Reference</h2>
+
+<table class="data">
+  <tr><th>Question</th><th>Answer</th></tr>
+  <tr><td class="k">Can it hurt capital ships?</td><td>No. Enemy <code>Drone</code>s only. Hard rule.</td></tr>
+  <tr><td class="k">Can capital ships hurt it?</td><td>Only when it is close and the player ship is out of range. Some types prefer it.</td></tr>
+  <tr><td class="k">Can one player launch it?</td><td>No. Two crewmembers, always.</td></tr>
+  <tr><td class="k">Can one player recover it?</td><td>Yes, if the bay is powered. If not, the pilot ejects, EVAs home, and powers it.</td></tr>
+  <tr><td class="k">What happens on a power cut while docked?</td><td>Alarm, countdown, then release. Restoring power re-latches.</td></tr>
+  <tr><td class="k">What happens if the ship jumps without it?</td><td>Fighter lost; pilot dies and respawns at a clone tube.</td></tr>
+  <tr><td class="k">How many can exist?</td><td>Two, per run, regardless of bays.</td></tr>
+  <tr><td class="k">Does the pilot keep the ship&rsquo;s HUD?</td><td>No. It is not the player ship.</td></tr>
+  <tr><td class="k">Does boarding need EVA?</td><td>No. A prompt seats the pilot directly, like a turret. EVA is only for ejection.</td></tr>
+  <tr><td class="k">Does the Fighter land inside?</td><td>No. It clamps to an exterior hardpoint. There is no hangar.</td></tr>
+  <tr><td class="k">Can a powered bay grab me against my will?</td><td>Only past the inner commit threshold. Before that you can break away under thrust.</td></tr>
+  <tr><td class="k">Do I have to dock precisely?</td><td>No. Fly at it; the bay drags you in and matches attitude for you.</td></tr>
+</table>
+
+<hr />
+
+<h2 id="open">Open Questions</h2>
+
+<ul class="bullets">
+  <li><strong>Which enemy types prefer the Fighter?</strong> The Signature Profile makes this a per-type tuning knob. Interceptor-flavoured enemies are the obvious candidates, but the list needs a pre-flight pass over enemy definitions.</li>
+  <li><strong>Can the Fighter shoot down Leech Missiles?</strong> Real synergy with the Leech Carrier encounter — it would give the Fighter a second, very legible job. It also means the two features become entangled before either is built.</li>
+  <li><strong>Numbers.</strong> Purchase cost, fuel burn rate, repair cost, Release Grace duration, Fighter hull and gun values. All deferred to the design doc and playtest.</li>
+  <li><strong>A third bay.</strong> With the Fighter Cap at 2, what does a third installed bay do? Simplest answer is that it can be installed but never stocked; worth confirming it is not just a trap for the player.</li>
+  <li><strong>Does an empty Fighter drift?</strong> If power is lost with the bay empty and a Fighter is docked&hellip; that state cannot exist. But an unoccupied Fighter released by a grace expiry does drift away. Recoverable via Grab State, but it can be lost to a jump with nobody aboard.</li>
+</ul>
+
+<h2 id="risks">Risks &amp; Mitigations</h2>
+
+<table class="data">
+  <tr><th>Risk</th><th>Mitigation</th></tr>
+  <tr><td class="k">Character physics on a manoeuvring craft</td><td><strong>Largely resolved on inspection.</strong> Vanilla turrets already seat players on a ship under thrust, and more directly: <code>TakeoverChair</code> carries a <code>SpacePlatform Platform</code> which <code>SittingInChair</code> feeds to <code>SetMovingPlatform</code>, so riding a craft is a supported, network-synced chair behaviour. <code>SittingInChair</code> even guards for a seated player whose platform is not the player ship. Remaining question is behaviour under fighter-scale accelerations.</td></tr>
+  <tr><td class="k">No second-player-ship precedent</td><td>Every flyable non-player craft in the game is AI-driven. Turrets give us the parenting, the chair, ownership transfer <em>and</em> platform association &mdash; but nothing gives us a player-flown craft. The flight model and camera remain genuinely new code, and are now the largest unknown.</td></tr>
+  <tr><td class="k">Solo players buy dead content</td><td>Accepted deliberately. The bay and Fighter should be clearly described as requiring a crew, so the purchase is informed.</td></tr>
+  <tr><td class="k">Coop friction at the worst moment</td><td>Launch needs a crewmate exactly when the ship is under pressure. Recovery deliberately does not, which is where the real danger is.</td></tr>
+  <tr><td class="k">Feature interacts with an unverified layer</td><td>The Fighter's state is host-arbitrated over the same ModMessage layer as Phase 8, which is still unverified in-game. Building on it before T1&ndash;T7 pass compounds risk.</td></tr>
+  <tr><td class="k">Cursed bay ejects the Fighter</td><td>Emergent and intended. Release Grace makes it survivable; the alarm makes it fair.</td></tr>
+</table>
+
+<h2 id="alternatives">Alternatives Considered</h2>
+
+<h3>Reassigning <code>ClientGame.Current.PlayerShip</code> while piloting</h3>
+<p>Would have made the entire control stack free — helm input, external camera, thruster boost, danger state. Rejected: the property is read in 244 files, and the pilot's objective tracking, life-support UI and session-preserve would all follow the Fighter. The free lunch costs more than writing a flight model.</p>
+
+<h3>A remote-controlled drone flown from a console</h3>
+<p>Far cheaper and much safer in multiplayer: no player transfer, no ejection, no life support, no EVA. Rejected because it removes every stake the design is built on — nobody can be left behind if nobody ever left.</p>
+
+<h3>Automatic capture on proximity</h3>
+<p>The literal scoop behaviour: powered bay plus Fighter in range equals docked, no input. Rejected in favour of the bay actively dragging the Fighter in only when the crew has put it in Grab State, so docking is always something the crew chose.</p>
+
+<h3>Relic fuel</h3>
+<p>Thematically attractive and the original instinct. Rejected because relics are the Upgrade Forge's only currency; every fuelled Sortie would be a module upgrade forgone, which would either gut the Forge or leave the Fighter permanently grounded.</p>
+
+<h3>Pilot-side emergency release</h3>
+<p>Would have made the Fighter solo-viable and removed the stranded-pilot case. Rejected deliberately: the two-person launch is the design, and ejection plus EVA already provides a recovery path that does not require weakening it.</p>
+
+<h3>Symmetric weight class</h3>
+<p>A clean rule where capital ships and the Fighter simply cannot touch each other. Rejected as too absolute — dogfighting unharmed past a dreadnought reads as broken. The Signature Profile gives the same practical safety with a reason attached.</p>
+
+<h2 id="future">Future Variants</h2>
+
+<ul class="bullets">
+  <li><strong>Fighter loadouts</strong> — bought at the panel, letting a crew specialise toward swarm clearing or missile interception.</li>
+  <li><strong>Forge integration</strong> &mdash; largely <em>free already</em>. The bay's capture range and pull speed are <code>StatType.AttractorMaxRange</code> and <code>AttractorPullVelocity</code>, both of which the Forge's Utility group and the existing <code>utility_extended_manipulators</code> perk already boost. Tag the Fighter Bay as Utility and a forged bay recovers Fighters from further out and faster, with no new code. Grace duration and Fighter hull would be additional work.</li>
+  <li><strong>Leech interception</strong> — see Open Questions. The strongest candidate for a second role.</li>
+  <li><strong>Two-seat variant</strong> — pilot plus gunner, trading a second crewmember for real combat capability.</li>
+  <li><strong>Salvage runs</strong> — a cargo variant that reaches wrecks the ship cannot approach, giving the bay a non-combat use.</li>
+</ul>
+
+<div class="footer">
+  VoidCrewTerminus &middot; Aux Fighter RFC &middot; companion: <a href="aux-fighter-design.html">aux-fighter-design.html</a> &middot; vocabulary: <code>handoff/CONTEXT.md</code>
+</div>
+
+</main>
+</body>
+</html>

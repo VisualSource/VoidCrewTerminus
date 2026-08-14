@@ -88,6 +88,50 @@ _Avoid_: "Leech cap" — the design name is Concurrency Safety Rail.
 **Diegetic Awareness**:
 The design principle that crew learn of Leeches through the game world (vanilla telescope, cockpit 3rd-person, gunner turret external views; 3D-positional audio through the hull) rather than via bespoke alert popups or hull-status UI.
 
+### Aux Fighter feature
+
+**Aux Fighter**:
+A single-seat craft carried by the player ship, launched and recovered through a Fighter Bay. Flown by one crewmember; its weapons damage only enemy Drones.
+_Avoid_: "Drone" (taken — the vanilla `Drone` class is the enemy fighter this thing shoots), "aux ship", "fighter" unqualified.
+
+**Fighter Bay**:
+The installable `CellModule` that carries, launches, recovers, sells, refuels and repairs an Aux Fighter. Has a control panel. The Aux Fighter clamps to it from **outside the hull** — the bay is a hardpoint with a hull pass-through, not an interior hangar. Nothing lands inside it.
+_Avoid_: "Hangar" — implies an interior volume the Fighter flies into, which is wrong. "Airlock module" unqualified — vanilla has two unrelated airlocks (see below).
+
+**Docking Collar**:
+The sealed interface between a Latched Aux Fighter's cockpit and the Fighter Bay's hull pass-through. Aligned only while Latched. It is an alignment, not a passage: the pilot is seated by an interaction prompt exactly as they would take over a turret, and never traverses the hull. The Collar's job is to put the cockpit adjacent to the module so that prompt is offered at all, which gates boarding by geometry rather than by a rule. Modelled on `CarryablesAirlock`, the vanilla `CellModule` that passes carryables through the hull via input/output sockets.
+_Avoid_: describing it as a passage, hatch or corridor — nothing walks through it.
+_Avoid_: Confusing this with vanilla `Airlock`, which is a `MonoBehaviour` — the fixed crew EVA lock, not installable and unrelated.
+
+**Grab State**:
+A Fighter Bay that is powered with its hardpoint empty, reaching for an Aux Fighter. Modelled on `CarryableAttractor`, which already has the three zones this needs: pull begins at `MaxRange`, capture commits inside `CatchRadius`, and `BufferRange` provides hysteresis so a released object is not instantly re-grabbed.
+
+**Capture Envelope**:
+The three-zone geometry of a Grab State bay. Outside **MaxRange** nothing happens. Between MaxRange and **CatchRadius** the bay drags the Aux Fighter in and rotates it into the hardpoint's orientation — and the pilot can still **Break Away**. Inside CatchRadius the capture is committed, alignment completes, and the bay Latches. The bay performs the attitude match, so the pilot never has to fly a precise docking manoeuvre.
+
+**Break Away**:
+A pilot escaping an in-progress capture by out-thrusting the pull, possible only while outside CatchRadius. Past that point the Aux Fighter is committed and will Latch. `BufferRange` hysteresis keeps a break-away from being immediately re-captured while still inside MaxRange.
+
+**Latched**:
+The state of a Fighter Bay clamping an Aux Fighter to its exterior hardpoint under power, with the Docking Collar aligned. Losing power ends it.
+_Avoid_: "Docked" when the mechanical state is meant — Docked is the fiction, Latched is the state that power maintains.
+
+**Release Grace**:
+The alarmed countdown that begins when a Latched bay loses power involuntarily (combat defect, power reroute, a RandomShutoff Maintenance Burden). Restoring power within the window re-latches; expiry releases the Aux Fighter.
+
+**Sortie**:
+One launch-to-recovery cycle. Bounded by alloy fuel, by the sector's jump, and by enemy fire.
+
+**Signature Profile**:
+The deliberately small `SignatureRadius` that governs how enemies attend to an Aux Fighter. Vanilla `TargetSelector` scores candidates by `distance − SignatureRadius`, so a small profile means large ships ignore the Fighter until it is close and the player ship is out of range.
+_Avoid_: "Stealth", "cloak" — nothing is hidden; the Fighter is simply a less attractive target than the ship it came from.
+
+**Fighter Cap**:
+The hard limit of 2 Aux Fighters per run, regardless of how many Fighter Bays are installed. Same role as the Leech encounter's Concurrency Safety Rail.
+
+**Coop-gated launch**:
+The rule that undocking requires two crewmembers — one seated in the Aux Fighter, one cutting bay power. Recovery is symmetrical: someone must re-power the bay. A deliberate design constraint, not an oversight; the Aux Fighter is coop-only content.
+
 ### Shared
 
 **Per-run state**:

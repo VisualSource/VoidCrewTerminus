@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aux Fighter — System Design</title>
+  <style>
+    :root {
+      --bg:      #0f1117;
+      --surface: #181c27;
+      --border:  #2a2f42;
+      --accent:  #5c8aff;
+      --accent2: #9b59f5;
+      --text:    #d4d8e8;
+      --muted:   #7a80a0;
+      --code-bg: #12151f;
+      --tag-bg:  #1e2436;
+      --danger:  #e05c5c;
+      --warn:    #e0a35c;
+      --ok:      #5ce08a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 15.5px;
+      line-height: 1.75;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    nav {
+      width: 260px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 28px 20px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+    nav .logo {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+    nav .subtitle {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 28px;
+    }
+    nav ul { list-style: none; }
+    nav ul li { margin-bottom: 2px; }
+    nav ul li a {
+      display: block;
+      padding: 5px 10px;
+      border-radius: 6px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 13px;
+    }
+    nav ul li a:hover { color: var(--text); background: var(--border); }
+    nav .section-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--accent2);
+      margin: 18px 0 6px 10px;
+    }
+
+    main {
+      flex: 1;
+      padding: 56px 72px;
+      max-width: 880px;
+    }
+
+    h1 {
+      font-size: 30px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    .page-meta {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 40px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .page-meta .pill {
+      display: inline-block;
+      background: var(--tag-bg);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 2px 10px;
+      font-size: 11px;
+      margin-right: 6px;
+      color: var(--accent);
+    }
+
+    h2 {
+      font-size: 22px;
+      font-weight: 700;
+      color: #fff;
+      margin: 56px 0 16px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    h3 {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--accent);
+      margin: 32px 0 10px;
+    }
+    p { margin-bottom: 16px; color: var(--text); }
+    p.lead {
+      font-size: 17px;
+      color: #e8ebf5;
+      line-height: 1.7;
+      margin-bottom: 22px;
+    }
+    ul.bullets, ol.bullets { margin: 0 0 16px 24px; }
+    ul.bullets li, ol.bullets li { margin-bottom: 8px; }
+
+    strong { color: #fff; }
+    em { color: var(--text); }
+
+    code {
+      font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+      font-size: 13px;
+      background: var(--tag-bg);
+      padding: 1px 6px;
+      border-radius: 4px;
+      color: #a8c0ff;
+    }
+
+    .callout {
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin: 20px 0;
+      font-size: 14px;
+      border-left: 4px solid;
+    }
+    .callout.note   { background: #1a2035; border-color: var(--accent);  color: #b8c8f0; }
+    .callout.warn   { background: #241e12; border-color: var(--warn);    color: #e8d3b0; }
+    .callout.danger { background: #241212; border-color: var(--danger);  color: #e8c0c0; }
+    .callout.ok     { background: #122414; border-color: var(--ok);      color: #b8e8c8; }
+    .callout strong { color: inherit; font-weight: 700; }
+    .callout .label {
+      display: inline-block;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      font-size: 11px;
+      margin-right: 8px;
+    }
+
+    table.data {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      margin: 14px 0 22px;
+    }
+    table.data th {
+      text-align: left;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      padding: 0 14px 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    table.data td {
+      padding: 10px 14px 10px 0;
+      border-bottom: 1px solid #1a1f2e;
+      vertical-align: top;
+      color: var(--text);
+    }
+    table.data tr:last-child td { border-bottom: none; }
+    table.data td.k {
+      font-weight: 700;
+      color: #9cdcfe;
+      white-space: nowrap;
+    }
+    table.data td.muted { color: var(--muted); }
+
+    .scene {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 22px 28px;
+      margin: 14px 0 22px;
+      font-size: 14.5px;
+    }
+    .scene .scene-label {
+      display: inline-block;
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--accent2);
+      margin-bottom: 10px;
+    }
+    .scene p:last-child { margin-bottom: 0; }
+
+    hr { border: none; border-top: 1px solid var(--border); margin: 48px 0; }
+
+    .footer {
+      font-size: 12px;
+      color: var(--muted);
+      text-align: center;
+      margin-top: 56px;
+    }
+    .footer a { color: var(--accent); text-decoration: none; }
+  </style>
+<body>
+
+<nav>
+  <div class="logo">VoidCrewTerminus</div>
+  <div class="subtitle">Aux Fighter — System Design</div>
+
+  <div class="section-label">Orientation</div>
+  <ul>
+    <li><a href="#context">Context</a></li>
+    <li><a href="#summary">System Summary</a></li>
+    <li><a href="#glossary">Glossary</a></li>
+    <li><a href="#vanilla">Vanilla Foundations</a></li>
+  </ul>
+
+  <div class="section-label">Systems</div>
+  <ul>
+    <li><a href="#bay">Fighter Bay</a></li>
+    <li><a href="#latch">Latch State Machine</a></li>
+    <li><a href="#fighter">Aux Fighter</a></li>
+    <li><a href="#cockpit">Cockpit &amp; Entry</a></li>
+    <li><a href="#flight">Flight Model &amp; Camera</a></li>
+    <li><a href="#weapons">Weapons &amp; Signature</a></li>
+    <li><a href="#loss">Loss &amp; Ejection</a></li>
+    <li><a href="#jump">Jump Interaction</a></li>
+    <li><a href="#economy">Economy &amp; Panel</a></li>
+  </ul>
+
+  <div class="section-label">Engineering</div>
+  <ul>
+    <li><a href="#architecture">Architecture</a></li>
+    <li><a href="#files">File Map</a></li>
+    <li><a href="#patches">Patch Surfaces</a></li>
+    <li><a href="#mp">Multiplayer Sync</a></li>
+    <li><a href="#preflight">Pre-Flight Verification</a></li>
+    <li><a href="#phases">Phased Plan</a></li>
+    <li><a href="#risks">Known Risks</a></li>
+  </ul>
+</nav>
+
+<main>
+
+<h1>Aux Fighter — System Design</h1>
+<div class="page-meta">
+  <span class="pill">Design</span>
+  <span class="pill">VoidCrewTerminus mod</span>
+  <span class="pill">Not scheduled</span>
+  <span class="pill">Pre-flight required</span>
+  <br /><br />
+  Technical companion to <a href="aux-fighter-rfc.html" style="color:var(--accent)">aux-fighter-rfc.html</a>. Covers the latch state machine, the craft, multiplayer authority, patch surfaces and the phased build. Vocabulary is defined in <code>handoff/CONTEXT.md</code>; this document assumes it.
+</div>
+
+<h2 id="context">Context</h2>
+
+<p>The Aux Fighter is the mod's third feature area after the Upgrade Forge and the Leech Carrier encounter. It shares their conventions — per-run state, host-arbitrated decisions, VoidManager <code>ModMessage</code> transport, mod-side overlay rather than prefab replacement — and departs from exactly one of them, deliberately, for flight control latency (see <a href="#mp">Multiplayer Sync</a>).</p>
+
+<div class="callout warn">
+  <span class="label">Sequencing</span>
+  This design depends on the same net layer as Phase 8, which is <strong>code-complete but only partially verified in-game</strong>. Four of seven 2-client tests have evidence; T4, T6 and T7 do not. The net layer was also refactored behind <code>IForgeTransport</code> on 2026-08-14 and has not been re-verified since. Building the Aux Fighter's sync on top of an unverified layer means any failure has two possible causes. <strong>Finish Phase 8 verification first.</strong>
+</div>
+
+<h2 id="summary">System Summary</h2>
+
+<p class="lead">A <code>CellModule</code> holds a mod-authored <code>SpaceCraft</code> by reparenting it, exactly as a vanilla <code>Turret</code> is parented to the ship it sits on. Module power drives a five-state latch machine whose transitions are the launch and recovery mechanics. A pilot enters through a <code>TakeoverChair</code>-derived cockpit seat, which transfers the craft's PhotonView ownership to them so flight is locally responsive; every consequential state change stays host-arbitrated over <code>ModMessage</code>. Enemy attention is governed by a small <code>SignatureRadius</code> rather than by damage rules.</p>
+
+<h2 id="glossary">Glossary</h2>
+
+<p>Canonical terms are defined in <code>handoff/CONTEXT.md</code> under <em>Aux Fighter feature</em>. Summarised here for reading convenience only — <code>CONTEXT.md</code> is the source of truth.</p>
+
+<table class="data">
+  <tr><th>Term</th><th>Meaning</th></tr>
+  <tr><td class="k">Aux Fighter</td><td>The single-seat craft. Never "drone" — that noun belongs to the enemy <code>Drone</code> class.</td></tr>
+  <tr><td class="k">Fighter Bay</td><td>The installable module. An <strong>exterior hardpoint with a hull pass-through</strong> &mdash; never "hangar", nothing lands inside.</td></tr>
+  <tr><td class="k">Docking Collar</td><td>The sealed cockpit&harr;hull interface, aligned only while Latched. The only way in or out of the cockpit; no EVA needed.</td></tr>
+  <tr><td class="k">Grab State</td><td>Powered, hardpoint empty, reaching for a Fighter.</td></tr>
+  <tr><td class="k">Capture Envelope</td><td>Three zones: pull begins at <code>MaxRange</code>, commits inside <code>CatchRadius</code>, <code>BufferRange</code> gives hysteresis.</td></tr>
+  <tr><td class="k">Break Away</td><td>Pilot escaping an in-progress capture. Only possible outside <code>CatchRadius</code>.</td></tr>
+  <tr><td class="k">Latched</td><td>Powered, clamping a Fighter to the exterior hardpoint with the Collar aligned.</td></tr>
+  <tr><td class="k">Release Grace</td><td>Alarmed countdown after involuntary power loss.</td></tr>
+  <tr><td class="k">Sortie</td><td>One launch-to-recovery cycle.</td></tr>
+  <tr><td class="k">Signature Profile</td><td>The small <code>SignatureRadius</code> governing enemy attention.</td></tr>
+  <tr><td class="k">Fighter Cap</td><td>Hard limit of 2 per run.</td></tr>
+</table>
+
+<h2 id="vanilla">Vanilla Foundations</h2>
+
+<p>Everything below was confirmed against the decompiled assemblies in <code>.voidcrew/</code>. These are the load-bearing facts; the design is shaped around them rather than around what would be convenient.</p>
+
+<table class="data">
+  <tr><th>Fact</th><th>Consequence for this design</th></tr>
+  <tr><td class="k"><code>ClientGame.Current.PlayerShip</code> is a single <code>virtual</code> slot read in <strong>244 files</strong></td><td>The Fighter can never be the player ship. No HUD, objectives, cruise control or danger state come for free.</td></tr>
+  <tr><td class="k"><code>Turret : SpaceCraft</code> has <code>ParentSpaceCraft</code>, inherits the parent's <code>Faction</code>, attributes projectiles to the parent, shares <code>Hostiles</code>, and tests <code>ParentSpaceCraft != this</code></td><td>The whole docked/undocked model. Self-parenting already means "independent craft" in vanilla.</td></tr>
+  <tr><td class="k"><code>TakeoverChair : ChairBase</code> uses <code>Clicker.HoldCompleted</code>, RPCs <code>RequestSitInChair</code>, implements <code>IOnPhotonViewOwnerChange</code>, exposes <code>WorksWithJetpack</code> and gates on an <code>OxygenMaskOn</code> state</td><td>Hold-prompt entry, ownership transfer to the pilot, and a jetpack/oxygen hook — all free.</td></tr>
+  <tr><td class="k"><code>ChairBase.SeatedPoint</code> is a <code>Transform</code></td><td>The pilot's character rides the craft when it moves.</td></tr>
+  <tr><td class="k"><code>TakeoverChair</code> exposes <code>public SpacePlatform Platform</code>, and <code>SittingInChair</code> calls <code>SetMovingPlatform(chair.Platform.transform)</code> on seating</td><td><strong>Platform association is a chair's job in vanilla.</strong> Our cockpit chair sets <code>Platform</code> to the Fighter and the pilot rides it through the engine's own supported path &mdash; network-synced by <code>CustomPunCharacterTransformMonitor</code>, with position stored platform-relative.</td></tr>
+  <tr><td class="k"><code>SittingInChair</code> guards <code>if (player.Platform == ClientGame.Current.PlayerShip.Platform)</code> before applying seat modifiers</td><td>Vanilla <strong>already anticipates a seated player on a platform that is not the player ship</strong>. The case we need is one the engine was written to expect.</td></tr>
+  <tr><td class="k"><code>CustomCharacterLocomotion</code> gates platform association on the <code>MovingPlatform</code> layer</td><td>The Aux Fighter must carry a <code>SpacePlatform</code> on that layer. A concrete, small requirement rather than an open question.</td></tr>
+  <tr><td class="k"><code>TargetSelector.GetBestTarget()</code> scores by <code>distance − SignatureRadius</code></td><td>The entire threat model is a tuning value. No AI patching.</td></tr>
+  <tr><td class="k"><code>CarryablesAirlock : CellModule</code> sets its <code>CarryablesSockets</code> to input+output and <code>SocketState.Open</code></td><td>The Docking Collar precedent: a <code>CellModule</code> that acts as a hull pass-through between inside and outside. The Fighter Bay is this idea scaled up from a carryable to a cockpit.</td></tr>
+  <tr><td class="k"><code>CarryableAttractor</code> exposes <code>MaxRange</code> (pull reach), <code>_catchRadius</code> (&ldquo;the distance at which objects will be captured&rdquo;), <code>BufferRange</code> (&ldquo;so items aren't lost quickly after grabbing&rdquo;) and <code>_pullVelocity</code></td><td><strong>The entire Capture Envelope already exists as vanilla fields.</strong> Three zones, hysteresis and pull speed are tuning values, not new mechanics.</td></tr>
+  <tr><td class="k"><code>CarryableAttractor</code> registers <code>StatType.AttractorMaxRange</code> and <code>StatType.AttractorPullVelocity</code> as modifiable stats</td><td><strong>Free Upgrade Forge synergy.</strong> <code>ForgeModuleState.BuildMods</code> already boosts both in its Utility group, and the <code>utility_extended_manipulators</code> perk grants +15% attractor range. Tag the Fighter Bay as Utility and forging it extends capture range and pull speed with <em>no new code</em>.</td></tr>
+  <tr><td class="k"><code>GravityScoopModule : CellModule</code> gates purely on <code>PowerDrain.IsOn</code>; its attractor captures automatically</td><td>Grab State has a direct vanilla precedent. Notably it needs <em>no</em> second operator — the coop requirement here is ours, not inherited.</td></tr>
+  <tr><td class="k"><code>VoidJumpSystem.ActiveState</code> + <code>StateChanged</code>, 11 states including <code>SpinningUp</code>, <code>TravellingStable</code>, <code>SpinningDown</code></td><td>Clean, reliable hooks for every jump rule.</td></tr>
+  <tr><td class="k"><code>Helm</code> and <code>ShipEngine</code> are both <code>CellModule</code>s bound to the ship's grid</td><td>The ship's flight controls are <strong>not</strong> reusable. The flight model is new code.</td></tr>
+  <tr><td class="k">Enemy fighters are <code>Drone : SpaceCraft</code>, grouped under a <code>Swarm</code></td><td>The "only damages enemy fighters" rule has an exact type to test.</td></tr>
+</table>
+
+<hr />
+
+<h2 id="bay">Fighter Bay</h2>
+
+<p>A <code>CellModule</code> subclass following the Upgrade Forge's pattern: a mod-authored prefab loaded through the RuntimeAssets pipeline, attached at runtime by a Harmony postfix on module instantiation, with named anchor transforms for the capture volume, the dock point and the panel.</p>
+
+<p>It owns: the latch state machine, the capture volume, the exterior hardpoint, the Docking Collar alignment, the alarm, the panel interactions, and the bay's stocked-or-empty status. It does <em>not</em> own the Fighter's flight, weapons or fuel burn &mdash; those live on the craft.</p>
+
+<div class="callout note">
+  <span class="label">Geometry</span>
+  The Fighter attaches <strong>outside the hull</strong>. Prefab anchors needed: a <code>CaptureVolume</code> trigger, a <code>Hardpoint</code> transform carrying position <em>and orientation</em> (the Fighter is aligned to it, so its rotation is load-bearing), a <code>Collar</code> transform marking the interior side of the pass-through, and a <code>Panel</code> anchor. The Forge's <code>PlaceAtAnchor</code> already solves base-pivot alignment against a rotated, non-uniformly scaled anchor with quaternions &mdash; reuse that maths rather than rediscovering it.
+</div>
+
+<h2 id="latch">Latch State Machine</h2>
+
+<p>Five states, driven by <code>PowerDrain.IsOn</code> and by occupancy. Power transitions come from the vanilla power system; the Forge's <code>RandomShutoffBehavior</code> already demonstrates hooking <code>PowerDrain.IsOn.OnChange</code> and using <code>CellModule.TurnOff()</code>/<code>TurnOn()</code>.</p>
+
+<table class="data">
+  <tr><th>State</th><th>Enter when</th><th>Behaviour</th><th>Exits to</th></tr>
+  <tr><td class="k">Dark</td><td>Unpowered, bay empty</td><td>Inert.</td><td>Grab State (power on)</td></tr>
+  <tr><td class="k">Grab State</td><td>Powered, hardpoint empty</td><td>Reaching. Nothing happens until an Aux Fighter crosses <code>MaxRange</code>.</td><td>Capturing (Fighter in range) &middot; Dark (power off)</td></tr>
+  <tr><td class="k">Capturing</td><td>Fighter inside <code>MaxRange</code>, outside <code>CatchRadius</code></td><td>Bay drags the Fighter in and rotates it toward the hardpoint orientation. <strong>Interruptible</strong> &mdash; the pilot can Break Away under thrust.</td><td>Latched (crosses <code>CatchRadius</code>) &middot; Grab State (Break Away) &middot; Dark (power off)</td></tr>
+  <tr><td class="k">Latched</td><td>Fighter clamped, powered</td><td>Fighter parented to the ship, inert, Collar aligned so the cockpit is reachable from inside. Stable state.</td><td>Releasing &middot; Release Grace</td></tr>
+  <tr><td class="k">Releasing</td><td>Power cut <em>deliberately</em> at the panel</td><td>Latch drops immediately. This is the launch.</td><td>Dark</td></tr>
+  <tr><td class="k">Release Grace</td><td>Power lost <em>involuntarily</em> while Latched</td><td>Alarm plus countdown. Restoring power returns to Latched; expiry drops the latch.</td><td>Latched (restored) &middot; Dark (expiry)</td></tr>
+</table>
+
+<div class="callout note">
+  <span class="label">Design note</span>
+  Distinguishing <strong>Releasing</strong> from <strong>Release Grace</strong> is the crux of the module. Both are "power went away", but one is a crew decision and the other is an accident, and they must feel completely different. The panel action is the only route into Releasing; every other cause of power loss routes into Release Grace.
+</div>
+
+<h3>Capture Envelope</h3>
+
+<p>Capture is a <strong>process, not a snap</strong>, and it is interruptible up to a point. All four parameters exist on <code>CarryableAttractor</code> already.</p>
+
+<table class="data">
+  <tr><th>Zone</th><th>Vanilla field</th><th>Behaviour</th><th>Break Away?</th></tr>
+  <tr><td class="k">Outside</td><td>&gt; <code>MaxRange</code></td><td>Nothing. The bay is reaching but cannot touch the Fighter.</td><td class="muted">n/a</td></tr>
+  <tr><td class="k">Pull</td><td><code>MaxRange</code> &rarr; <code>CatchRadius</code></td><td>Bay drags the Fighter in at <code>_pullVelocity</code> and rotates it toward the hardpoint's orientation.</td><td><strong>Yes</strong> &mdash; out-thrust the pull.</td></tr>
+  <tr><td class="k">Committed</td><td>&lt; <code>CatchRadius</code></td><td>Capture completes. Alignment finishes, Collar lines up, bay Latches.</td><td><strong>No.</strong> Point of no return.</td></tr>
+  <tr><td class="k">Hysteresis</td><td><code>BufferRange</code></td><td>Keeps a Fighter that has just broken away from being re-grabbed on the same frame.</td><td class="muted">&mdash;</td></tr>
+</table>
+
+<div class="callout note">
+  <span class="label">Why interruptible</span>
+  Auto-capture on proximity was rejected in the RFC precisely because being yanked out of a dogfight by your own ship would feel awful. The Capture Envelope keeps the convenience &mdash; the bay does the attitude match, the pilot just flies at it &mdash; while leaving the pilot an out until they are genuinely committed. <code>BufferRange</code> is what stops a break-away turning into a yo-yo.
+</div>
+
+<div class="callout ok">
+  <span class="label">Free synergy</span>
+  <code>AttractorMaxRange</code> and <code>AttractorPullVelocity</code> are <code>StatType</code>s, and the Upgrade Forge's Utility group already boosts both (<code>ForgeModuleState.BuildMods</code>), as does the existing <code>utility_extended_manipulators</code> perk. Tagging the Fighter Bay as a Utility module means <strong>forging it widens the Capture Envelope and speeds the pull with no new code</strong> &mdash; a forged bay recovers a Fighter from further out and faster.
+</div>
+
+<h2 id="fighter">Aux Fighter</h2>
+
+<p>A mod-authored <code>SpaceCraft</code>. Dock state is expressed by parenting, following <code>Turret</code>:</p>
+
+<table class="data">
+  <tr><th>Condition</th><th><code>ParentSpaceCraft</code></th><th>Meaning</th></tr>
+  <tr><td class="k">Latched</td><td>The player ship</td><td>Docked. Inherits faction, rides the hull, flight disabled.</td></tr>
+  <tr><td class="k">Released</td><td>Itself</td><td>Independent. Flight enabled. Vanilla already treats self-parenting as independence.</td></tr>
+</table>
+
+<h2 id="cockpit">Cockpit &amp; Entry</h2>
+
+<p>A <code>TakeoverChair</code> subclass on the Fighter's cockpit anchor. Entry is by <strong>interaction prompt</strong>, identical to taking over a turret: the pilot holds the prompt at the bay and the vanilla chair machinery seats them. <strong>The character never traverses the hull.</strong></p>
+
+<p>This is worth stating plainly because it removes a whole class of risk. There is no pathing from ship interior onto a hull-exterior craft, no doorway, no pressurisation handoff, and no chance of a character falling through geometry at the boundary. The Docking Collar is an <em>alignment</em>, not a passage &mdash; its job is to put the cockpit adjacent to the module so the prompt is offered, and to gate boarding on <strong>Latched</strong> by geometry rather than by a rule.</p>
+
+<p>Exit is the vanilla chair exit, returning the pilot to the bay interior. <strong>Boarding therefore never involves EVA or pressurisation</strong>, which confines EVA strictly to the failure path where it belongs.</p>
+
+<p><strong>Riding the craft is the chair's job, not ours.</strong> <code>TakeoverChair</code> carries a <code>public SpacePlatform Platform</code>, and <code>SittingInChair</code> calls <code>SetMovingPlatform(chair.Platform.transform)</code> when the pilot sits. Setting our cockpit chair's <code>Platform</code> to the Aux Fighter therefore makes the pilot ride it via the engine's own path &mdash; already network-synced, already storing position platform-relative. The requirement this creates is concrete: the Fighter needs a <code>SpacePlatform</code> on the <code>MovingPlatform</code> layer.</p>
+
+<p>Sitting triggers the vanilla <code>RequestSitInChair</code> RPC, which transfers PhotonView ownership to the sitter. That is precisely the ownership model the flight code needs, and it arrives for free.</p>
+
+<p><code>WorksWithJetpack</code> should be <strong>true</strong>: the pilot must be able to sit while wearing a jetpack, because ejection puts them straight into EVA and a pilot who had to remove their jetpack to fly would be ejecting to certain death.</p>
+
+<h2 id="flight">Flight Model &amp; Camera</h2>
+
+<p>Neither <code>ShipEngine</code> nor <code>ShipExternalCamera</code> can be reused &mdash; the first is a <code>CellModule</code> bound to the ship's grid, the second resolves <code>ClientGame.Current.PlayerShip</code> in <code>Start()</code>. But both should be <strong>modelled closely on how they work</strong>, so the Fighter feels like it belongs to this game rather than bolted on. What follows is the vanilla behaviour, read out of the decompile, and what to copy.</p>
+
+<h3>How <code>ShipEngine</code> actually flies the ship</h3>
+
+<p>Owner-gated integration in <code>FixedUpdate</code>, with force and torque applied separately:</p>
+
+<table class="data">
+  <tr><th>Mechanism</th><th>Vanilla</th><th>Copy?</th></tr>
+  <tr><td class="k">Named input channels</td><td><code>ThrustInputs</code>/<code>TorqueInputs</code> are <code>Dictionary&lt;string, Vector3&gt;</code> summed each tick. <code>"PlayerInput"</code> is one key; cruise control and debug are others.</td><td><strong>Yes.</strong> Cheap, and it makes assists or autopilot additive later rather than a rewrite.</td></tr>
+  <tr><td class="k">Owner gate</td><td><code>if (IsPowered &amp;&amp; photonView.AmOwner)</code> wraps both <code>ApplyForce</code> and <code>ApplyTorque</code>.</td><td><strong>Yes.</strong> Exactly the split-authority model &mdash; the pilot owns the view, so the pilot integrates.</td></tr>
+  <tr><td class="k">Per-axis power vector</td><td><code>EngineThrustPower = (50, 50, 500)</code> &mdash; forward is <strong>10&times;</strong> lateral. Boost has its own vector.</td><td><strong>Structure yes, values no.</strong> A fighter wants a far flatter ratio.</td></tr>
+  <tr><td class="k">Stat-scaled</td><td>Scaled again by <code>StrifePower</code>, <code>ElevationPower</code>, <code>ForwardPower</code>, <code>YawPower</code>, <code>EnginePower</code> &mdash; all registered <code>StatType</code>s.</td><td><strong>Yes.</strong> Registering stats is what makes the Fighter forge-upgradeable, exactly as the bay's attractor stats already are.</td></tr>
+  <tr><td class="k">dt-scaled AddForce</td><td><code>AddForce(force * Time.fixedDeltaTime, worldSpace: true, userInputsThrust)</code> &mdash; the third argument tells the platform whether the player is actively inputting.</td><td><strong>Yes</strong>, including the input flag; it is what lets damping distinguish coasting from driving.</td></tr>
+</table>
+
+<div class="callout warn">
+  <span class="label">The big one</span>
+  <strong>The player ship is not 6DOF. It is 2.5D.</strong> <code>ApplyForce</code> builds its heading from
+  <code>Quaternion.FromToRotation(Vector3.forward, Vector3.ProjectOnPlane(transform.forward, Vector3.up))</code>
+  &mdash; the forward vector <em>flattened onto the horizontal plane</em> &mdash; and <code>EngineTorquePower = (0, 50, 0)</code> is <strong>yaw only</strong>. There is no pitch and no roll. Vertical movement is a separate world-axis elevation input, not a consequence of pointing the nose up.
+</div>
+
+<p>This is the one place a faithful copy is probably wrong. A capital ship that yaws and elevates like a boat reads as weighty and correct; a <em>fighter</em> that cannot pitch or roll will read as broken, and the Fighter's whole job is dogfighting <code>Drone</code>s that move freely. The recommendation is therefore: <strong>copy the architecture exactly, change the axes deliberately</strong> &mdash; keep named channels, the owner gate, per-axis power vectors, stat registration and dt-scaled application, but populate <code>TorquePower</code> on all three axes and drop the <code>ProjectOnPlane</code> flattening so thrust follows the nose.</p>
+
+<div class="callout note">
+  <span class="label">Prototype question</span>
+  Worth building both and flying them: full 6DOF, versus the ship's 2.5D model with pitch added. The second may feel more consistent with the game and be less disorienting for a player who has only ever flown the ship. This is the single question the throwaway prototype exists to answer.
+</div>
+
+<h3>How <code>ShipExternalCamera</code> actually works</h3>
+
+<p>A Cinemachine rig with an acceleration-driven trailing offset:</p>
+
+<ul class="bullets">
+  <li><strong><code>Cinemachine3rdPersonFollow</code></strong> drives the shot. The mod does not need to hand-roll a follow camera &mdash; Cinemachine ships with the game.</li>
+  <li><strong>Acceleration offset, not velocity offset.</strong> <code>Move()</code> reads <code>engine.AppliedThrust</code> (the summed <em>input</em>, not the resulting speed) &times; <code>accelerationOffsetMultiplier</code> (0.5), rotates it into the ship's heading, and lerps toward it at <code>Time.deltaTime * 3f</code>. The <em>anchor</em> is then pushed backward by that offset, so the camera trails when you accelerate and settles when you coast. Reading input rather than velocity is why it responds the instant you touch the throttle.</li>
+  <li><strong>Free-look with a pitch clamp</strong> &mdash; <code>RotateCamera(Vector2 mouseDelta)</code> with <code>RotationSensitivity</code> and <code>XRotationLimit</code>.</li>
+  <li><strong>Yaw-only re-alignment on toggle</strong> &mdash; <code>Quaternion.LookRotation(Vector3.ProjectOnPlane(parent.forward, Vector3.up), Vector3.up)</code>, consistent with the 2.5D flight model.</li>
+</ul>
+
+<div class="callout note">
+  <span class="label">Do not miss this</span>
+  <code>ShipExternalCamera</code> implements <strong><code>IKinematicObject</code></strong> and registers with Opsive's <code>SimulationManager</code>, so <code>Move()</code> runs inside the <em>character-controller simulation step</em> &mdash; not <code>Update</code> or <code>LateUpdate</code>. Since our pilot is an Opsive character riding the Fighter as a moving platform, the Fighter's camera must do the same or it will jitter against the seated character. This is the kind of detail that is invisible in design and obvious in play.
+</div>
+
+<h3>What the Fighter's implementation therefore is</h3>
+
+<ol class="bullets">
+  <li>A flight controller with summed named input channels, integrating in <code>FixedUpdate</code>, gated on <code>photonView.AmOwner</code>.</li>
+  <li>Per-axis thrust and torque power vectors, scaled by registered <code>StatType</code>s so the Forge can upgrade them, applied via <code>AddForce</code>/<code>AddTorque</code> scaled by <code>Time.fixedDeltaTime</code> with the active-input flag.</li>
+  <li>Torque on all three axes, and thrust following the nose &mdash; the deliberate deviation.</li>
+  <li>A <code>Cinemachine3rdPersonFollow</code> rig whose anchor carries an acceleration-driven trailing offset lerped at ~3/sec, registered as an <code>IKinematicObject</code>.</li>
+</ol>
+
+<h2 id="weapons">Weapons &amp; Signature</h2>
+
+<p><strong>Outgoing.</strong> Damage applies only when the target resolves to a <code>Drone</code>. Implemented as a target-type check at the damage application point, mirroring the existing <code>EnemyScalingHelpers.IsEnemyFaction</code> pattern — a small pure predicate, unit-testable without a game running.</p>
+
+<p><strong>Incoming.</strong> No damage rules at all. The Fighter is given a small <code>SignatureRadius</code>, and vanilla target selection does the rest:</p>
+
+<ul class="bullets">
+  <li>Player ship in range &rarr; it scores better, so large ships engage it and ignore the Fighter.</li>
+  <li>Player ship out of range and the Fighter close &rarr; the Fighter becomes the best available target.</li>
+  <li>Per-enemy-type preference is a tuning knob on top, not new logic.</li>
+</ul>
+
+<h2 id="loss">Loss &amp; Ejection</h2>
+
+<p>One ejection path serves both the manual bail and destruction, which keeps the code and the fiction aligned.</p>
+
+<ol class="bullets">
+  <li>Pilot leaves the chair (vanilla chair exit).</li>
+  <li>Character is placed outside the Fighter in EVA.</li>
+  <li>Survival is governed entirely by existing systems: oxygen, jetpack fuel, distance, and swarm EVA intercepts via <code>InterceptEVAModule</code>.</li>
+</ol>
+
+<p>Destruction runs the same path automatically before despawning the craft. A destroyed Fighter empties the bay; the crew must buy a replacement.</p>
+
+<h2 id="jump">Jump Interaction</h2>
+
+<p>Driven off <code>VoidJumpSystem.StateChanged</code>. Host-arbitrated — the host owns the outcome and broadcasts it.</p>
+
+<table class="data">
+  <tr><th>Jump state</th><th>Fighter released</th><th>Outcome</th></tr>
+  <tr><td class="k"><code>SpinningUp</code></td><td>Yes</td><td>Warning to the crew. Still recoverable — this is the window to get home.</td></tr>
+  <tr><td class="k"><code>TravellingStable</code></td><td>Release attempted</td><td>Fighter destroyed. Pilot dies, respawns at a clone tube.</td></tr>
+  <tr><td class="k">Jump completes</td><td>Yes</td><td>Fighter left behind and lost. Any pilot aboard dies and respawns at a clone tube.</td></tr>
+</table>
+
+<h2 id="economy">Economy &amp; Panel</h2>
+
+<p>The panel is a mod interactable on the bay, offering four actions against <code>GameSessionSuppliesManager</code> alloys — the same API the Forge's Alloy Terminal uses, including its host-only spend behaviour and the existing client&rarr;host request hop.</p>
+
+<table class="data">
+  <tr><th>Action</th><th>Precondition</th><th>Effect</th></tr>
+  <tr><td class="k">Buy Fighter</td><td>Bay empty, Fighter Cap not reached, alloys sufficient</td><td>Spawns a Latched Fighter.</td></tr>
+  <tr><td class="k">Refuel</td><td>Latched</td><td>Alloys to fuel.</td></tr>
+  <tr><td class="k">Repair</td><td>Latched, damaged</td><td>Alloys to hull.</td></tr>
+  <tr><td class="k">Release</td><td>Latched</td><td>Cuts power deliberately &rarr; Releasing. The launch.</td></tr>
+</table>
+
+<p>The Fighter Cap of 2 is enforced at purchase, host-side, counting live Fighters across all bays.</p>
+
+<hr />
+
+<h2 id="architecture">Architecture</h2>
+
+<p>Following the deep-module discipline applied to the Forge, the Unity-entangled parts are kept thin and the decisions are kept pure and testable.</p>
+
+<table class="data">
+  <tr><th>Module</th><th>Interface</th><th>Testable?</th></tr>
+  <tr><td class="k">Latch state machine</td><td><code>Current</code>, <code>OnPowerChanged(bool)</code>, <code>OnFighterEntered()</code>, <code>Tick(dt)</code>, <code>RequestRelease()</code></td><td><strong>Yes</strong> — pure. Every transition, including grace expiry, unit-testable with no game running.</td></tr>
+  <tr><td class="k">Target eligibility</td><td><code>CanDamage(target) : bool</code></td><td><strong>Yes</strong> — pure predicate over type/faction.</td></tr>
+  <tr><td class="k">Fighter economy</td><td><code>CanBuy(liveCount, alloys) : Result</code></td><td><strong>Yes</strong> — pure. Cap and cost logic.</td></tr>
+  <tr><td class="k">Jump outcome</td><td><code>ResolveJump(jumpState, fighterState) : Outcome</code></td><td><strong>Yes</strong> — pure decision table.</td></tr>
+  <tr><td class="k">Bay behaviour</td><td>MonoBehaviour; capture volume, anchors, alarm</td><td>No — playtest.</td></tr>
+  <tr><td class="k">Flight controller</td><td>MonoBehaviour; input, integration, camera</td><td>No — playtest.</td></tr>
+</table>
+
+<p>The lesson from the Forge's net layer applies directly: put the <em>decisions</em> behind pure interfaces and leave only scene manipulation in the MonoBehaviours. The latch machine in particular is a state machine with a timer — precisely the kind of thing that is miserable to verify by launching a game twice.</p>
+
+<h2 id="files">File Map</h2>
+
+<table class="data">
+  <tr><th>Path</th><th>Contents</th></tr>
+  <tr><td class="k">Features/AuxFighter/FighterBayModule.cs</td><td><code>CellModule</code>; anchors, capture volume, hardpoint alignment, Collar, panel wiring.</td></tr>
+  <tr><td class="k">Features/AuxFighter/LatchStateMachine.cs</td><td>Pure five-state machine. No Unity types.</td></tr>
+  <tr><td class="k">Features/AuxFighter/AuxFighterCraft.cs</td><td>The <code>SpaceCraft</code>; parenting, fuel, hull.</td></tr>
+  <tr><td class="k">Features/AuxFighter/FighterCockpitChair.cs</td><td><code>TakeoverChair</code> subclass; boarding gate, ownership.</td></tr>
+  <tr><td class="k">Features/AuxFighter/FighterFlightController.cs</td><td>Named input channels, owner-gated <code>FixedUpdate</code> integration, per-axis power vectors, stat registration. Modelled on <code>ShipEngine</code>.</td></tr>
+  <tr><td class="k">Features/AuxFighter/FighterCamera.cs</td><td><code>Cinemachine3rdPersonFollow</code> rig, acceleration-trail offset, <code>IKinematicObject</code> registration. Modelled on <code>ShipExternalCamera</code>.</td></tr>
+  <tr><td class="k">Features/AuxFighter/FighterWeapons.cs</td><td>Firing plus the <code>Drone</code>-only eligibility check.</td></tr>
+  <tr><td class="k">Features/AuxFighter/FighterEconomy.cs</td><td>Pure cap/cost rules.</td></tr>
+  <tr><td class="k">Features/AuxFighter/JumpOutcome.cs</td><td>Pure jump decision table.</td></tr>
+  <tr><td class="k">Features/Net/AuxFighterMessages.cs</td><td><code>ModMessage</code> types for bay and fighter state.</td></tr>
+  <tr><td class="k">Patches/FighterBaySpawnPatch.cs</td><td>Attach behaviour on module instantiate, per <code>ForgeModuleSpawnPatch</code>.</td></tr>
+  <tr><td class="k">Patches/FighterJumpHook.cs</td><td><code>VoidJumpSystem.StateChanged</code> subscription.</td></tr>
+</table>
+
+<h2 id="patches">Patch Surfaces</h2>
+
+<table class="data">
+  <tr><th>Target</th><th>Kind</th><th>Purpose</th></tr>
+  <tr><td class="k"><code>OrbitObject.OnPhotonInstantiate</code></td><td>Postfix</td><td>Attach bay behaviour on every client, including the placer. Already used by <code>ForgeModuleSpawnPatch</code>.</td></tr>
+  <tr><td class="k"><code>BuildBox.BuildModule</code></td><td>Prefix/Postfix</td><td>Runtime-asset instantiation for the mod prefab, as the Forge already does.</td></tr>
+  <tr><td class="k"><code>CarryableInteract.StartInteraction</code></td><td>Prefix</td><td>Route panel clicks, per <code>ForgeInteractionPatch</code>.</td></tr>
+  <tr><td class="k"><code>VoidJumpSystem.StateChanged</code></td><td>Event subscription</td><td>Not a patch — a public event, like <code>GameSessionSectorManager.OnSectorExited</code>.</td></tr>
+  <tr><td class="k">Damage application</td><td>Prefix</td><td>Enforce the <code>Drone</code>-only rule. Exact member requires pre-flight.</td></tr>
+</table>
+
+<h2 id="mp">Multiplayer Sync</h2>
+
+<p>The mod's convention is <strong>host-arbitrated</strong> throughout. This feature takes one deliberate, bounded exception.</p>
+
+<table class="data">
+  <tr><th>Concern</th><th>Owner</th><th>Why</th></tr>
+  <tr><td class="k">Position, rotation, thrust, firing</td><td><strong>Pilot's client</strong></td><td>Flight cannot round-trip through the host and remain flyable. Ownership arrives free via <code>TakeoverChair</code>'s existing transfer, and transform replication is what every networked <code>SpaceCraft</code> already does.</td></tr>
+  <tr><td class="k">Latch state, Release Grace</td><td>Host</td><td>Consequential. Broadcast over <code>ModMessage</code>.</td></tr>
+  <tr><td class="k">Purchase, Fighter Cap, fuel, repair</td><td>Host</td><td>Spends shared resources; a client must not be able to conjure a Fighter.</td></tr>
+  <tr><td class="k">Destruction, ejection, jump outcome</td><td>Host</td><td>Decides whether a player dies.</td></tr>
+</table>
+
+<div class="callout note">
+  <span class="label">Trust boundary</span>
+  A misbehaving client can make its Fighter fly strangely. It cannot conjure Fighters, fake a dock, exceed the Fighter Cap, refuse to die on a jump, or spend alloys it does not have. That is the right line, and it is the same line <code>CONTEXT.md</code> already draws — the exception is scoped to <em>presentation of motion</em>, not to state.
+</div>
+
+<p>Late joiners need bay state, stocked status and any live Fighter's state, following the existing <code>SendCatchUpTo</code> pattern. Host migration re-asserts bay state exactly as <code>OnMasterClientSwitched</code> already does for forge state.</p>
+
+<h2 id="preflight">Pre-Flight Verification</h2>
+
+<p>Required before any code, in order. The reference-only NuGet DLLs have empty method bodies, so this must be done against a live install with <code>ilspycmd</code>.</p>
+
+<ol class="bullets">
+  <li><strong>Character on a manoeuvring craft.</strong> No longer a feasibility question &mdash; the mechanism exists (<code>TakeoverChair.Platform</code> &rarr; <code>SetMovingPlatform</code>) and vanilla explicitly handles a seated player off the ship's platform. What remains is narrower: give the Fighter a <code>SpacePlatform</code> on the <code>MovingPlatform</code> layer, seat a pilot, and confirm the character holds up under <em>fighter-scale</em> accelerations, which are far harsher than the ship's. A quality question, not a go/no-go.</li>
+  <li><strong><code>SignatureRadius</code> is settable per instance</strong> and actually consulted by <code>TargetSelector</code> at runtime.</li>
+  <li><strong>Damage application point</strong> — the correct member to gate the <code>Drone</code>-only rule.</li>
+  <li><strong><code>TakeoverChair</code> subclassing</strong> from a mod assembly, and whether ownership transfer survives it.</li>
+  <li><strong>Mod-authored <code>SpaceCraft</code> instantiation</strong> over Photon via the RuntimeAssets path.</li>
+  <li><strong>Cinemachine availability from a mod assembly</strong> &mdash; the game ships it and <code>ShipExternalCamera</code> uses <code>Cinemachine3rdPersonFollow</code>, but confirm a mod can construct a rig at runtime rather than only via an authored prefab.</li>
+  <li><strong><code>ParentSpaceCraft</code> reassignment at runtime</strong> &mdash; is it safe to flip after spawn, and does faction/hostiles follow?</li>
+</ol>
+
+<h2 id="phases">Phased Plan</h2>
+
+<p>Each phase should end somewhere demonstrable, as the Forge's phases did.</p>
+
+<table class="data">
+  <tr><th>Phase</th><th>Deliverable</th><th>Proves</th></tr>
+  <tr><td class="k">0</td><td>Pre-flight, all six items</td><td>The design is buildable at all.</td></tr>
+  <tr><td class="k">1</td><td>Pure modules + tests: latch machine, economy, jump table, target eligibility</td><td>Every rule in this document, with no game running.</td></tr>
+  <tr><td class="k">2</td><td>Fighter Bay module installs, powers, panel responds</td><td>Module pipeline, panel, power hooks.</td></tr>
+  <tr><td class="k">3</td><td>Fighter spawns Latched on the hardpoint; board by prompt and leave; no flight</td><td>Craft, parenting, chair placement across the hull, ownership.</td></tr>
+  <tr><td class="k">4</td><td>Launch and recover, solo-host only</td><td>The latch machine against the real power system.</td></tr>
+  <tr><td class="k">5</td><td>Flight model and camera, modelled on <code>ShipEngine</code> + <code>ShipExternalCamera</code></td><td>Whether it is fun, and whether 6DOF or the ship's 2.5D-plus-pitch reads better. Earliest honest answer.</td></tr>
+  <tr><td class="k">6</td><td>Weapons, signature, fuel</td><td>The combat role.</td></tr>
+  <tr><td class="k">7</td><td>Ejection, destruction, jump outcomes</td><td>Failure paths.</td></tr>
+  <tr><td class="k">8</td><td>Multiplayer: split authority, catch-up, migration</td><td>Two clients. Nothing before this is MP-verified.</td></tr>
+</table>
+
+<div class="callout warn">
+  <span class="label">Ordering</span>
+  Phase 5 answers "is this fun?" and sits five phases deep. If that answer is no, phases 2&ndash;4 are sunk. Consider a throwaway prototype of the flight model immediately after Phase 0 &mdash; before the module, the chair or the economy exist &mdash; purely to find out whether flying it feels like anything.
+</div>
+
+<h2 id="risks">Known Risks</h2>
+
+<table class="data">
+  <tr><th>Risk</th><th>Severity</th><th>Note</th></tr>
+  <tr><td class="k">Character physics on a thrusting craft</td><td>Low&ndash;Medium</td><td><strong>Downgraded.</strong> Vanilla chairs already set platform association via <code>TakeoverChair.Platform</code>, turrets already seat players on a thrusting ship, and <code>SittingInChair</code> explicitly guards for a seated player off the ship's platform. Residual risk is quality under fighter-scale accelerations, not feasibility.</td></tr>
+  <tr><td class="k">Flight model is not fun</td><td>High</td><td>Unknowable until built. Mitigate with an early throwaway prototype.</td></tr>
+  <tr><td class="k">Built on unverified Phase 8 net layer</td><td>High</td><td>Finish T1&ndash;T7 first, or failures have two candidate causes.</td></tr>
+  <tr><td class="k">Split authority is a convention exception</td><td>Medium</td><td>Bounded to motion. Documented here and in <code>CONTEXT.md</code>.</td></tr>
+  <tr><td class="k">Camera work is unfamiliar territory</td><td>Low&ndash;Medium</td><td><strong>Downgraded.</strong> <code>ShipExternalCamera</code> can't be reused (it resolves <code>PlayerShip</code> in <code>Start</code>) but it is a readable blueprint: Cinemachine rig, acceleration-trail offset, <code>IKinematicObject</code> registration. Copying it is a known quantity.</td></tr>
+  <tr><td class="k">Feature is dead for solo players</td><td>Accepted</td><td>Deliberate. Should be stated plainly wherever the bay is described in-game.</td></tr>
+</table>
+
+<div class="footer">
+  VoidCrewTerminus &middot; Aux Fighter Design &middot; companion: <a href="aux-fighter-rfc.html">aux-fighter-rfc.html</a> &middot; vocabulary: <code>handoff/CONTEXT.md</code>
+</div>
+
+</main>
+</body>
+</html>
