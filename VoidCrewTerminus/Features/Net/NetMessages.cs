@@ -41,8 +41,10 @@ public class ForgeDockMessage : ModMessage
 // meter/level reaches the requester via the state broadcast.
 public class AlloySpendRequestMessage : ModMessage
 {
+    // Only the actor number crosses into the sync logic — keeping Photon's Player
+    // out of it is what lets the handler be driven from a test.
     public override void Handle(object[] arguments, Player sender)
-        => ForgeNetSync.HandleAlloySpendRequest(sender);
+        => ForgeNetSync.HandleAlloySpendRequest(sender?.ActorNumber ?? 0);
 }
 
 // Phase 8-B — Host → clients: which relics are cursed, keyed by PhotonView.ViewID.
@@ -60,7 +62,7 @@ public class CursedRelicMessage : ModMessage
 public class CommitRequestMessage : ModMessage
 {
     public override void Handle(object[] arguments, Player sender)
-        => ForgeNetSync.HandleCommitRequest(arguments, sender);
+        => ForgeNetSync.HandleCommitRequest(arguments, sender?.ActorNumber ?? 0);
 }
 
 // Phase 8-C — Host → all: authoritative commit result as a full box snapshot.

@@ -15,10 +15,10 @@ namespace VoidCrewTerminus.Net;
 // (DifficultyScalar, BossesDefeated, Meter, Level) plus the client→host alloy
 // spend hop.
 //
-// Authority == Photon master client. It is ALSO true in solo/offline play
-// (PhotonNetwork.IsMasterClient is true when not in a room), so single-player is
-// unchanged: you are the authority, and BroadcastState simply no-ops with no one
-// to send to.
+// Authority == Photon master client, and ALSO true in solo/offline play, so
+// single-player is unchanged: you are the authority, and BroadcastState simply
+// no-ops with no one to send to. Which of those you are is the transport's
+// business (see IForgeTransport) — this class only composes gates out of it.
 //
 // The escalation increment hooks (ForgeSectorHook, BossDefeatHook), the alloy
 // spend, the per-run reset, and the dev setters all run ONLY on the authority,
@@ -40,14 +40,38 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
     private static EventHandler _onJoinedRoom;
     private static EventHandler _onLeftRoom;
 
-    // True when this client owns the authoritative state. Solo (not in a room)
-    // counts as authority so single-player behaves exactly as before.
-    internal static bool IsAuthority => !PhotonNetwork.InRoom || PhotonNetwork.IsMasterClient;
+    // The network underneath us. Starts OFFLINE and is swapped to the PUN adapter
+    // only once we are genuinely in a room — see OfflineTransport for why that
+    // ordering is load-bearing rather than cosmetic. Tests install a fake.
+    private static IForgeTransport _transport = OfflineTransport.Instance;
 
-    // Only actually put a message on the wire when we're the authority AND there's
-    // someone else in the room to receive it.
-    private static bool ShouldBroadcast =>
-        PhotonNetwork.InRoom && PhotonNetwork.IsMasterClient && PhotonNetwork.CurrentRoom.PlayerCount > 1;
+    internal static IForgeTransport Transport
+    {
+        get => _transport;
+        set => _transport = value ?? OfflineTransport.Instance;
+    }
+
+    // ---- gates ------------------------------------------------------------
+    //
+    // Four distinct rules, stated together so the differences are visible. Each is
+    // a composition of the two facts the transport reports:
+    //
+    //   IsAuthority     — we own the state. Read by callers OUTSIDE this class
+    //                     (DoCommit, ForgeSectorHook) to decide whether to act
+    //                     locally or ask the host. True solo.
+    //   ShouldBroadcast — an authority-originated push. Silent solo (no peers) and
+    //                     silent on clients (not authority).
+    //   ShouldRelay     — a push whose originator need NOT be the authority: the
+    //                     player who PLACED a module announces its overlay, and
+    //                     that player may be a client. Relaying already-
+    //                     authoritative state, not deciding anything new.
+    //   Targeted sends  — the late-joiner catch-up. Authority-only; the recipient
+    //                     is named, so peer count is irrelevant.
+    internal static bool IsAuthority => _transport.IsAuthority;
+
+    private static bool ShouldBroadcast => _transport.IsAuthority && _transport.HasPeers;
+
+    private static bool ShouldRelay => _transport.HasPeers;
 
     // Init runs from BepInEx plugin Awake, which is FAR earlier than the game's
     // own Photon setup — the chainloader finishes before "Starting photon
@@ -81,8 +105,11 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
     {
         if (_registered) return;
         _registered = true;
+        // First touch of PhotonNetwork in the plugin's whole lifetime, and it
+        // happens here — inside a room event — on purpose.
+        _transport = PunTransport.Instance;
         PhotonNetwork.AddCallbackTarget(_callbacks);
-        BepinPlugin.Log.LogDebug("[Net] PUN callback target attached (in room).");
+        BepinPlugin.Log?.LogDebug("[Net] PUN callback target attached (in room).");
     }
 
     private static void UnregisterCallbacks()
@@ -90,8 +117,9 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         if (!_registered) return;
         _registered = false;
         PhotonNetwork.RemoveCallbackTarget(_callbacks);
-        _pendingCursed.Clear();
-        BepinPlugin.Log.LogDebug("[Net] PUN callback target detached (left room).");
+        _transport = OfflineTransport.Instance;
+        ClearPending();
+        BepinPlugin.Log?.LogDebug("[Net] PUN callback target detached (left room).");
     }
 
     internal static void Shutdown()
@@ -112,7 +140,16 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         }
 
         UnregisterCallbacks();
+        ClearPending();
+    }
+
+    // Both buffers, not just the cursed one. ViewIDs are scoped to a room, so a
+    // module overlay left buffered across a room change would eventually be
+    // applied to whatever unrelated object inherits that ID.
+    private static void ClearPending()
+    {
         _pendingCursed.Clear();
+        _pendingModuleOverlay.Clear();
     }
 
     // ---- outbound (authority → clients) -----------------------------------
@@ -121,20 +158,19 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
     {
         if (!ShouldBroadcast) return;
         var args = StatePayload();
-        ModMessage.Send(MyPluginInfo.PLUGIN_GUID,
-            ModMessage.GetIdentifier(typeof(ForgeStateSyncMessage)),
-            ReceiverGroup.Others, args, reliable: true);
-        BepinPlugin.Log.LogDebug($"[Net] → sent forge state {Describe(args)} to all.");
+        _transport.SendToOthers(typeof(ForgeStateSyncMessage), args);
+        BepinPlugin.Log?.LogDebug($"[Net] → sent forge state {Describe(args)} to all.");
     }
 
-    private static void SendStateTo(Player player)
+    // internal, not private: this and SendOverlaySnapshotTo are the two catch-up
+    // pushes free of Unity calls, so they are the only way to exercise the
+    // targeted-send gate from a test. See ForgeNetSyncGateTests.
+    internal static void SendStateTo(int actorNumber)
     {
-        if (!PhotonNetwork.IsMasterClient || player == null) return;
+        if (!IsAuthority) return;
         var args = StatePayload();
-        ModMessage.Send(MyPluginInfo.PLUGIN_GUID,
-            ModMessage.GetIdentifier(typeof(ForgeStateSyncMessage)),
-            player, args, reliable: true);
-        BepinPlugin.Log.LogDebug($"[Net] → sent forge state {Describe(args)} to joiner #{player.ActorNumber}.");
+        _transport.SendToPeer(actorNumber, typeof(ForgeStateSyncMessage), args);
+        BepinPlugin.Log?.LogDebug($"[Net] → sent forge state {Describe(args)} to joiner #{actorNumber}.");
     }
 
     private static object[] StatePayload() => new object[]
@@ -164,7 +200,7 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
 
         ForgeMeterController.ApplyNetworkState(scalar, meter, level);
         SectorEscalation.ApplyNetworkBosses(bosses);
-        BepinPlugin.Log.LogDebug(
+        BepinPlugin.Log?.LogDebug(
             $"[Net] ← applied forge state {{scalar={scalar}, bosses={bosses}, meter={meter:0.#}, level={level}}}.");
     }
 
@@ -172,18 +208,16 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
 
     internal static void RequestAlloySpend()
     {
-        ModMessage.Send(MyPluginInfo.PLUGIN_GUID,
-            ModMessage.GetIdentifier(typeof(AlloySpendRequestMessage)),
-            ReceiverGroup.MasterClient, Array.Empty<object>(), reliable: true);
-        BepinPlugin.Log.LogDebug("[Net] → sent alloy-spend request to host.");
+        _transport.SendToMaster(typeof(AlloySpendRequestMessage), Array.Empty<object>());
+        BepinPlugin.Log?.LogDebug("[Net] → sent alloy-spend request to host.");
     }
 
-    internal static void HandleAlloySpendRequest(Player sender)
+    internal static void HandleAlloySpendRequest(int senderActor)
     {
-        if (!PhotonNetwork.IsMasterClient) return;
+        if (!IsAuthority) return;
         bool ok = ForgeMeterController.TrySpendAlloys(out string message);
-        BepinPlugin.Log.LogDebug(
-            $"[Net] ← alloy-spend request from #{sender?.ActorNumber}: {(ok ? "spent" : message)}");
+        BepinPlugin.Log?.LogDebug(
+            $"[Net] ← alloy-spend request from #{senderActor}: {(ok ? "spent" : message)}");
         if (ok) BroadcastState(); // push the new meter/level to everyone incl. the requester
     }
 
@@ -197,24 +231,27 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
     // from the client's OnPhotonInstantiate (see CursedRelicSpawnPatch).
 
     // ViewID → burden, for cursed flags that arrived before the object existed.
-    private static readonly Dictionary<int, BurdenType> _pendingCursed = new();
+    private static readonly PendingByViewId<BurdenType> _pendingCursed = new();
+
+    // Both cursed messages carry parallel arrays so a single live flag and a whole
+    // joiner snapshot share one wire shape.
+    private static object[] CursedPayload(int[] viewIds, int[] burdens) =>
+        new object[] { viewIds, burdens };
 
     // Host: announce one freshly-cursed relic to all clients.
     internal static void BroadcastCursed(PhotonView pv, BurdenType burden)
     {
         if (!ShouldBroadcast) return;
         if (pv == null || pv.ViewID <= 0) return;
-        ModMessage.Send(MyPluginInfo.PLUGIN_GUID,
-            ModMessage.GetIdentifier(typeof(CursedRelicMessage)),
-            ReceiverGroup.Others,
-            new object[] { new[] { pv.ViewID }, new[] { (int)burden } }, reliable: true);
-        BepinPlugin.Log.LogDebug($"[Net] → sent cursed relic viewID={pv.ViewID} ({burden}) to all.");
+        _transport.SendToOthers(typeof(CursedRelicMessage),
+            CursedPayload(new[] { pv.ViewID }, new[] { (int)burden }));
+        BepinPlugin.Log?.LogDebug($"[Net] → sent cursed relic viewID={pv.ViewID} ({burden}) to all.");
     }
 
     // Host: full cursed set for a joining player.
-    private static void SendCursedSnapshotTo(Player player)
+    private static void SendCursedSnapshotTo(int actorNumber)
     {
-        if (!PhotonNetwork.IsMasterClient || player == null) return;
+        if (!IsAuthority) return;
 
         var ids = new List<int>();
         var burdens = new List<int>();
@@ -227,10 +264,9 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         }
         if (ids.Count == 0) return;
 
-        ModMessage.Send(MyPluginInfo.PLUGIN_GUID,
-            ModMessage.GetIdentifier(typeof(CursedRelicMessage)),
-            player, new object[] { ids.ToArray(), burdens.ToArray() }, reliable: true);
-        BepinPlugin.Log.LogDebug($"[Net] → sent cursed snapshot ({ids.Count} relics) to joiner #{player.ActorNumber}.");
+        _transport.SendToPeer(actorNumber, typeof(CursedRelicMessage),
+            CursedPayload(ids.ToArray(), burdens.ToArray()));
+        BepinPlugin.Log?.LogDebug($"[Net] → sent cursed snapshot ({ids.Count} relics) to joiner #{actorNumber}.");
     }
 
     // Client: apply (or buffer) cursed flags from host.
@@ -247,12 +283,12 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
             if (pv != null && pv.gameObject != null)
             {
                 CursedRelicMarker.MarkCursed(pv.gameObject, burden);
-                BepinPlugin.Log.LogDebug($"[Net] ← applied cursed relic viewID={viewID} ({burden}).");
+                BepinPlugin.Log?.LogDebug($"[Net] ← applied cursed relic viewID={viewID} ({burden}).");
             }
             else
             {
-                _pendingCursed[viewID] = burden;
-                BepinPlugin.Log.LogDebug($"[Net] ← buffered cursed relic viewID={viewID} ({burden}) — object not spawned yet.");
+                _pendingCursed.Buffer(viewID, burden);
+                BepinPlugin.Log?.LogDebug($"[Net] ← buffered cursed relic viewID={viewID} ({burden}) — object not spawned yet.");
             }
         }
     }
@@ -262,10 +298,9 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
     internal static void TryApplyPendingCursed(PhotonView pv, GameObject go)
     {
         if (pv == null || go == null) return;
-        if (!_pendingCursed.TryGetValue(pv.ViewID, out var burden)) return;
-        _pendingCursed.Remove(pv.ViewID);
+        if (!_pendingCursed.TryTake(pv.ViewID, out var burden)) return;
         CursedRelicMarker.MarkCursed(go, burden);
-        BepinPlugin.Log.LogDebug($"[Net] ← applied buffered cursed relic viewID={pv.ViewID} ({burden}).");
+        BepinPlugin.Log?.LogDebug($"[Net] ← applied buffered cursed relic viewID={pv.ViewID} ({burden}).");
     }
 
     // ---- authoritative commit (Phase 8-C) ---------------------------------
@@ -279,18 +314,16 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
     // Client → host.
     internal static void RequestCommit(int boxViewId, int[] relicViewIds)
     {
-        ModMessage.Send(MyPluginInfo.PLUGIN_GUID,
-            ModMessage.GetIdentifier(typeof(CommitRequestMessage)),
-            ReceiverGroup.MasterClient,
-            new object[] { boxViewId, relicViewIds ?? Array.Empty<int>() }, reliable: true);
-        BepinPlugin.Log.LogDebug($"[Net] → sent commit request box={boxViewId} ({relicViewIds?.Length ?? 0} relics) to host.");
+        _transport.SendToMaster(typeof(CommitRequestMessage),
+            new object[] { boxViewId, relicViewIds ?? Array.Empty<int>() });
+        BepinPlugin.Log?.LogDebug($"[Net] → sent commit request box={boxViewId} ({relicViewIds?.Length ?? 0} relics) to host.");
     }
 
     // Host resolves + computes. UpgradeForgeBehavior.ComputeAndPersist saves the
     // host snapshot and broadcasts the result; the operator consumes on receipt.
-    internal static void HandleCommitRequest(object[] a, Player sender)
+    internal static void HandleCommitRequest(object[] a, int senderActor)
     {
-        if (!PhotonNetwork.IsMasterClient) return;
+        if (!IsAuthority) return;
         if (a == null || a.Length < 2) return;
 
         int boxViewId = Convert.ToInt32(a[0]);
@@ -303,7 +336,7 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         var box = boxPv != null ? boxPv.GetComponent<CG.Ship.Object.BuildBox>() : null;
         if (box == null)
         {
-            BepinPlugin.Log.LogWarning($"[Net] ← commit request from #{sender?.ActorNumber} for box={boxViewId}: box not found — ignored.");
+            BepinPlugin.Log?.LogWarning($"[Net] ← commit request from #{senderActor} for box={boxViewId}: box not found — ignored.");
             return;
         }
 
@@ -313,7 +346,7 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
             var pv = PhotonView.Find(vid);
             if (pv != null && pv.gameObject != null) relics.Add(pv.gameObject);
         }
-        BepinPlugin.Log.LogDebug($"[Net] ← commit request from #{sender?.ActorNumber} box={boxViewId} ({relics.Count}/{relicViewIds.Length} relics resolved).");
+        BepinPlugin.Log?.LogDebug($"[Net] ← commit request from #{senderActor} box={boxViewId} ({relics.Count}/{relicViewIds.Length} relics resolved).");
 
         UpgradeForgeBehavior.ComputeAndPersist(box, relics); // saves host snapshot + broadcasts result
     }
@@ -323,10 +356,8 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
     internal static void BroadcastCommitResult(int boxViewId, ForgeSnapshot snap, int relicsConsumed)
     {
         if (!ShouldBroadcast) return;
-        ModMessage.Send(MyPluginInfo.PLUGIN_GUID,
-            ModMessage.GetIdentifier(typeof(CommitResultMessage)),
-            ReceiverGroup.Others, snap.ToPayload(boxViewId, relicsConsumed), reliable: true);
-        BepinPlugin.Log.LogDebug($"[Net] → sent commit result box={boxViewId} L{snap.Level} " +
+        _transport.SendToOthers(typeof(CommitResultMessage), snap.ToPayload(boxViewId, relicsConsumed));
+        BepinPlugin.Log?.LogDebug($"[Net] → sent commit result box={boxViewId} L{snap.Level} " +
             $"({DescribeOverlay(snap.PerkSlots, snap.Burdens)}, consumed {relicsConsumed}) to all.");
     }
 
@@ -337,7 +368,7 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         if (!ForgeSnapshot.TryFromPayload(a, out int boxViewId, out var snap, out int relicsConsumed)) return;
 
         ForgeStateStore.SaveSnapshot(boxViewId, snap);
-        BepinPlugin.Log.LogDebug($"[Net] ← applied commit result box={boxViewId} L{snap.Level} " +
+        BepinPlugin.Log?.LogDebug($"[Net] ← applied commit result box={boxViewId} L{snap.Level} " +
             $"({DescribeOverlay(snap.PerkSlots, snap.Burdens)}, consumed {relicsConsumed}).");
 
         UpgradeForgeBehavior.FindByBoxViewId(boxViewId)?.OnNetworkCommitResult(relicsConsumed);
@@ -363,16 +394,14 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
 
     // Host → joiner: every upgraded box's overlay so their modules reconstruct
     // with the right level/perks/burdens.
-    private static void SendOverlaySnapshotTo(Player player)
+    internal static void SendOverlaySnapshotTo(int actorNumber)
     {
-        if (!PhotonNetwork.IsMasterClient || player == null) return;
+        if (!IsAuthority) return;
         var all = ForgeStateStore.AllSnapshots();
         if (all.Count == 0) return;
         foreach (var kv in all)
-            ModMessage.Send(MyPluginInfo.PLUGIN_GUID,
-                ModMessage.GetIdentifier(typeof(CommitResultMessage)),
-                player, kv.Value.ToPayload(kv.Key, 0), reliable: true);
-        BepinPlugin.Log.LogDebug($"[Net] → sent overlay snapshot ({all.Count} boxes) to joiner #{player.ActorNumber}.");
+            _transport.SendToPeer(actorNumber, typeof(CommitResultMessage), kv.Value.ToPayload(kv.Key, 0));
+        BepinPlugin.Log?.LogDebug($"[Net] → sent overlay snapshot ({all.Count} boxes) to joiner #{actorNumber}.");
     }
 
     // ---- installed-module overlay (Phase 8-D) -----------------------------
@@ -389,20 +418,18 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
     // relays originated from the host-authoritative commit.
 
     // moduleViewID → snapshot, for overlays that arrived before the module spawned.
-    private static readonly Dictionary<int, ForgeSnapshot> _pendingModuleOverlay = new();
+    private static readonly PendingByViewId<ForgeSnapshot> _pendingModuleOverlay = new();
 
     // Placer → everyone else: "this module ViewID carries this overlay."
     internal static void BroadcastModuleOverlay(int moduleViewId, ForgeSnapshot snap)
     {
-        // Deliberately not ShouldBroadcast: the placer may be a client, and this
+        // ShouldRelay, not ShouldBroadcast: the placer may be a client, and this
         // is a relay of already-authoritative state rather than a new decision.
-        if (!PhotonNetwork.InRoom || PhotonNetwork.CurrentRoom.PlayerCount <= 1) return;
+        if (!ShouldRelay) return;
         if (moduleViewId <= 0 || snap == null) return;
 
-        ModMessage.Send(MyPluginInfo.PLUGIN_GUID,
-            ModMessage.GetIdentifier(typeof(ModuleOverlayMessage)),
-            ReceiverGroup.Others, snap.ToPayload(moduleViewId, 0), reliable: true);
-        BepinPlugin.Log.LogDebug($"[Net] → sent module overlay module={moduleViewId} L{snap.Level} " +
+        _transport.SendToOthers(typeof(ModuleOverlayMessage), snap.ToPayload(moduleViewId, 0));
+        BepinPlugin.Log?.LogDebug($"[Net] → sent module overlay module={moduleViewId} L{snap.Level} " +
             $"({DescribeOverlay(snap.PerkSlots, snap.Burdens)}) to all.");
     }
 
@@ -419,16 +446,14 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
 
     // Host → joiner: every installed module's overlay, so a late joiner sees
     // forged modules already welded into the ship.
-    private static void SendModuleOverlaysTo(Player player)
+    private static void SendModuleOverlaysTo(int actorNumber)
     {
-        if (!PhotonNetwork.IsMasterClient || player == null) return;
+        if (!IsAuthority) return;
         var all = ForgeStateStore.AllModuleStates();
         if (all.Count == 0) return;
         foreach (var (viewId, snap) in all)
-            ModMessage.Send(MyPluginInfo.PLUGIN_GUID,
-                ModMessage.GetIdentifier(typeof(ModuleOverlayMessage)),
-                player, snap.ToPayload(viewId, 0), reliable: true);
-        BepinPlugin.Log.LogDebug($"[Net] → sent module overlays ({all.Count}) to joiner #{player.ActorNumber}.");
+            _transport.SendToPeer(actorNumber, typeof(ModuleOverlayMessage), snap.ToPayload(viewId, 0));
+        BepinPlugin.Log?.LogDebug($"[Net] → sent module overlays ({all.Count}) to joiner #{actorNumber}.");
     }
 
     internal static void ApplyIncomingModuleOverlay(object[] a)
@@ -441,13 +466,13 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         {
             // The overlay can outrun the module's own instantiation; drained from
             // OnPhotonInstantiate once it appears.
-            _pendingModuleOverlay[moduleViewId] = snap;
-            BepinPlugin.Log.LogDebug($"[Net] ← buffered module overlay module={moduleViewId} — module not spawned yet.");
+            _pendingModuleOverlay.Buffer(moduleViewId, snap);
+            BepinPlugin.Log?.LogDebug($"[Net] ← buffered module overlay module={moduleViewId} — module not spawned yet.");
             return;
         }
 
         ForgeStateStore.GetOrCreate(module).ApplySnapshot(snap);
-        BepinPlugin.Log.LogDebug($"[Net] ← applied module overlay module={moduleViewId} L{snap.Level} " +
+        BepinPlugin.Log?.LogDebug($"[Net] ← applied module overlay module={moduleViewId} L{snap.Level} " +
             $"({DescribeOverlay(snap.PerkSlots, snap.Burdens)}).");
     }
 
@@ -455,10 +480,9 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
     internal static void TryApplyPendingModuleOverlay(PhotonView pv, CellModule module)
     {
         if (pv == null || module == null) return;
-        if (!_pendingModuleOverlay.TryGetValue(pv.ViewID, out var snap)) return;
-        _pendingModuleOverlay.Remove(pv.ViewID);
+        if (!_pendingModuleOverlay.TryTake(pv.ViewID, out var snap)) return;
         ForgeStateStore.GetOrCreate(module).ApplySnapshot(snap);
-        BepinPlugin.Log.LogDebug($"[Net] ← applied buffered module overlay module={pv.ViewID} L{snap.Level} " +
+        BepinPlugin.Log?.LogDebug($"[Net] ← applied buffered module overlay module={pv.ViewID} L{snap.Level} " +
             $"({DescribeOverlay(snap.PerkSlots, snap.Burdens)}).");
     }
 
@@ -473,14 +497,13 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
     // still host-authoritative and re-resolves everything from ViewIDs.
     internal static void BroadcastDock(int forgeViewId, int itemViewId, int anchorIndex, bool docked)
     {
-        if (!PhotonNetwork.InRoom || PhotonNetwork.CurrentRoom.PlayerCount <= 1) return;
+        // ShouldRelay: the operator may be a client, same as the module overlay.
+        if (!ShouldRelay) return;
         if (forgeViewId <= 0 || itemViewId <= 0) return;
 
-        ModMessage.Send(MyPluginInfo.PLUGIN_GUID,
-            ModMessage.GetIdentifier(typeof(ForgeDockMessage)),
-            ReceiverGroup.Others,
-            new object[] { forgeViewId, itemViewId, anchorIndex, docked }, reliable: true);
-        BepinPlugin.Log.LogDebug(
+        _transport.SendToOthers(typeof(ForgeDockMessage),
+            new object[] { forgeViewId, itemViewId, anchorIndex, docked });
+        BepinPlugin.Log?.LogDebug(
             $"[Net] → sent {(docked ? "dock" : "undock")} item={itemViewId} anchor={anchorIndex} forge={forgeViewId} to all.");
     }
 
@@ -499,7 +522,7 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
             // Unlike cursed markers and overlays this isn't buffered: a dock is a
             // transient staging state, and replaying a stale one against a Forge
             // that appears later would be worse than showing nothing.
-            BepinPlugin.Log.LogDebug($"[Net] ← dock for forge={forgeViewId} ignored — forge not found here.");
+            BepinPlugin.Log?.LogDebug($"[Net] ← dock for forge={forgeViewId} ignored — forge not found here.");
             return;
         }
 
@@ -511,20 +534,33 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
 
     public void OnPlayerEnteredRoom(Player newPlayer)
     {
-        SendStateTo(newPlayer);
-        SendCursedSnapshotTo(newPlayer);
-        SendOverlaySnapshotTo(newPlayer);
-        SendModuleOverlaysTo(newPlayer);
+        if (newPlayer == null) return;
+        SendCatchUpTo(newPlayer.ActorNumber);
+    }
+
+    // The late-joiner catch-up, in one place so the four pushes can't drift out of
+    // step. Each is individually authority-gated.
+    //
+    // Not reachable from tests: SendCursedSnapshotTo scans the scene for markers,
+    // and a method body containing Unity engine calls cannot even be JIT-compiled
+    // in the test host — an early return does not help. The two Unity-free pushes
+    // are covered individually instead.
+    private static void SendCatchUpTo(int actorNumber)
+    {
+        SendStateTo(actorNumber);
+        SendCursedSnapshotTo(actorNumber);
+        SendOverlaySnapshotTo(actorNumber);
+        SendModuleOverlaysTo(actorNumber);
     }
 
     public void OnMasterClientSwitched(Player newMasterClient)
     {
-        // Authority is computed live from IsMasterClient, so the new master's
-        // hooks already act on their own — just re-assert so no client stays
-        // stale, and so escalation never silently freezes after a host leaves.
-        if (PhotonNetwork.IsMasterClient)
+        // Authority is derived live, so the new master's hooks already act on their
+        // own — just re-assert so no client stays stale, and so escalation never
+        // silently freezes after a host leaves.
+        if (IsAuthority)
         {
-            BepinPlugin.Log.LogInfo("[Net] Became master client — asserting forge-state authority.");
+            BepinPlugin.Log?.LogInfo("[Net] Became master client — asserting forge-state authority.");
             BroadcastState();
         }
     }

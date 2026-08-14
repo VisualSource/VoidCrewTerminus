@@ -9,6 +9,7 @@ namespace VoidCrewTerminus.Tests;
 
 // Tests for the pure downgrade algorithm. Uses real relic prefab names from
 // RelicTierData so tier lookups resolve without stubbing.
+[Collection(SharedStaticStateCollection.Name)]
 public class SectorEscalationTests
 {
     // Known-tier names lifted from RelicTierData._map so tier lookups are real.

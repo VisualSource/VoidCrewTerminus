@@ -22,7 +22,7 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
     <!-- Runtime deps for VoidCrewTerminus.dll. -->
     <PackageReference Include="BepInEx.BaseLib" Version="5.*" GeneratePathProperty="true" />
-    <PackageReference Include="VCMT.VoidManager" Version="1.2.10" />
+    <PackageReference Include="VCMT.VoidManager" Version="1.2.10" GeneratePathProperty="true" />
     <PackageReference Include="VoidCrew.GameLibs" Version="1.3.0" GeneratePathProperty="true" />
   </ItemGroup>
 
@@ -39,6 +39,12 @@
        older Unity-shipped copy conflicts with it. -->
   <ItemGroup>
     <None Include="$(PkgBepInEx_BaseLib)\lib\netstandard2.0\BepInEx.dll"
+          CopyToOutputDirectory="PreserveNewest"
+          Visible="false" />
+    <!-- Needed since the net-seam tests exist: naming a ModMessage subclass (e.g.
+         typeof(ForgeStateSyncMessage)) forces the CLR to load its VoidManager base
+         type, so the assembly must be present even though nothing calls into it. -->
+    <None Include="$(PkgVCMT_VoidManager)\lib\net472\VoidManager.dll"
           CopyToOutputDirectory="PreserveNewest"
           Visible="false" />
     <None Include="$(PkgVoidCrew_GameLibs)\lib\*.dll"

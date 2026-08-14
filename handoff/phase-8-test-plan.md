@@ -3,9 +3,65 @@
 **Project:** VoidCrewTerminus
 **Covers:** 8-A meter/escalation state + alloy hop · 8-B cursed marker sync · 8-C authoritative commit + overlay.
 **Status:** Code complete for all three. **NONE verified — Phase 8 is invisible without 2 clients.**
-**Date:** 2026-07-17
+**Date:** 2026-07-17 · net layer refactored 2026-08-14 — see [Re-verification required](#-re-verification-required--net-layer-refactored-2026-08-14) before treating any result as current.
 
 7 tests. Supersedes the per-sub-phase `phase-8a/b/c` plans (kept in git history if you need the granular breakdown).
+
+---
+
+## ⚠ Re-verification required — net layer refactored 2026-08-14
+
+The whole net layer was restructured behind a transport port (`IForgeTransport`,
+with `OfflineTransport` / `PunTransport` adapters). **The gate rules are now
+covered by unit tests for the first time, but no unit test proves a message
+traverses a real Photon room — so every test below still has to be run.** Unit
+coverage moved the risk, it did not remove it.
+
+What changed underneath, in risk order:
+
+1. **Targeted sends now resolve the recipient themselves.** The late-joiner
+   pushes used to receive Photon's `Player` object directly; they now take an
+   actor number and the adapter looks it up via
+   `CurrentRoom.GetPlayer(actorNumber, false)`. **If that lookup ever returns
+   null the push silently no-ops** — which would look exactly like a joiner
+   getting a clean slate. This is the single most likely new failure and **T6 is
+   the test for it**. A host `→ sent … to joiner #N` line still proves the send
+   happened; its absence now has one more possible cause than before.
+2. **Snapshot payloads are encoded in one place** (`ForgeSnapshot.ToPayload` /
+   `TryFromPayload`) instead of three hand-rolled copies. Affects every
+   snapshot-carrying message — commit results, module overlays, and both
+   late-joiner overlay pushes. **T4, T5, T6.**
+   Two latent inconsistencies were corrected here: the module-overlay decode now
+   normalises empty perk slots (`""` → `null`) as the commit-result decode always
+   did, and it now requires the full 5-slot payload rather than 4.
+3. **Gate rules were recomposed** from `PhotonNetwork` reads into
+   `IsAuthority` / `HasPeers`. Verified algebraically equivalent to the old
+   expressions (and unit-tested), so no behaviour change is expected — but this
+   is what decides whether anything sends at all, so a total silence on one side
+   points here first.
+4. **Buffered module overlays now clear when leaving a room.** Previously only
+   the cursed buffer was cleared, so a stale overlay could survive a room change
+   and later be applied to an unrelated object that inherited the ViewID. Check
+   by leaving a run with a forged module and starting a fresh one — the new run's
+   modules must come up **vanilla**, with no `← applied buffered module overlay`
+   in the log.
+
+### Not covered by any test below (pre-existing gap, now higher risk)
+
+This plan predates **8-D** (installed-module overlay) and **8-E** (forge docking
+sync), and both are driven by the *relay* gate — the one rule that fires
+off-authority, because the player who placed a module or docked a relic may be a
+client. That gate is unit-tested now, but its end-to-end path never has been:
+
+- **8-D:** a **client** places a forged build box into a socket → every other
+  player (host included) sees the module at the forged level/perk, not vanilla.
+  Client logs `→ sent module overlay module=N`; others log `← applied module
+  overlay module=N` (or `← buffered …` then `← applied buffered …`).
+- **8-E:** a **client** docks a relic and a build box into a forge → the other
+  players see them appear in the tubes/socket, and see them leave when grabbed
+  back out. `→ sent dock item=N anchor=K` / `← applied dock item=N`.
+
+Worth adding as T8/T9 next time this plan is opened.
 
 ## Definition of done (read first)
 

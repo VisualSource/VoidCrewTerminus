@@ -6,6 +6,7 @@ namespace VoidCrewTerminus.Tests;
 // Snapshot-bridge coverage only. The per-module (CellModule → ForgeModuleState)
 // path can't run outside the game — GetOrCreate → Attach → BuildMods hits StatType,
 // same limitation the two skipped commit tests document.
+[Collection(SharedStaticStateCollection.Name)]
 public class ForgeStateStoreTests
 {
     // View-ids are namespaced per test to avoid cross-test bleed (the store is static).
