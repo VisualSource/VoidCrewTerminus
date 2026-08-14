@@ -66,7 +66,7 @@ public class ForgeInteractable : AbstractInteractable
         base.Highlighted(isHighlighted);
         if (!_highlightResolved && Anchor != null)
         {
-            _highlight = UpgradeForgeBehavior.FindDeep(Anchor, "Highlight");
+            _highlight = ForgeAnchors.FindDeep(Anchor, ForgeAnchors.HighlightName);
             _highlightResolved = true;
         }
         if (_highlight != null) _highlight.gameObject.SetActive(isHighlighted);

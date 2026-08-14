@@ -51,9 +51,11 @@ public class UpgradeForgeBehavior : MonoBehaviour
     private BuildBox _moduleBox;
     private readonly List<GameObject> _relics = new();
 
-    // Physically docked items (relics + BuildBox) → the anchor they sit on.
-    private readonly Dictionary<GameObject, Transform> _docked = new();
-    private readonly List<KeyValuePair<GameObject, Transform>> _undockScratch = new();
+    // The items physically held on this Forge's anchors. AnchorDock owns their
+    // physics; this class owns what they MEAN — which are relics, which is the
+    // module, and who has to be told when one leaves.
+    private readonly AnchorDock _dock = new();
+    private readonly List<KeyValuePair<GameObject, Transform>> _grabbedScratch = new();
     private Transform[] _tubeAnchors = System.Array.Empty<Transform>();
     private Transform _inputAnchor;
     private bool _interactablesBuilt;
@@ -334,9 +336,9 @@ public class UpgradeForgeBehavior : MonoBehaviour
     // how many relics were loaded. The operator announces each dock/undock and
     // everyone else mirrors it.
     //
-    // Suppresses re-broadcast while applying a remote change, or two clients
-    // would echo each other forever.
-    private bool _applyingRemoteDock;
+    // Only the paths that ORIGINATE a dock announce it — the two Apply arms and
+    // the Update reconcile. The mirroring paths below deliberately say nothing,
+    // which is what stops two clients echoing each other forever.
 
     internal static UpgradeForgeBehavior FindByViewId(int forgeViewId)
     {
@@ -376,24 +378,19 @@ public class UpgradeForgeBehavior : MonoBehaviour
         var pv = Photon.Pun.PhotonView.Find(itemViewId);
         if (pv == null) return;
         var go = pv.gameObject;
-        if (go == null || _docked.ContainsKey(go)) return;
+        if (go == null || _dock.IsDocked(go)) return;
 
         var anchor = AnchorFromIndex(anchorIndex);
         if (anchor == null) return;
 
-        _applyingRemoteDock = true;
-        try
-        {
-            // Mirror the bookkeeping so RelicCount / HasModule read correctly for
-            // observers too. The commit itself stays host-authoritative and is
-            // resolved from ViewIDs, so a mirrored list can't affect an outcome.
-            var box = go.GetComponent<BuildBox>();
-            if (box != null) _moduleBox ??= box;
-            else if (!_relics.Contains(go)) _relics.Add(go);
+        // Mirror the bookkeeping so RelicCount / HasModule read correctly for
+        // observers too. The commit itself stays host-authoritative and is
+        // resolved from ViewIDs, so a mirrored list can't affect an outcome.
+        var box = go.GetComponent<BuildBox>();
+        if (box != null) _moduleBox ??= box;
+        else if (!_relics.Contains(go)) _relics.Add(go);
 
-            Dock(go, anchor);
-        }
-        finally { _applyingRemoteDock = false; }
+        _dock.Dock(go, anchor); // no BroadcastDock — we are mirroring, not originating
 
         BepinPlugin.Log.LogDebug($"[Net] ← applied dock item={itemViewId} anchor={anchorIndex} on forge={ForgeViewId}.");
     }
@@ -403,27 +400,17 @@ public class UpgradeForgeBehavior : MonoBehaviour
         var pv = Photon.Pun.PhotonView.Find(itemViewId);
         if (pv == null) return;
         var go = pv.gameObject;
-        if (go == null || !_docked.TryGetValue(go, out var anchor)) return;
+        if (go == null || !_dock.Undock(go)) return; // not docked here — nothing to mirror
 
-        _applyingRemoteDock = true;
-        try
-        {
-            _docked.Remove(go);
-            SetAnchorFilled(anchor, false);
-            ReleaseRigidbody(go);
-
-            var box = go.GetComponent<BuildBox>();
-            if (box != null && box == _moduleBox) _moduleBox = null;
-            else _relics.Remove(go);
-        }
-        finally { _applyingRemoteDock = false; }
+        var box = go.GetComponent<BuildBox>();
+        if (box != null && box == _moduleBox) _moduleBox = null;
+        else _relics.Remove(go);
 
         BepinPlugin.Log.LogDebug($"[Net] ← applied undock item={itemViewId} on forge={ForgeViewId}.");
     }
 
     private void BroadcastDock(GameObject item, Transform anchor, bool docked)
     {
-        if (_applyingRemoteDock) return;
         var pv = item != null ? item.GetComponent<Photon.Pun.PhotonView>() : null;
         if (pv == null) return;
         Net.ForgeNetSync.BroadcastDock(ForgeViewId, pv.ViewID, AnchorIndexOf(anchor), docked);
@@ -580,7 +567,7 @@ public class UpgradeForgeBehavior : MonoBehaviour
         GameObject go;
         var authored = anchor.GetComponent<Collider>();
         if (authored == null)
-            authored = FindDeep(anchor, "ClickTarget")?.GetComponent<Collider>();
+            authored = ForgeAnchors.FindDeep(anchor, ForgeAnchors.ClickTargetName)?.GetComponent<Collider>();
 
         if (authored != null)
         {
@@ -608,11 +595,8 @@ public class UpgradeForgeBehavior : MonoBehaviour
         // not match the game's, so authored layer indices can't be trusted.
         go.layer = layer;
 
-        // Highlight / Filled helpers are visual-only; primitives authored in the
-        // editor often keep their default colliders, which would collide with docked
-        // items and block the interact ray. Strip them.
-        StripHelperColliders(anchor, "Highlight");
-        StripHelperColliders(anchor, "Filled");
+        ForgeAnchors.StripHelperColliders(anchor, ForgeAnchors.HighlightName);
+        ForgeAnchors.StripHelperColliders(anchor, ForgeAnchors.FilledName);
 
         var fi = go.GetComponent<ForgeInteractable>();
         if (fi == null) fi = go.AddComponent<ForgeInteractable>();
@@ -673,7 +657,9 @@ public class UpgradeForgeBehavior : MonoBehaviour
             case ForgeAction.LoadModule:
                 player.Carrier.ReleaseCarryable();
                 TryTakeModule((BuildBox)payload);
-                Dock(payload.gameObject, _inputAnchor != null ? _inputAnchor : transform);
+                var socket = _inputAnchor != null ? _inputAnchor : transform;
+                _dock.Dock(payload.gameObject, socket);
+                BroadcastDock(payload.gameObject, socket, docked: true);
                 break;
 
             case ForgeAction.InsertRelic:
@@ -687,7 +673,8 @@ public class UpgradeForgeBehavior : MonoBehaviour
                     break;
                 }
                 player.Carrier.ReleaseCarryable();
-                Dock(payload.gameObject, target.Anchor);
+                _dock.Dock(payload.gameObject, target.Anchor);
+                BroadcastDock(payload.gameObject, target.Anchor, docked: true);
                 break;
 
             case ForgeAction.Commit:
@@ -722,119 +709,38 @@ public class UpgradeForgeBehavior : MonoBehaviour
     // removing itself. The reloaded assembly re-attaches on its own patch pass.
     public void TeardownForReload()
     {
-        foreach (var kv in _docked)
-        {
-            var go = kv.Key;
-            if (go == null) continue;
-            SetAnchorFilled(kv.Value, false);
-            ReleaseRigidbody(go);
-        }
-        _docked.Clear();
+        _dock.ReleaseAll();
         _relics.Clear();
         _moduleBox = null;
         Destroy(this);
     }
 
     // ---- Physical docking ------------------------------------------------
-
-    private void Dock(GameObject item, Transform anchor)
-    {
-        if (item == null || anchor == null) return;
-        _docked[item] = anchor;
-        BroadcastDock(item, anchor, docked: true); // no-op while mirroring a remote dock
-        var co = item.GetComponent<CarryableObject>();
-        // Freeze the simulation body too, not just the main one — otherwise it
-        // keeps integrating in the platform's physics scene the whole time the
-        // item is docked, which is what the per-frame pin was accumulating into.
-        SetDockedKinematic(co, item, true);
-        PlaceAtAnchor(item, co, anchor);
-        SetAnchorFilled(anchor, true);
-    }
-
-    // Optional prefab-authored fill indicator: a disabled child named "Filled" under
-    // the anchor is toggled while something is docked there.
-    private static void SetAnchorFilled(Transform anchor, bool filled)
-    {
-        var indicator = FindDeep(anchor, "Filled");
-        if (indicator != null) indicator.gameObject.SetActive(filled);
-    }
-
-    private static void StripHelperColliders(Transform anchor, string helperName)
-    {
-        var helper = FindDeep(anchor, helperName);
-        if (helper == null) return;
-        foreach (var col in helper.GetComponentsInChildren<Collider>(true))
-        {
-            BepinPlugin.Log.LogDebug($"[Forge] Removing stray collider from {helperName} helper under {anchor.name}.");
-            Destroy(col);
-        }
-    }
-
-    // Depth-first name search through an anchor's subtree, so authored helper objects
-    // (ClickTarget / Highlight / Filled) may sit anywhere below the anchor — e.g. a
-    // duplicated FBX node kept inside a wrapper to preserve its transform chain.
-    internal static Transform FindDeep(Transform root, string name)
-    {
-        if (root == null) return null;
-        var direct = root.Find(name);
-        if (direct != null) return direct;
-        foreach (Transform child in root)
-        {
-            var hit = FindDeep(child, name);
-            if (hit != null) return hit;
-        }
-        return null;
-    }
-
-    // Base-pivot alignment: the item's BasePivot lands on the anchor's origin with
-    // its axes matching the anchor's axes (anchor green/Y = item up, blue/Z = item
-    // facing). Same intent as CarryablesSocket.PlaceCarryableOnSocket, but computed
-    // with quaternions instead of the anchor's matrices — vanilla store transforms
-    // are unit-scale, while our anchors inherit rotated, non-uniformly scaled FBX
-    // nodes whose matrices skew a rotation extracted from them.
-    private static void PlaceAtAnchor(GameObject item, CarryableObject co, Transform anchor)
-    {
-        var itemTr = item.transform;
-        var pivot = co != null ? co.BasePivot : itemTr;
-        var finalRot = anchor.rotation * Quaternion.Inverse(pivot.rotation) * itemTr.rotation;
-        var delta = finalRot * Quaternion.Inverse(itemTr.rotation);
-        var finalPos = anchor.position - delta * (pivot.position - itemTr.position);
-        itemTr.SetPositionAndRotation(finalPos, finalRot);
-    }
+    //
+    // The physics itself lives in AnchorDock. What stays here is what a docked
+    // item MEANS to the Forge — whether it is the module or a relic, and who has
+    // to be told when it arrives or leaves.
 
     // Whether something is physically docked on the given anchor. Used by
     // ForgeInteractable to step aside so docked items can be grabbed directly.
-    public bool IsAnchorOccupied(Transform anchor) =>
-        anchor != null && _docked.ContainsValue(anchor);
+    public bool IsAnchorOccupied(Transform anchor) => _dock.IsOccupied(anchor);
 
     // Reconcile forge state with the world: players grab docked items back out via
-    // the vanilla Grabbable flow, and commits destroy consumed relics. Both surface
-    // here as docked entries whose item is gone or carried again.
+    // the vanilla Grabbable flow, and commits destroy consumed relics. The dock
+    // reports the ones a player is now carrying — the destroyed ones it reaps
+    // itself, and _relics has already dropped them on the line above.
     private void Update()
     {
         _relics.RemoveAll(r => r == null);
         if (!ReferenceEquals(_moduleBox, null) && _moduleBox == null) _moduleBox = null;
-        if (_docked.Count == 0) return;
 
-        foreach (var kv in _docked)
+        _dock.Reconcile(_grabbedScratch);
+        foreach (var kv in _grabbedScratch)
         {
             var go = kv.Key;
-            if (go == null) { _undockScratch.Add(kv); continue; }
-            var co = go.GetComponent<CarryableObject>();
-            if (co != null && co.Carrier != null) _undockScratch.Add(kv);
-        }
-
-        foreach (var kv in _undockScratch)
-        {
-            var go = kv.Key;
-            _docked.Remove(go);
-            SetAnchorFilled(kv.Value, false);
-            if (go == null) continue;
 
             // A player grabbed it: tell everyone else so their copy undocks too.
             BroadcastDock(go, kv.Value, docked: false);
-
-            ReleaseRigidbody(go);
 
             var box = go.GetComponent<BuildBox>();
             if (box != null && box == _moduleBox)
@@ -847,104 +753,11 @@ public class UpgradeForgeBehavior : MonoBehaviour
                 BepinPlugin.Log.LogInfo($"[Forge] Relic {go.name} retrieved ({RelicCount}/{Capacity} remain).");
             }
         }
-        _undockScratch.Clear();
+        _grabbedScratch.Clear();
     }
 
     // Keep docked items pinned to their anchors while the ship moves.
-    private void LateUpdate()
-    {
-        if (_docked.Count == 0) return;
-        foreach (var kv in _docked)
-        {
-            if (kv.Key == null || kv.Value == null) continue;
-            var co = kv.Key.GetComponent<CarryableObject>();
-            // Skip pinning once a player has grabbed the item — Update() next
-            // frame will undock. Otherwise the pin snaps a carried box back to
-            // the anchor, and the accumulated teleport delta produces a visible
-            // drift when the rigidbody wakes.
-            if (co != null && co.Carrier != null) continue;
-            PlaceAtAnchor(kv.Key, co, kv.Value);
-        }
-    }
-
-    // Freeze/unfreeze BOTH bodies a CarryableObject can be simulated through.
-    //
-    // CarryableObject is an ISimulatedBody: while it rides a MovingSpacePlatform
-    // (i.e. the ship) its real physics lives on SimulationRigidbody in a separate
-    // physics scene, NOT on MainRigidbody. Note that Rigidbody and MainRigidbody
-    // both return the same field, so there's no "active body" accessor — the
-    // simulation body has to be addressed explicitly.
-    //
-    // Both are set unconditionally rather than branching on IsBeingSimulated,
-    // because that flag can flip while an item is docked (the ship starts or
-    // stops being simulated) and a body left un-frozen would integrate in the
-    // background the whole time.
-    private static void SetDockedKinematic(CarryableObject co, GameObject go, bool kinematic)
-    {
-        var main = co != null ? co.MainRigidbody : go.GetComponent<Rigidbody>();
-        if (main != null) main.isKinematic = kinematic;
-
-        var sim = co != null ? co.SimulationRigidbody : null;
-        if (sim != null) sim.isKinematic = kinematic;
-    }
-
-    // Return a docked item to the physics simulation.
-    //
-    // The per-frame LateUpdate pin against a moving-ship anchor accumulates an
-    // implicit velocity estimate; without zeroing it the item inherits roughly
-    // the ship's velocity the instant kinematic goes false and drifts through the
-    // ship — the "BuildBox floats away" bug.
-    //
-    // The original fix wrote straight to MainRigidbody, which is the WRONG body
-    // whenever the item is being simulated on the ship platform — the accumulated
-    // velocity survived on SimulationRigidbody and the box drifted anyway. That's
-    // why it only reproduced intermittently: it depended on whether platform
-    // simulation happened to be active at that moment.
-    //
-    // Going through the Velocity/AngularVelocity properties routes to whichever
-    // body is live. Zero is safe in either space (the simulated branch applies an
-    // inverse platform rotation, and rotating zero yields zero).
-    private static void ReleaseRigidbody(GameObject go)
-    {
-        if (go == null) return;
-        var co = go.GetComponent<CarryableObject>();
-
-        bool simulated = co != null && co.IsBeingSimulated;
-        Vector3 before = Vector3.zero;
-        try { before = co != null ? co.Velocity : Vector3.zero; }
-        catch { /* SimulationPlatform can be null mid-transition; not worth failing the undock */ }
-
-        // MUST clear kinematic BEFORE assigning velocity: the property's
-        // non-simulated branch is `else if (!rigidBody.isKinematic)`, so writing
-        // velocity to a still-kinematic body is silently dropped.
-        SetDockedKinematic(co, go, false);
-
-        if (co != null)
-        {
-            try
-            {
-                co.Velocity = Vector3.zero;
-                co.AngularVelocity = Vector3.zero;
-            }
-            catch (System.Exception e)
-            {
-                BepinPlugin.Log.LogWarning($"[Forge] undock {go.name}: velocity zeroing failed ({e.GetType().Name}) — falling back to main body.");
-                var rb = co.MainRigidbody;
-                if (rb != null) { rb.velocity = Vector3.zero; rb.angularVelocity = Vector3.zero; }
-            }
-        }
-        else
-        {
-            var rb = go.GetComponent<Rigidbody>();
-            if (rb != null) { rb.velocity = Vector3.zero; rb.angularVelocity = Vector3.zero; }
-        }
-
-        // The float-away is rare and not reliably reproducible, so it has to be
-        // diagnosed from a log of the one run where it happens. A non-zero
-        // `was=` on a simulated item is the signature of the original bug.
-        BepinPlugin.Log.LogDebug(
-            $"[Forge] undock {go.name}: simulated={simulated}, was={before}, zeroed both bodies.");
-    }
+    private void LateUpdate() => _dock.Pin();
 
     // Consumed relics are networked objects — destroy through the game's factory
     // when we own them so the removal replicates; plain Destroy otherwise.
