@@ -58,7 +58,7 @@ internal class ForgeCostCommand : PublicCommand
 
     public override void Execute(string arguments, int sender)
     {
-        if (!TerminusConfig.EnableDevMode.Value) return;
+        if (!TerminusConfig.DevMode) return;
 
         var parts = (arguments ?? "").Trim().Split(' ', System.StringSplitOptions.RemoveEmptyEntries);
         int from = ForgeCostCurve.MinLevel;
@@ -87,7 +87,7 @@ internal class ForgeStatusCommand : PublicCommand
 
     public override void Execute(string arguments, int sender)
     {
-        if (!TerminusConfig.EnableDevMode.Value) return;
+        if (!TerminusConfig.DevMode) return;
 
         var forge = ForgeCommandHelper.FindNearestForge();
         if (forge == null) { Messaging.Notification("No Upgrade Forge found in scene."); return; }
@@ -110,7 +110,7 @@ internal class ForgeTargetCommand : PublicCommand
 
     public override void Execute(string arguments, int sender)
     {
-        if (!TerminusConfig.EnableDevMode.Value) return;
+        if (!TerminusConfig.DevMode) return;
 
         var forge = ForgeCommandHelper.FindNearestForge();
         if (forge == null) { Messaging.Notification("No Upgrade Forge found."); return; }
@@ -135,7 +135,7 @@ internal class ForgeReleaseModuleCommand : PublicCommand
 
     public override void Execute(string arguments, int sender)
     {
-        if (!TerminusConfig.EnableDevMode.Value) return;
+        if (!TerminusConfig.DevMode) return;
 
         var forge = ForgeCommandHelper.FindNearestForge();
         if (forge == null) { Messaging.Notification("No Upgrade Forge found."); return; }
@@ -155,7 +155,7 @@ internal class ForgeInsertCommand : PublicCommand
 
     public override void Execute(string arguments, int sender)
     {
-        if (!TerminusConfig.EnableDevMode.Value) return;
+        if (!TerminusConfig.DevMode) return;
 
         var forge = ForgeCommandHelper.FindNearestForge();
         if (forge == null) { Messaging.Notification("No Upgrade Forge found."); return; }
@@ -192,7 +192,7 @@ internal class ForgeEjectRelicCommand : PublicCommand
 
     public override void Execute(string arguments, int sender)
     {
-        if (!TerminusConfig.EnableDevMode.Value) return;
+        if (!TerminusConfig.DevMode) return;
         if (!int.TryParse((arguments ?? "").Trim(), out int index))
         {
             Messaging.Notification("Usage: !forgeeject <index>");
@@ -218,7 +218,7 @@ internal class ForgeMarkCommand : PublicCommand
 
     public override void Execute(string arguments, int sender)
     {
-        if (!TerminusConfig.EnableDevMode.Value) return;
+        if (!TerminusConfig.DevMode) return;
 
         var forge = ForgeCommandHelper.FindNearestForge();
         if (forge == null) { Messaging.Notification("No Upgrade Forge found."); return; }
@@ -238,39 +238,17 @@ internal class ForgeCommitCommand : PublicCommand
 
     public override void Execute(string arguments, int sender)
     {
-        if (!TerminusConfig.EnableDevMode.Value) return;
+        if (!TerminusConfig.DevMode) return;
 
         var forge = ForgeCommandHelper.FindNearestForge();
         if (forge == null) { Messaging.Notification("No Upgrade Forge found."); return; }
 
+        // Deliberately renders the same lines the in-world commit button shows —
+        // a dev testing !forgecommit should be reading exactly what a player
+        // reads, not a parallel set of paraphrases.
         var outcome = forge.TryCommit();
-        switch (outcome.Status)
-        {
-            case CommitStatus.Ok:
-                Messaging.Notification($"Committed: L{outcome.NewLevel} (consumed {outcome.RelicsConsumed} relics; {forge.RelicCount} remain).");
-                if (outcome.RolledPerk != null || outcome.RollAttempted)
-                    Messaging.Notification(UpgradeForgeBehavior.DescribePerkResult(outcome));
-                break;
-            case CommitStatus.NoModule:
-                Messaging.Notification("Cannot commit: module socket is empty.");
-                break;
-            case CommitStatus.NoRelics:
-                Messaging.Notification("Cannot commit: no relics inserted.");
-                break;
-            case CommitStatus.AlreadyAtMax:
-                Messaging.Notification("Cannot commit: module already at L10.");
-                break;
-            case CommitStatus.InsufficientRelics:
-                var cost = ForgeCostCurve.CostForNextLevel(forge.CurrentBoxLevel);
-                Messaging.Notification($"Cannot commit: next level requires {cost} relics, have {forge.RelicCount}.");
-                break;
-            case CommitStatus.MissingViewId:
-                Messaging.Notification("Cannot commit: BuildBox has no PhotonView.");
-                break;
-            case CommitStatus.InvalidModuleLevel:
-                Messaging.Notification("Cannot commit: only Mark III modules can be forged.");
-                break;
-        }
+        foreach (var line in ForgeLabels.DescribeCommit(outcome, forge.CurrentBoxLevel, forge.RelicCount))
+            Messaging.Notification(line);
     }
 }
 
@@ -296,7 +274,7 @@ internal class ForgeSpawnCommand : PublicCommand
 
     public override void Execute(string arguments, int sender)
     {
-        if (!TerminusConfig.EnableDevMode.Value) return;
+        if (!TerminusConfig.DevMode) return;
 
         var player = LocalPlayer.Instance;
         if (player == null) { Messaging.Notification("Not in an active session."); return; }

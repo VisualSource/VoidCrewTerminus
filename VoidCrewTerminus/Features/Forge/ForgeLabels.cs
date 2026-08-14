@@ -52,6 +52,11 @@ public static class ForgeLabels
         return _trailingMark.Replace(header, "") + " " + mark;
     }
 
+    // "1 relic" / "2 relics". Shared so the commit lines, the host-committed
+    // notification and anything else counting relics pluralise the same way.
+    public static string Plural(int count, string noun) =>
+        $"{count} {noun}{(count == 1 ? "" : "s")}";
+
     public static string BurdenName(BurdenType burden) => burden switch
     {
         BurdenType.RandomShutoff => "Random Shutoff",
@@ -131,5 +136,81 @@ public static class ForgeLabels
         if (curse != BurdenType.None)
             sb.Append($"\n<color={BurdenColor}><b>⚠ CURSED: {BurdenName(curse)}</b></color>");
         return sb.ToString();
+    }
+
+    // ---- commit results --------------------------------------------------
+
+    // Human-readable perk-roll summary. Reads Name / Description straight off the
+    // outcome's own PerkDefinition rather than looking the id up in PerkPool —
+    // that lookup forces PerkPool's static initialiser, which touches game
+    // StatTypes and so cannot run in the test host.
+    //
+    // The "no roll" string is only ever reached by the causal log line in
+    // ComputeAndPersist; DescribeCommit gates it out of player-facing text.
+    public static string DescribePerkResult(CommitOutcome outcome)
+    {
+        if (outcome.RolledPerk != null)
+            return $"Perk gained in slot {outcome.TargetSlot + 1}: " +
+                   $"{outcome.RolledPerk.Name} — {outcome.RolledPerk.Description}!";
+        if (outcome.RollAttempted)
+            return $"No perk this time ({TierName(outcome.BestTier)} · {outcome.RollChance:P0} chance).";
+        return "no roll";
+    }
+
+    // The notification lines for a commit attempt, in display order.
+    //
+    // Both commit entry points render through here — the in-world commit button
+    // (UpgradeForgeBehavior.DoCommit) and the !forgecommit dev command. They
+    // previously carried separate copies of this switch which had already drifted
+    // apart on every single arm ("This module is already at L10." against
+    // "Cannot commit: module already at L10."), which is exactly the vocabulary
+    // split this module exists to prevent.
+    //
+    // `relicsRemaining` is the Forge's relic count AFTER the attempt. Nothing is
+    // consumed on a failure, so on those arms it is equally the count that was
+    // there all along — which is what InsufficientRelics needs to report.
+    public static IReadOnlyList<string> DescribeCommit(
+        CommitOutcome outcome, int currentLevel, int relicsRemaining)
+    {
+        switch (outcome.Status)
+        {
+            case CommitStatus.Ok:
+                var lines = new List<string>(2)
+                {
+                    $"Upgrade committed: L{outcome.NewLevel} " +
+                    $"(consumed {Plural(outcome.RelicsConsumed, "relic")}, {relicsRemaining} remaining). " +
+                    "Rebuild the module to apply.",
+                };
+                // A commit with no eligible slot shouldn't announce a non-event,
+                // so an unattempted roll stays silent.
+                if (outcome.RolledPerk != null || outcome.RollAttempted)
+                    lines.Add(DescribePerkResult(outcome));
+                return lines;
+
+            case CommitStatus.NoModule:
+                return new[] { "Load a deconstructed module box into the Forge first." };
+
+            case CommitStatus.NoRelics:
+                return new[] { "Insert relics into the tubes before committing." };
+
+            case CommitStatus.AlreadyAtMax:
+                return new[] { $"This module is already at L{ForgeCostCurve.MaxLevel}." };
+
+            case CommitStatus.InsufficientRelics:
+                return new[]
+                {
+                    $"Next level requires {ForgeCostCurve.CostForNextLevel(currentLevel)} relics; " +
+                    $"the Forge holds {relicsRemaining}.",
+                };
+
+            case CommitStatus.MissingViewId:
+                return new[] { "Forge error: module box has no network identity." };
+
+            case CommitStatus.InvalidModuleLevel:
+                return new[] { "Only Mark III modules can be forged — upgrade it with module chips first." };
+
+            default:
+                return System.Array.Empty<string>();
+        }
     }
 }

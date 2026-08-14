@@ -143,4 +143,103 @@ public class ForgeLabelsTests
         Assert.DoesNotContain("%", body);
         Assert.DoesNotContain("chance", body);
     }
+
+    // ---- Plural ----------------------------------------------------------
+
+    [Theory]
+    [InlineData(0, "0 relics")]
+    [InlineData(1, "1 relic")]
+    [InlineData(2, "2 relics")]
+    public void Plural_only_singularises_exactly_one(int count, string expected) =>
+        Assert.Equal(expected, ForgeLabels.Plural(count, "relic"));
+
+    // ---- DescribeCommit --------------------------------------------------
+    //
+    // The in-world commit button and the !forgecommit dev command used to hold
+    // separate copies of this switch, which had drifted apart on every arm. These
+    // tests pin the single vocabulary so the copies can't come back.
+    //
+    // Perk-bearing outcomes aren't constructed here: CommitOutcome.Success needs a
+    // PerkDefinition, whose payload type touches StatType — the same static-init
+    // limitation that skips the perk-pool tests. The no-perk and roll-failed
+    // branches are covered, which is every branch that doesn't read a perk's name.
+
+    private static CommitOutcome OkOutcome(int newLevel, int consumed) =>
+        CommitOutcome.Success(newLevel, consumed, RelicTier.Common,
+            rolledPerk: null, targetSlot: -1, rollChance: 0f, rollAttempted: false);
+
+    [Fact]
+    public void DescribeCommit_success_reports_level_consumption_and_remainder()
+    {
+        var lines = ForgeLabels.DescribeCommit(OkOutcome(7, 2), currentLevel: 5, relicsRemaining: 1);
+
+        Assert.Single(lines);
+        Assert.Contains("L7", lines[0]);
+        Assert.Contains("consumed 2 relics", lines[0]);
+        Assert.Contains("1 remaining", lines[0]);
+        // The upgrade only lands when the box is rebuilt into a socket; a commit
+        // line that omits this reads as though the module is already improved.
+        Assert.Contains("Rebuild", lines[0]);
+    }
+
+    [Fact]
+    public void DescribeCommit_success_singularises_a_one_relic_commit() =>
+        Assert.Contains("consumed 1 relic,",
+            ForgeLabels.DescribeCommit(OkOutcome(4, 1), 3, 0)[0]);
+
+    // A commit with no eligible slot must not announce a non-event.
+    [Fact]
+    public void DescribeCommit_success_stays_silent_when_no_roll_was_attempted() =>
+        Assert.Single(ForgeLabels.DescribeCommit(OkOutcome(7, 2), 5, 0));
+
+    // A roll that fired and lost IS worth reporting — the crew spent relics on it.
+    [Fact]
+    public void DescribeCommit_success_reports_a_failed_roll()
+    {
+        var outcome = CommitOutcome.Success(7, 2, RelicTier.Rare,
+            rolledPerk: null, targetSlot: -1, rollChance: 0.4f, rollAttempted: true);
+
+        var lines = ForgeLabels.DescribeCommit(outcome, 5, 0);
+
+        Assert.Equal(2, lines.Count);
+        Assert.Contains("No perk this time", lines[1]);
+        Assert.Contains("Rare", lines[1]);
+    }
+
+    [Fact]
+    public void DescribeCommit_insufficient_relics_names_the_cost_and_the_holding()
+    {
+        // L3→L4 costs 1 on the default curve, so hold 0 to fail it.
+        var lines = ForgeLabels.DescribeCommit(
+            CommitOutcome.Failure(CommitStatus.InsufficientRelics),
+            currentLevel: ForgeCostCurve.MinLevel, relicsRemaining: 0);
+
+        Assert.Single(lines);
+        Assert.Contains($"requires {ForgeCostCurve.CostForNextLevel(ForgeCostCurve.MinLevel)} relics", lines[0]);
+        Assert.Contains("holds 0", lines[0]);
+    }
+
+    // The max level is a const on the cost curve; the old copies of this message
+    // hardcoded "L10" in two places instead.
+    [Fact]
+    public void DescribeCommit_already_at_max_reads_the_cap_from_the_curve() =>
+        Assert.Contains($"L{ForgeCostCurve.MaxLevel}",
+            ForgeLabels.DescribeCommit(CommitOutcome.Failure(CommitStatus.AlreadyAtMax), 10, 0)[0]);
+
+    // Every status must produce exactly one non-empty line, or a commit can fail
+    // in-world with no feedback at all.
+    [Theory]
+    [InlineData(CommitStatus.NoModule)]
+    [InlineData(CommitStatus.NoRelics)]
+    [InlineData(CommitStatus.AlreadyAtMax)]
+    [InlineData(CommitStatus.InvalidModuleLevel)]
+    [InlineData(CommitStatus.InsufficientRelics)]
+    [InlineData(CommitStatus.MissingViewId)]
+    public void DescribeCommit_every_failure_says_something(CommitStatus status)
+    {
+        var lines = ForgeLabels.DescribeCommit(CommitOutcome.Failure(status), 5, 2);
+
+        Assert.Single(lines);
+        Assert.False(string.IsNullOrWhiteSpace(lines[0]));
+    }
 }

@@ -325,7 +325,7 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         if (!ShouldBroadcast) return;
         ModMessage.Send(MyPluginInfo.PLUGIN_GUID,
             ModMessage.GetIdentifier(typeof(CommitResultMessage)),
-            ReceiverGroup.Others, SnapshotPayload(boxViewId, snap, relicsConsumed), reliable: true);
+            ReceiverGroup.Others, snap.ToPayload(boxViewId, relicsConsumed), reliable: true);
         BepinPlugin.Log.LogDebug($"[Net] → sent commit result box={boxViewId} L{snap.Level} " +
             $"({DescribeOverlay(snap.PerkSlots, snap.Burdens)}, consumed {relicsConsumed}) to all.");
     }
@@ -334,25 +334,11 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
     internal static void ApplyCommitResult(object[] a)
     {
         if (IsAuthority) return; // host already persisted inline
-        if (a == null || a.Length < 5) return;
+        if (!ForgeSnapshot.TryFromPayload(a, out int boxViewId, out var snap, out int relicsConsumed)) return;
 
-        int boxViewId = Convert.ToInt32(a[0]);
-        int level = Convert.ToInt32(a[1]);
-        var perkSlots = a[2] as string[] ?? Array.Empty<string>();
-        var burdensInt = a[3] as int[] ?? Array.Empty<int>();
-        int relicsConsumed = Convert.ToInt32(a[4]);
-
-        var slots = new string[perkSlots.Length];
-        for (int i = 0; i < perkSlots.Length; i++)
-            slots[i] = string.IsNullOrEmpty(perkSlots[i]) ? null : perkSlots[i]; // "" ← empty slot
-
-        var burdens = new BurdenType[burdensInt.Length];
-        for (int i = 0; i < burdensInt.Length; i++)
-            burdens[i] = (BurdenType)burdensInt[i];
-
-        ForgeStateStore.SaveSnapshot(boxViewId, ForgeSnapshot.Create(level, slots, burdens));
-        BepinPlugin.Log.LogDebug($"[Net] ← applied commit result box={boxViewId} L{level} " +
-            $"({DescribeOverlay(slots, burdens)}, consumed {relicsConsumed}).");
+        ForgeStateStore.SaveSnapshot(boxViewId, snap);
+        BepinPlugin.Log.LogDebug($"[Net] ← applied commit result box={boxViewId} L{snap.Level} " +
+            $"({DescribeOverlay(snap.PerkSlots, snap.Burdens)}, consumed {relicsConsumed}).");
 
         UpgradeForgeBehavior.FindByBoxViewId(boxViewId)?.OnNetworkCommitResult(relicsConsumed);
     }
@@ -375,15 +361,6 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         return $"perks={filled}, burdens={burdenText}";
     }
 
-    private static object[] SnapshotPayload(int boxViewId, ForgeSnapshot snap, int relicsConsumed)
-    {
-        var perks = new string[snap.PerkSlots.Count];
-        for (int i = 0; i < snap.PerkSlots.Count; i++) perks[i] = snap.PerkSlots[i] ?? ""; // null → "" for transport
-        var burdens = new int[snap.Burdens.Count];
-        for (int i = 0; i < snap.Burdens.Count; i++) burdens[i] = (int)snap.Burdens[i];
-        return new object[] { boxViewId, snap.Level, perks, burdens, relicsConsumed };
-    }
-
     // Host → joiner: every upgraded box's overlay so their modules reconstruct
     // with the right level/perks/burdens.
     private static void SendOverlaySnapshotTo(Player player)
@@ -394,7 +371,7 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         foreach (var kv in all)
             ModMessage.Send(MyPluginInfo.PLUGIN_GUID,
                 ModMessage.GetIdentifier(typeof(CommitResultMessage)),
-                player, SnapshotPayload(kv.Key, kv.Value, 0), reliable: true);
+                player, kv.Value.ToPayload(kv.Key, 0), reliable: true);
         BepinPlugin.Log.LogDebug($"[Net] → sent overlay snapshot ({all.Count} boxes) to joiner #{player.ActorNumber}.");
     }
 
@@ -424,7 +401,7 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
 
         ModMessage.Send(MyPluginInfo.PLUGIN_GUID,
             ModMessage.GetIdentifier(typeof(ModuleOverlayMessage)),
-            ReceiverGroup.Others, SnapshotPayload(moduleViewId, snap, 0), reliable: true);
+            ReceiverGroup.Others, snap.ToPayload(moduleViewId, 0), reliable: true);
         BepinPlugin.Log.LogDebug($"[Net] → sent module overlay module={moduleViewId} L{snap.Level} " +
             $"({DescribeOverlay(snap.PerkSlots, snap.Burdens)}) to all.");
     }
@@ -450,19 +427,13 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         foreach (var (viewId, snap) in all)
             ModMessage.Send(MyPluginInfo.PLUGIN_GUID,
                 ModMessage.GetIdentifier(typeof(ModuleOverlayMessage)),
-                player, SnapshotPayload(viewId, snap, 0), reliable: true);
+                player, snap.ToPayload(viewId, 0), reliable: true);
         BepinPlugin.Log.LogDebug($"[Net] → sent module overlays ({all.Count}) to joiner #{player.ActorNumber}.");
     }
 
     internal static void ApplyIncomingModuleOverlay(object[] a)
     {
-        if (a == null || a.Length < 4) return;
-
-        int moduleViewId = Convert.ToInt32(a[0]);
-        var snap = ForgeSnapshot.Create(
-            Convert.ToInt32(a[1]),
-            a[2] as string[] ?? Array.Empty<string>(),
-            ToBurdens(a[3] as int[]));
+        if (!ForgeSnapshot.TryFromPayload(a, out int moduleViewId, out var snap, out _)) return;
 
         var pv = PhotonView.Find(moduleViewId);
         var module = pv != null ? pv.GetComponent<CellModule>() : null;
@@ -489,14 +460,6 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         ForgeStateStore.GetOrCreate(module).ApplySnapshot(snap);
         BepinPlugin.Log.LogDebug($"[Net] ← applied buffered module overlay module={pv.ViewID} L{snap.Level} " +
             $"({DescribeOverlay(snap.PerkSlots, snap.Burdens)}).");
-    }
-
-    private static List<BurdenType> ToBurdens(int[] raw)
-    {
-        var list = new List<BurdenType>();
-        if (raw != null)
-            foreach (var b in raw) list.Add((BurdenType)b);
-        return list;
     }
 
     // ---- forge docking (Phase 8-E) ----------------------------------------

@@ -277,8 +277,8 @@ public class UpgradeForgeBehavior : MonoBehaviour
 
         BepinPlugin.Log.LogInfo(
             $"[Forge] Committed L{currentLevel}→L{outcome.NewLevel} on ViewID={viewId} " +
-            $"(consumed {outcome.RelicsConsumed} relic{(outcome.RelicsConsumed == 1 ? "" : "s")}, " +
-            $"tier={outcome.BestTier}, perk={DescribePerkResult(outcome)})");
+            $"(consumed {ForgeLabels.Plural(outcome.RelicsConsumed, "relic")}, " +
+            $"tier={outcome.BestTier}, perk={ForgeLabels.DescribePerkResult(outcome)})");
 
         LogPerkCausalChain(outcome, relicNames);
         LogBurdenCausalChain(outcome, relicCursedBurden);
@@ -321,7 +321,8 @@ public class UpgradeForgeBehavior : MonoBehaviour
         int before = _relics.Count;
         ConsumeOwnedRelics(relicsConsumed);
         Messaging.Notification(
-            $"Upgrade committed by the host (consumed {before - _relics.Count} relic{(before - _relics.Count == 1 ? "" : "s")}). Rebuild the module to apply.");
+            $"Upgrade committed by the host (consumed {ForgeLabels.Plural(before - _relics.Count, "relic")}). " +
+            "Rebuild the module to apply.");
     }
 
     // Phase 8-C — find the forge behaviour operating a given module box (by its
@@ -485,21 +486,11 @@ public class UpgradeForgeBehavior : MonoBehaviour
             return;
         }
 
-        float chance = TerminusConfig.BurdenApplicationChance?.Value ?? 0.75f;
+        float chance = TerminusConfig.BurdenChance;
         BepinPlugin.Log.LogInfo(
             outcome.AppliedBurden != BurdenType.None
                 ? $"[Forge] Burden: cursed x{cursedCount} consumed, roll {chance:P0} → APPLIED {outcome.AppliedBurden}."
                 : $"[Forge] Burden: cursed x{cursedCount} consumed, roll {chance:P0} → none (roll failed).");
-    }
-
-    // Human-readable perk-roll summary used by DoCommit for the notification line.
-    public static string DescribePerkResult(CommitOutcome outcome)
-    {
-        if (outcome.RolledPerk != null)
-            return $"Perk gained in slot {outcome.TargetSlot + 1}: {outcome.RolledPerk.Name} — {outcome.RolledPerk.Description}!";
-        if (outcome.RollAttempted)
-            return $"No perk this time ({outcome.BestTier} · {outcome.RollChance:P0} chance).";
-        return "no roll";
     }
 
     // ---- In-world interactables ----------------------------------------
@@ -720,32 +711,8 @@ public class UpgradeForgeBehavior : MonoBehaviour
         }
 
         var outcome = TryCommit();
-        switch (outcome.Status)
-        {
-            case CommitStatus.Ok:
-                Messaging.Notification($"Upgrade committed: L{outcome.NewLevel} (consumed {outcome.RelicsConsumed} relic{(outcome.RelicsConsumed == 1 ? "" : "s")}). Rebuild the module to apply.");
-                if (outcome.RolledPerk != null || outcome.RollAttempted)
-                    Messaging.Notification(DescribePerkResult(outcome));
-                break;
-            case CommitStatus.NoModule:
-                Messaging.Notification("Load a deconstructed module box into the Forge first.");
-                break;
-            case CommitStatus.NoRelics:
-                Messaging.Notification("Insert relics into the tubes before committing.");
-                break;
-            case CommitStatus.AlreadyAtMax:
-                Messaging.Notification("This module is already at L10.");
-                break;
-            case CommitStatus.InsufficientRelics:
-                Messaging.Notification($"Next level requires {ForgeCostCurve.CostForNextLevel(CurrentBoxLevel)} relics; the Forge holds {RelicCount}.");
-                break;
-            case CommitStatus.MissingViewId:
-                Messaging.Notification("Forge error: module box has no network identity.");
-                break;
-            case CommitStatus.InvalidModuleLevel:
-                Messaging.Notification("Only Mark III modules can be forged — upgrade it with module chips first.");
-                break;
-        }
+        foreach (var line in ForgeLabels.DescribeCommit(outcome, CurrentBoxLevel, RelicCount))
+            Messaging.Notification(line);
     }
 
     // Hot-reload teardown (ScriptEngine): a reloaded assembly brings its OWN

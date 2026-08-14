@@ -3,7 +3,6 @@ using HarmonyLib;
 using Photon.Pun;
 using ResourceAssets;
 using VoidCrewTerminus.Escalation;
-using VoidCrewTerminus.Forge;
 
 namespace VoidCrewTerminus.Patches;
 
@@ -26,16 +25,13 @@ internal static class AIDirectorSetTargetIntensityPatch
 
     internal static int ScaleForCurrentScalar(int n)
     {
-        // Warm-up gate: pass scenario values through unchanged until the
-        // configured boss threshold has been reached this run.
-        if (!SectorEscalation.IsScalingActive) return n;
-
-        int scalar = EnemyScalingHelpers.CapScalar(
-            ForgeMeterController.DifficultyScalar, TerminusConfig.EscalationScalarCap?.Value ?? 10);
-        float rate = TerminusConfig.EscalationDensityScalarPerJump?.Value ?? 0.12f;
-        int scaled = EnemyScalingHelpers.ScaleIntensity(n, scalar, rate);
+        // ScaleDensity is a no-op while dormant, so scenario values pass through
+        // unchanged until the configured boss threshold has been reached this run.
+        var escalation = EscalationIntensity.Current;
+        int scaled = escalation.ScaleDensity(n);
         if (scaled != n)
-            BepinPlugin.Log.LogDebug($"[Escalation] Density {n} → {scaled} (scalar {scalar}, rate {rate}).");
+            BepinPlugin.Log.LogDebug(
+                $"[Escalation] Density {n} → {scaled} (scalar {escalation.Scalar}, rate {escalation.DensityRate}).");
         return scaled;
     }
 }
@@ -94,21 +90,16 @@ internal static class SpawnerInitIntensityScalingPatch
         try
         {
             if (__instance == null) return;
-            if (!SectorEscalation.IsScalingActive) return;
             if (!PhotonNetwork.IsMasterClient) return;
 
-            int scalar = EnemyScalingHelpers.CapScalar(
-                ForgeMeterController.DifficultyScalar, TerminusConfig.EscalationScalarCap?.Value ?? 10);
-            if (scalar <= 0) return;
-
-            float rate = TerminusConfig.EscalationDensityScalarPerJump?.Value ?? 0.12f;
+            var escalation = EscalationIntensity.Current;
+            if (!escalation.AffectsEnemies) return;
 
             int oldMax = MaxRef(__instance);
             int oldTarget = TargetRef(__instance);
 
-            int newMax = EnemyScalingHelpers.ScaleIntensity(oldMax, scalar, rate);
-            int newTarget = System.Math.Min(
-                EnemyScalingHelpers.ScaleIntensity(oldTarget, scalar, rate), newMax);
+            int newMax = escalation.ScaleDensity(oldMax);
+            int newTarget = System.Math.Min(escalation.ScaleDensity(oldTarget), newMax);
 
             MaxRef(__instance) = newMax;
             TargetRef(__instance) = newTarget;
@@ -116,7 +107,7 @@ internal static class SpawnerInitIntensityScalingPatch
             if (newMax != oldMax || newTarget != oldTarget)
                 BepinPlugin.Log.LogDebug(
                     $"[Escalation] Spawner intensity {oldTarget}/{oldMax} → {newTarget}/{newMax} " +
-                    $"(scalar {scalar}, rate {rate}).");
+                    $"(scalar {escalation.Scalar}, rate {escalation.DensityRate}).");
         }
         catch (System.Exception e)
         {

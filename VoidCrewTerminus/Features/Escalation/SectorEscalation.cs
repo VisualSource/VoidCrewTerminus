@@ -41,7 +41,7 @@ public static class SectorEscalation
     // Whether any escalation should apply right now. Read by every escalation
     // patch/hook before it does anything.
     public static bool IsScalingActive =>
-        BossesDefeated >= (TerminusConfig.EscalationBossActivationThreshold?.Value ?? 2);
+        BossesDefeated >= TerminusConfig.BossActivationThreshold;
 
     public static void ResetForRun() => BossesDefeated = 0;
 
@@ -73,9 +73,7 @@ public static class SectorEscalation
     {
         if (entries == null || entries.Count == 0) return;
 
-        int rareUnlock = TerminusConfig.EscalationRareUnlockScalar?.Value ?? 3;
-        int legendaryUnlock = TerminusConfig.EscalationLegendaryUnlockScalar?.Value ?? 6;
-        var maxAllowed = MaxAllowedTier(scalar, bossesDefeated, rareUnlock, legendaryUnlock);
+        var maxAllowed = MaxAllowedTier(scalar, bossesDefeated);
 
         // Optimisation and correctness: at max scalar nothing is ever downgraded,
         // so skip the walk (and skip triggering any RelicTierData lookups) entirely.
@@ -116,6 +114,14 @@ public static class SectorEscalation
             tiers[i] = maxAllowed;
         }
     }
+
+    // Ceiling at the configured unlock thresholds. The four-argument overload
+    // below takes them explicitly so the tier table can be tested without config
+    // bound; production callers should use this one so the thresholds are read
+    // from a single place.
+    public static Loot.RelicTier MaxAllowedTier(int scalar, int bossesDefeated) =>
+        MaxAllowedTier(scalar, bossesDefeated,
+            TerminusConfig.RareUnlockScalar, TerminusConfig.LegendaryUnlockScalar);
 
     public static Loot.RelicTier MaxAllowedTier(int scalar, int bossesDefeated, int rareUnlockScalar, int legendaryUnlockScalar)
     {

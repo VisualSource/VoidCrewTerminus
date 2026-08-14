@@ -6,7 +6,6 @@ using Gameplay.Utilities;
 using HarmonyLib;
 using UnityEngine;
 using VoidCrewTerminus.Escalation;
-using VoidCrewTerminus.Forge;
 
 namespace VoidCrewTerminus.Patches;
 
@@ -27,18 +26,16 @@ internal static class EnemyHealthScalingPatch
     {
         try
         {
-            if (!SectorEscalation.IsScalingActive) return;
-
-            int scalar = EnemyScalingHelpers.CapScalar(
-                ForgeMeterController.DifficultyScalar, TerminusConfig.EscalationScalarCap?.Value ?? 10);
-            if (scalar <= 0) return;
+            var escalation = EscalationIntensity.Current;
+            if (!escalation.AffectsEnemies) return;
 
             var parent = __instance?.GetParentObject();
             if (parent == null) return;
             if (!EnemyScalingHelpers.IsEnemyFaction(parent.Faction)) return;
 
-            float rate = TerminusConfig.EscalationStatScalarPerJump?.Value ?? 0.05f;
-            float amount = scalar * rate;
+            // A zero/negative rate is a separate no-op from a zero scalar —
+            // registering a zero-value StatMod would attach a modifier for nothing.
+            float amount = escalation.StatBonus;
             if (amount <= 0f) return;
 
             var mods = new List<StatMod>
@@ -70,11 +67,9 @@ internal static class EnemyDamageScalingPatch
         try
         {
             if (source == null || __instance == null) return;
-            if (!SectorEscalation.IsScalingActive) return;
 
-            int scalar = EnemyScalingHelpers.CapScalar(
-                ForgeMeterController.DifficultyScalar, TerminusConfig.EscalationScalarCap?.Value ?? 10);
-            if (scalar <= 0) return;
+            var escalation = EscalationIntensity.Current;
+            if (!escalation.AffectsEnemies) return;
 
             var target = __instance.GetParentObject();
             if (target == null) return;
@@ -84,8 +79,7 @@ internal static class EnemyDamageScalingPatch
             if (!EnemyScalingHelpers.IsEnemyFaction(source.Faction)) return;
             if (!EnemyScalingHelpers.IsPlayerFaction(target.Faction)) return;
 
-            float rate = TerminusConfig.EscalationStatScalarPerJump?.Value ?? 0.05f;
-            __result *= (1f + scalar * rate);
+            __result *= escalation.StatMultiplier;
         }
         catch (System.Exception e)
         {
