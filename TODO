@@ -185,6 +185,40 @@ In Progress:
                     the next 2-client run can diff burdens directly.
                  [] STILL OPEN: T6 overlay join-push — nothing was installed at join time.
                  [] LIMITATIONS noted: overlay-on-join race (snapshot vs module reconstruct), operator notification basic (full detail+causal logs on host), one-operator-per-commit (docking is local), consume needs operator ownership
+                ✔ 8-REFACTOR: net layer moved behind a transport port @done(26-08-14) (CODE ONLY —
+                   NOT RE-VERIFIED IN GAME. Deep-module pass, no feature change intended.
+                   New IForgeTransport with OfflineTransport / PunTransport adapters; all 11
+                   sends and every authority read now go through it, so PhotonNetwork appears
+                   in exactly one type. The four gate rules (IsAuthority / ShouldBroadcast /
+                   ShouldRelay / targeted-send) are stated together and were checked
+                   ALGEBRAICALLY equivalent to the old PhotonNetwork expressions, not just by
+                   eye: ShouldBroadcast expands to (!InRoom||IsMaster) && InRoom && Count>1,
+                   which collapses to the original InRoom && IsMaster && Count>1.
+                   Bonus: the Awake hazard from 8-REGRESSION is now STRUCTURAL, not a rule to
+                   remember — the transport starts as OfflineTransport, which references nothing
+                   from Photon, so PunTransport isn't loaded until a room event fires.
+                   Also: snapshot payloads now encode in ONE place (ForgeSnapshot.ToPayload /
+                   TryFromPayload) instead of three hand-rolled copies in ForgeNetSync; commit
+                   status text now formats in ONE place (ForgeLabels.DescribeCommit) instead of
+                   two copies that had already drifted; EscalationIntensity.Current replaces a
+                   4-line preamble that 5 sites each carried; config defaults now live in one
+                   const per entry (the scalar cap default alone had SIX copies).
+                   77 new xunit tests, 225 passing — first coverage the net layer has ever had.
+                   TWO BUGS FIXED: _pendingModuleOverlay was never cleared on room leave (only
+                   _pendingCursed was), so a stale overlay could survive a room change and be
+                   applied to whatever unrelated object inherited the ViewID; and the
+                   module-overlay decode didn't normalise empty perk slots ""→null the way the
+                   commit-result decode always did.
+                   ONE REAL RUNTIME DIFFERENCE, highest re-test risk: targeted late-joiner
+                   sends used to receive Photon's Player object directly, and now take an actor
+                   number the adapter resolves via CurrentRoom.GetPlayer(actorNumber,false).
+                   If that lookup ever returns null the push SILENTLY no-ops, which would look
+                   exactly like a joiner getting a clean slate → T6 is the test for it.
+                   Test-plan status table in handoff/phase-8-test-plan.md was reconciled against
+                   this file at the same time — it used to say "NONE verified", which was stale.)
+                 [] RE-RUN T1-T7 after 8-REFACTOR — unit tests prove the gate algebra, nothing
+                    proves a message crosses a real Photon room. Priority order: T6 (the
+                    GetPlayer change), then T4/T5 (snapshot payload path), then T1.
         [] 8-* full-run 2-client soak once A/B/C individually verified
         Cleanup:
                 UI pass (grilled 26-07-18; one patch point for all 3 hover surfaces):
@@ -325,25 +359,31 @@ In Progress:
 
 Want:
 	- new enemies
-              - lech 
+            - lech 
                  launched via missiles, attaches to ship add case damage to ship until removed my a player like star wars buzz driods
                  small robotic spider 
+            - boss leech queen
         - more types of enemies
               * different styles of hollow dreadnaughts, 
                  maybe different attacks?
-        - new leveling system for weapons (or ship modules in general)
+        ✔ new leveling system for weapons (or ship modules in general) @done(26-08-14 09:09)
             * lean into the roguelike aspects of the game
        	    * levels 4-10 use relics to upgrade
-        - disable replication/copying of relics in Fabricator ui
+        ✔ disable replication/copying of relics in Fabricator ui @done(26-08-14 09:09)
 
 Maybe:
 	- player class
-        - more env hazard
-        - ship layouts (same sizes just different ships)
-        - difficulty levels
-        - more points of interest
-        - boss leech queen
-             - power drain attack
-
-        - interdiction event when leech on ship, leech leech pawn mini boss 
-        - void recon sound track
+   - more env hazard
+   - ship layouts (same sizes just different ships)
+   - difficulty levels
+   - more points of interest
+   - power drain attack
+   - interdiction event when leech on ship, leech leech pawn mini boss 
+   - void recon sound track
+   - small aux ship
+      - small player fighter ship that docks to a custom module on the exterior of the ship (LIKE start wars phatom on B Wing)
+      - can only damage enemy fighters
+      - ejection on ship being destroyed? (player can wear jet pack?)
+      - can be left behind
+      - powered by relics?
+      - must buy ship?

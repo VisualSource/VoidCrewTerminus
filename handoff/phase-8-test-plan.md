@@ -2,8 +2,34 @@
 
 **Project:** VoidCrewTerminus
 **Covers:** 8-A meter/escalation state + alloy hop · 8-B cursed marker sync · 8-C authoritative commit + overlay.
-**Status:** Code complete for all three. **NONE verified — Phase 8 is invisible without 2 clients.**
-**Date:** 2026-07-17 · net layer refactored 2026-08-14 — see [Re-verification required](#-re-verification-required--net-layer-refactored-2026-08-14) before treating any result as current.
+**Status:** Code complete for all three. **Partially verified — see the status table below.**
+**Date:** 2026-07-17 · results reconciled from `TODO` 2026-08-14 · net layer refactored 2026-08-14 — see [Re-verification required](#-re-verification-required--net-layer-refactored-2026-08-14).
+
+## Status at a glance (reconciled from `TODO` phase 8, 2026-08-14)
+
+The original "NONE verified" header was stale: the 26-07-18 and 26-07-19 2-client
+sessions produced real evidence for four of the seven, all recorded in `TODO`
+under `phase 8`. Reproduced here so this plan and the TODO agree.
+
+| Test | Status | Evidence / blocker (see `TODO` phase 8 for full detail) |
+|---|---|---|
+| **T1** state converge | ✔ **verified** 26-07-19 | Non-default values crossed both ways: host `→ sent {scalar=2,bosses=2}` / client `← applied {scalar=2,bosses=2}`. The 26-07-18 run proved only *transport* (every value was a default, so an identical log would appear if nothing propagated) — 26-07-19 closed that gap. |
+| T1 step 3 — client alloy feed | ☐ open | Never exercised in any recorded session. |
+| **T2** live progression + loot determinism | ~ **partial** 26-07-18 | Determinism half cleared: both machines independently produced seed `-1434881419` and identical `C7/R17/L1 → C25/R0/L0`, so state arrived before loot setup. **But that was the scalar=0 trivial case** — needs one run with escalation active. Live host-award tracking (step 1) not recorded. |
+| **T3** cursed live sync | ✔ **verified** 26-07-18 | `viewID=2043 (RandomShutoff)` sent and applied — matching ViewID *and* burden type, non-trivial data on both sides. |
+| **T4** client-operated commit | ☐ open | No `→ sent commit request` in either log. Was blocked by the 8-D placer-local bug — **that bug is now fixed, so this is retestable and is the untested half of 8-C.** |
+| **T5** host commit — level/perk half | ✔ **verified** 26-07-18 | `box=2055 L3→L4` sent and applied. Bonus proof the client *rendered* it: the client logged `[Forge/UI] raw vanilla header`, which only fires when `HasOverlay` is true. |
+| T5 — cursed→burden half | ☐ open | The payload always carried burdens, but the log lines printed only level+consumed, so it was unverifiable. `DescribeOverlay` was added 26-07-18 — both sides now print `(perks=N, burdens=X+Y)`, so this is directly diffable on the next run. |
+| **T6** late joiner | ☐ open | The joiner arrived before any cursed relic or installed forged module existed, so `SendCursedSnapshotTo` / the overlay push never ran. Needs a join **after** a curse spawns and a module is installed. |
+| **T7** host migration | ☐ open | The state-fidelity prerequisite is cleared (see T1), but the migration scenario itself — host leaves, survivor becomes master, escalation keeps advancing — has not been run. `TODO` records this as "T1/T7 state sync verified"; that covers the *sync*, not the *migration*. |
+
+Also open in `TODO` but with no test here: **8-D** verification (client sees forge
+hit targets; client sees Mk/perks/burdens on a host-placed module; client-placed
+module shows on host; late joiner sees installed forged modules), **8-E** docking
+sync, the **burden double-exec** suspicion (both machines logged `Core_S shutoff
+applied` for one module — a one-shot `shutoff schedule OWNED here` LogDebug was
+added to name the desync), and the **known gap** that docks are not in the
+late-joiner push at all.
 
 7 tests. Supersedes the per-sub-phase `phase-8a/b/c` plans (kept in git history if you need the granular breakdown).
 
@@ -46,12 +72,17 @@ What changed underneath, in risk order:
    modules must come up **vanilla**, with no `← applied buffered module overlay`
    in the log.
 
-### Not covered by any test below (pre-existing gap, now higher risk)
+### 8-D / 8-E — tracked in `TODO`, no test case here (now higher risk)
 
 This plan predates **8-D** (installed-module overlay) and **8-E** (forge docking
-sync), and both are driven by the *relay* gate — the one rule that fires
-off-authority, because the player who placed a module or docked a relic may be a
-client. That gate is unit-tested now, but its end-to-end path never has been:
+sync). `TODO` already carries both as open verification items — 8-D as
+"VERIFY 2-CLIENT: client sees forge hit targets…", 8-E as CODE ONLY from the
+26-07-19 session — but neither has a numbered test here.
+
+They matter more after the refactor because both are driven by the *relay* gate,
+the one rule that fires off-authority (the player who placed a module or docked a
+relic may be a client). That gate is unit-tested now; its end-to-end path never
+has been. Concrete checks, to promote into T8/T9:
 
 - **8-D:** a **client** places a forged build box into a socket → every other
   player (host included) sees the module at the forged level/perk, not vanilla.
