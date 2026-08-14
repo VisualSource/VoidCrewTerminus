@@ -362,7 +362,48 @@ Want:
             - lech 
                  launched via missiles, attaches to ship add case damage to ship until removed my a player like star wars buzz driods
                  small robotic spider 
-            - boss leech queen
+            - boss leech queen — RFC + design DONE @26-08-14, NOT SCHEDULED
+                 (docs/leech-queen-rfc.html + docs/leech-queen-design.html; vocabulary in
+                  handoff/CONTEXT.md under "Leech Queen boss". Grilled 26-08-14.)
+                 A 4th Pilgrimage boss. Stationary, custom model on a vanilla boss skeleton,
+                 custom attack set. Identity is CREW ALLOCATION, not damage: projectile
+                 volleys (vanilla delivery, dodgeable + interceptable) whose impacts trigger
+                 a module shutoff at the point of contact, plus a swarm whose only job is to
+                 occupy the gunners so nobody is free to go fix it.
+                 ✔ NOT dependent on the leech encounter — standalone. Optional "Brood Path"
+                    parasite volley only if the leech runtime ever ships, and it delegates
+                    ALL spawn arbitration to LeechEncounterController (never its own cap).
+                 ✔ addition, never a replacement — extra BossOption competing in the roll,
+                    gated on SectorEscalation.IsScalingActive, ~25% weight. Eligible in every
+                    live solar system, reusing that system's boss sector. A run can miss her.
+                 ✔ hit effect is a TRIGGER of the existing RandomShutoff effect, not a new
+                    affliction. No duration, no stacking, no state. Crew fixes it exactly as
+                    they would a normal burden shutoff. Do NOT write into ForgeSnapshot.Burdens
+                    — WithBurdenAdded is idempotent per type and permanent per run, so the
+                    attack would no-op within seconds and cripple the ship for the whole run.
+                 ✔ weak points come free — CriticalDestroyableComponentController already
+                    kills the boss when all criticals die, and DestroyableComponent.OnKilled
+                    is public. Each critical destroyed permanently silences one attack.
+                    3 HP-driven phases ADD attacks; criticals SUBTRACT them. Degrades to
+                    HP-only if the chosen skeleton has no criticals.
+                 ✔ reward: vanilla boss drops + a CHANCE at a Legendary Cursed relic with a
+                    Queen signature perk. Mandatory, not flavour — her gate needs 2 bosses
+                    already dead, and 2 boss defeats already unlock the Legendary ceiling, so
+                    she can NEVER unlock a tier. Without a distinct drop she's a harder fight
+                    for identical loot plus a +1 scalar bump, and players learn to avoid her.
+                 ⚠ BLOCKER: needs the ObjectiveData→spawned-ship link deferred at line 18.
+                    Nothing else starts until that's solved. Closing it also finally enables
+                    boss exclusion from EnemyStatScalingPatch.
+                 ⚠ NpcAI.Abilities caps at 16 (NpcAbilitiesActiveValuesMask packs one bit per
+                    index into a short), and Write/ReadAbilitiesData are POSITIONAL against a
+                    shared PhotonStream — one extra/missing ability corrupts every read after
+                    it. Registration order must be a fixed literal sequence, and the feature
+                    switch must be host-broadcast, never a per-player config read.
+                 ⚠ prereq refactor: lift the shutoff effect out of RandomShutoffBehavior
+                    (RequestPowerOff is private, and the component only exists on cursed-relic
+                    burdened modules) into a shared helper, so the burden timer and the Queen's
+                    impact are two triggers of one effect. Owner-authoritative, not host —
+                    PowerDrain.IsOn.RequestChange is owner-owned and vanilla-replicated.
         - more types of enemies
               * different styles of hollow dreadnaughts, 
                  maybe different attacks?

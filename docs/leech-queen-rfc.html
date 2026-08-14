@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Leech Queen &mdash; RFC</title>
+  <style>
+    :root {
+      --bg:      #0f1117;
+      --surface: #181c27;
+      --border:  #2a2f42;
+      --accent:  #5c8aff;
+      --accent2: #9b59f5;
+      --text:    #d4d8e8;
+      --muted:   #7a80a0;
+      --code-bg: #12151f;
+      --tag-bg:  #1e2436;
+      --danger:  #e05c5c;
+      --warn:    #e0a35c;
+      --ok:      #5ce08a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 15.5px;
+      line-height: 1.75;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    nav {
+      width: 260px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 28px 20px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+    nav .logo {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+    nav .subtitle {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 28px;
+    }
+    nav ul { list-style: none; }
+    nav ul li { margin-bottom: 2px; }
+    nav ul li a {
+      display: block;
+      padding: 5px 10px;
+      border-radius: 6px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 13px;
+    }
+    nav ul li a:hover { color: var(--text); background: var(--border); }
+    nav .section-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--accent2);
+      margin: 18px 0 6px 10px;
+    }
+
+    main {
+      flex: 1;
+      padding: 56px 72px;
+      max-width: 880px;
+    }
+
+    h1 {
+      font-size: 30px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    .page-meta {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 40px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .page-meta .pill {
+      display: inline-block;
+      background: var(--tag-bg);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 2px 10px;
+      font-size: 11px;
+      margin-right: 6px;
+      color: var(--accent);
+    }
+
+    h2 {
+      font-size: 22px;
+      font-weight: 700;
+      color: #fff;
+      margin: 56px 0 16px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    h3 {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--accent);
+      margin: 32px 0 10px;
+    }
+    p { margin-bottom: 16px; color: var(--text); }
+    p.lead {
+      font-size: 17px;
+      color: #e8ebf5;
+      line-height: 1.7;
+      margin-bottom: 22px;
+    }
+    ul.bullets, ol.bullets { margin: 0 0 16px 24px; }
+    ul.bullets li, ol.bullets li { margin-bottom: 8px; }
+
+    strong { color: #fff; }
+    em { color: var(--text); }
+
+    code {
+      font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+      font-size: 13px;
+      background: var(--tag-bg);
+      padding: 1px 6px;
+      border-radius: 4px;
+      color: #a8c0ff;
+    }
+
+    .callout {
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin: 20px 0;
+      font-size: 14px;
+      border-left: 4px solid;
+    }
+    .callout.note   { background: #1a2035; border-color: var(--accent);  color: #b8c8f0; }
+    .callout.warn   { background: #241e12; border-color: var(--warn);    color: #e8d3b0; }
+    .callout.danger { background: #241212; border-color: var(--danger);  color: #e8c0c0; }
+    .callout.ok     { background: #122414; border-color: var(--ok);      color: #b8e8c8; }
+    .callout strong { color: inherit; font-weight: 700; }
+    .callout .label {
+      display: inline-block;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      font-size: 11px;
+      margin-right: 8px;
+    }
+
+    table.data {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      margin: 14px 0 22px;
+    }
+    table.data th {
+      text-align: left;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      padding: 0 14px 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    table.data td {
+      padding: 10px 14px 10px 0;
+      border-bottom: 1px solid #1a1f2e;
+      vertical-align: top;
+      color: var(--text);
+    }
+    table.data tr:last-child td { border-bottom: none; }
+    table.data td.k {
+      font-weight: 700;
+      color: #9cdcfe;
+      white-space: nowrap;
+    }
+    table.data td.muted { color: var(--muted); }
+
+    .scene {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 22px 28px;
+      margin: 14px 0 22px;
+      font-size: 14.5px;
+    }
+    .scene .scene-label {
+      display: inline-block;
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--accent2);
+      margin-bottom: 10px;
+    }
+    .scene p:last-child { margin-bottom: 0; }
+
+    hr { border: none; border-top: 1px solid var(--border); margin: 48px 0; }
+
+    .footer {
+      font-size: 12px;
+      color: var(--muted);
+      text-align: center;
+      margin-top: 56px;
+    }
+    .footer a { color: var(--accent); text-decoration: none; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">VoidCrewTerminus</div>
+  <div class="subtitle">Leech Queen &mdash; RFC</div>
+
+  <div class="section-label">Proposal</div>
+  <ul>
+    <li><a href="#summary">Summary</a></li>
+    <li><a href="#motivation">Motivation</a></li>
+    <li><a href="#goals">Goals &amp; Non-Goals</a></li>
+  </ul>
+
+  <div class="section-label">The Design</div>
+  <ul>
+    <li><a href="#queen">The Queen</a></li>
+    <li><a href="#eligibility">When She Appears</a></li>
+    <li><a href="#volleys">Volleys &amp; the Hull</a></li>
+    <li><a href="#swarm">The Swarm</a></li>
+    <li><a href="#phases">Phases &amp; Weak Points</a></li>
+    <li><a href="#reward">Reward</a></li>
+  </ul>
+
+  <div class="section-label">Player Experience</div>
+  <ul>
+    <li><a href="#flow">A Sample Encounter</a></li>
+    <li><a href="#reference">Reference</a></li>
+  </ul>
+
+  <div class="section-label">Discussion</div>
+  <ul>
+    <li><a href="#open">Open Questions</a></li>
+    <li><a href="#risks">Risks &amp; Mitigations</a></li>
+    <li><a href="#alternatives">Alternatives Considered</a></li>
+    <li><a href="#future">Future Variants</a></li>
+  </ul>
+</nav>
+
+<main>
+
+<h1>Leech Queen &mdash; RFC</h1>
+<div class="page-meta">
+  <span class="pill">RFC</span>
+  <span class="pill">VoidCrewTerminus mod</span>
+  <span class="pill">Design only</span>
+  <span class="pill">Not scheduled</span>
+  <br /><br />
+  Design-level proposal for a fourth Pilgrimage boss. The <strong>Leech Queen</strong> is a stationary capital-scale enemy who fights by breaking things <em>inside</em> your hull while a swarm keeps your crew from going to fix them. For the technical companion, see <a href="leech-queen-design.html" style="color:var(--accent)">leech-queen-design.html</a>. Vocabulary is defined in <code>handoff/CONTEXT.md</code>.
+</div>
+
+<h2 id="summary">Summary</h2>
+
+<p class="lead">The Queen sits still and throws lines of projectiles at your ship, exactly as the vanilla bosses do. The difference is what a hit does: every impact triggers a module shutoff at the point of contact, and somebody has to walk over and switch it back on. At the same time she produces a swarm whose only job is to be shot at. Neither half is lethal. Together they are a triage problem &mdash; the reactor just went dark, and the only person free to fix it is the one holding the swarm off your flank.</p>
+
+<p>She is an <strong>addition</strong>, not a replacement. She joins the boss roll as an extra option once <code>Sector Escalation</code> is active, competing with the vanilla boss rather than supplanting it. A run can end without ever meeting her.</p>
+
+<div class="callout note">
+  <span class="label">Independence</span>
+  Despite the name, the Queen has <strong>no dependency on the Leech Carrier encounter</strong>. She shares its art language and origin fiction and nothing else. The optional <code>Brood Path</code> attack &mdash; launching actual parasites &mdash; exists only if the Leech runtime is ever built, and delegates every spawn decision to it.
+</div>
+
+<h2 id="motivation">Motivation</h2>
+
+<p>Void Crew's bosses are a gunnery problem. They sit in one place, they throw damage, and the crew answers with damage. The variety between the three shipped bosses is <em>damage type</em> &mdash; the tag table names <code>Spawns_Hollow_Boss_Energy</code>, <code>_Fire</code> and <code>_Frost</code> &mdash; which means a fourth boss built the same way would be a fourth number, not a fourth fight.</p>
+
+<p>The Leech Carrier RFC named the useful axis: the interesting thing to do to a Void Crew crew is not to hurt them harder but to <strong>make them leave their stations</strong>. That encounter does it by forcing someone into EVA. The Queen does it from the opposite direction &mdash; by making the ship's interior fall apart while the crew is busy outside it. The two are complements rather than repeats, and the Queen works without the Leech ever existing.</p>
+
+<p>She also completes a shape the mod already has. <code>Maintenance Burden</code> taught players that a module going dark at an inconvenient moment is a thing that happens and a thing someone fixes. The Queen is that lesson arriving at volume, from a hostile source, on a timer she controls.</p>
+
+<h2 id="goals">Goals &amp; Non-Goals</h2>
+
+<h3>Goals</h3>
+<ul class="bullets">
+  <li>A boss whose fight is about <strong>crew allocation</strong>, not damage throughput.</li>
+  <li>Attacks delivered the way vanilla boss attacks are delivered &mdash; projectile volleys the pilot can dodge and the gunners can shoot down &mdash; so the interior crisis is always a <em>consequence of a miss</em>, never an unavoidable timer.</li>
+  <li>A custom-modelled boss, following the Leech's art language, without hand-grafting a networked NPC.</li>
+  <li>Reuse of shipped systems wherever they exist: <code>CriticalDestroyableComponentController</code> for weak points, <code>RandomShutoffBehavior</code> for the effect and its recovery, <code>BossDefeatHook</code> for progression credit.</li>
+  <li>A reward that makes her the roll players <em>hope</em> for rather than the one they resent.</li>
+</ul>
+
+<h3>Non-Goals</h3>
+<ul class="bullets">
+  <li><strong>Not a replacement for any vanilla boss.</strong> She is appended to the roll. The Energy, Fire and Frost bosses keep every appearance they had.</li>
+  <li><strong>Not a new solar system.</strong> A dedicated system would need sectors, an environment theme, background objects and a sun. She reuses each system's existing boss sector.</li>
+  <li><strong>Not dependent on the Leech Carrier encounter.</strong> See the callout above.</li>
+  <li><strong>Not a mobile boss.</strong> She holds position and cycles attacks, matching the archetype.</li>
+  <li><strong>Not a damage-race check.</strong> If she kills a crew purely by out-damaging their repairs, the design has failed.</li>
+  <li><strong>Not persistent.</strong> Like all mod state, everything about her is per-run.</li>
+</ul>
+
+<hr />
+
+<h2 id="queen">The Queen</h2>
+
+<p>A stationary capital-scale enemy occupying the boss slot at the end of a solar system. Her body is a <strong>custom model mounted on a <code>Host Skeleton</code></strong>: the colliders, hit points, destroyable sub-structures, AI and network identity all belong to a vanilla boss, while the visible geometry and the entire attack set belong to the mod.</p>
+
+<p>That split is the load-bearing decision of this proposal. A fully authored boss would mean grafting <code>OrbitObject</code>, <code>NpcAI</code>, a signal resolver, every ability, every <code>DestroyableComponent</code>, colliders, aggro and FX onto a bundle prefab at runtime &mdash; all of it netcode-adjacent, none of it exercised by the Upgrade Forge's existing graft. Inheriting a proven skeleton costs one constraint instead: <strong>the mesh must be authored to fit vanilla's weak-point transforms</strong>, so that the sacs and vents a player wants to shoot are the things that are actually shootable.</p>
+
+<div class="callout note">
+  <span class="label">Fiction</span>
+  She is a Hollow boss the hive has taken and rebuilt. That is why she cannot move, and it is why her silhouette is chitin over something that used to be a ship. The art brief follows the Leech's language &mdash; plating, sacs, launcher clusters &mdash; on a hull whose proportions are not hers.
+</div>
+
+<h2 id="eligibility">When She Appears</h2>
+
+<p>Pilgrimage generates a boss section at the last sector of each solar system, then picks one option from that system's boss list. The Queen is an extra option in that list, admitted by the <strong><code>Queen Gate</code></strong>.</p>
+
+<table class="data">
+  <tr><th>Condition</th><th>Effect</th></tr>
+  <tr><td class="k">Escalation dormant</td><td>She is <strong>absent from the roll entirely</strong>. Nothing about her exists in the run.</td></tr>
+  <tr><td class="k">Escalation active</td><td>She enters the roll in every live solar system at a configurable weight (<code>QueenBossWeight</code>, default 25%).</td></tr>
+  <tr><td class="k">Rolled</td><td>She occupies that system's boss sector, in place of the vanilla boss <em>for that section only</em>.</td></tr>
+</table>
+
+<p>The gate is deliberately the same threshold that switches on the rest of <code>Sector Escalation</code>. Fiction ordering is the reason: escalation is the point at which the mod starts turning up pressure, and a Queen who arrives before that reads as a difficulty spike rather than as an escalation of something.</p>
+
+<div class="callout warn">
+  <span class="label">Accepted cost</span>
+  Gated <em>and</em> weighted <em>and</em> non-replacing means she is genuinely rare. She can never be a crew's first boss, and a short run will not see her. This is accepted: she is an addition, and additions that overwrite the base game's content are not additions.
+</div>
+
+<h2 id="volleys">Volleys &amp; the Hull</h2>
+
+<p>Her attack is a line of projectiles thrown at the ship &mdash; the vanilla boss delivery, unchanged. It is dodgeable by the pilot and interceptable by the gunners, which is the whole point: <strong>the interior crisis is earned by a miss, not applied by a timer.</strong></p>
+
+<p>What a hit does is the new part. On impact, the module <em>nearest the point of contact</em> goes dark, exactly as if its <code>RandomShutoff</code> burden had fired. There is no lingering affliction, no stacking counter, no expiry to track. The module is off, and restoring it is the crew's job &mdash; the same job, with the same notification, that a burdened module already produces.</p>
+
+<div class="callout ok">
+  <span class="label">Why this shape</span>
+  An earlier version of this design had her <em>apply</em> a debuff with a duration. That is a timer the crew cannot fight. A projectile that <em>triggers</em> an existing effect keeps every scrap of player agency &mdash; dodge it, shoot it down, or go fix what it broke &mdash; and needs no new state, no new lifetime, and no new sync surface beyond naming the victim module.
+</div>
+
+<p>Because the victim is chosen by <em>where she hits you</em>, the attack has natural variety without needing multiple effect types. A volley across the spine takes out something different than a volley across the flank, and a pilot who knows which face of the ship holds the reactor has a real reason to present the other one.</p>
+
+<h2 id="swarm">The Swarm</h2>
+
+<p>Alongside the volleys she produces small craft. Their job is not damage &mdash; it is <strong>attention</strong>. They are weak, numerous, low-threat, drop nothing, and vanish when she dies.</p>
+
+<p>This is what makes the fight one mechanic rather than two. The volleys create jobs inside the hull; the swarm consumes the crew's capacity to go do them. Neither is lethal alone. The failure state is not "we ran out of hit points", it is "we ran out of people", and the recovery is always visible: stop shooting, go fix the reactor, accept the hits you take while you do it.</p>
+
+<p>The swarm deliberately does <em>not</em> scale with <code>Sector Escalation</code>'s density system, which only reaches spawns routed through the enemy director. Hers are not. Her numbers are her own at every scalar, which keeps her tunable in isolation.</p>
+
+<h2 id="phases">Phases &amp; Weak Points</h2>
+
+<p>Three phases, driven by her remaining hit points, each one <em>adding</em> to what she is doing: volleys, then volleys plus swarm, then both at a higher cadence.</p>
+
+<p>Running the other way, her destroyable sub-structures <strong>subtract</strong>. Vanilla bosses already carry a set of critical components, and destroying all of them kills the boss outright. Each one the crew removes permanently silences one of her attacks, so a crew that shoots well fights a quieter third phase than a crew that simply raced her health bar.</p>
+
+<table class="data">
+  <tr><th>Crew approach</th><th>What the fight becomes</th></tr>
+  <tr><td class="k">Damage race</td><td>She reaches phase 3 intact. Maximum volley cadence, full swarm, maximum interior chaos. Fastest kill, worst conditions.</td></tr>
+  <tr><td class="k">Dismantling</td><td>Slower, because criticals are smaller targets. Phase 3 arrives with attacks already missing. Fewer shutoffs to chase.</td></tr>
+  <tr><td class="k">Mixed</td><td>The expected play: silence whichever attack is hurting most, then push.</td></tr>
+</table>
+
+<div class="callout warn">
+  <span class="label">Degradation</span>
+  The weak-point layer depends on the chosen <code>Host Skeleton</code> actually carrying critical components, and how many &mdash; authored prefab data that cannot be read from the decompiled source. The design therefore treats HP phases as the spine and weak-point removal as an <em>additive</em> layer. If a skeleton turns out to carry two criticals instead of six, the encounter loses a layer, not its identity.
+</div>
+
+<h2 id="reward">Reward</h2>
+
+<p>She drops what a boss drops, plus a chance at a <strong>Legendary <code>Cursed Relic</code> carrying a Queen <code>Signature Perk</code></strong> &mdash; a relic that only rolls its signature when that exact relic is inserted into the Upgrade Forge.</p>
+
+<p>The relic is cursed on purpose. A <code>Maintenance Burden</code> is the thing she spent the whole fight inflicting; a trophy that keeps shutting itself down is her following the crew home. It is also the correct balance shape: a genuine run-defining upgrade whose cost is the exact inconvenience the crew just proved they could manage.</p>
+
+<div class="callout danger">
+  <span class="label">Why a reward is mandatory</span>
+  By construction the Queen can <strong>never unlock a relic tier</strong>. Her gate requires two bosses already defeated, and two boss defeats already unlock the Legendary ceiling. Her defeat also bumps <code>DifficultyScalar</code>, making the rest of the run harder. Without a distinct drop she is a harder fight for identical loot <em>plus</em> a difficulty increase &mdash; and players would correctly learn to prefer not rolling her. For an opt-in addition, that is fatal.
+</div>
+
+<p>Because the drop is a chance rather than a guarantee, the chance and her difficulty are coupled: either the chance is generous enough to be worth the risk, or she must be tuned to rough parity with the vanilla boss. This proposal takes the first option and leaves her difficulty alone.</p>
+
+<hr />
+
+<h2 id="flow">A Sample Encounter</h2>
+
+<div class="scene">
+  <div class="scene-label">Vigilance &middot; boss sector &middot; four bosses down &middot; crew of three</div>
+  <p>The astral map shows a boss at the end of the system, same as always. What comes out of the jump is not the dreadnought they were expecting. It is bigger, it is not moving, and the plating is wrong &mdash; ribbed and wet-looking, grown over something with the proportions of a Hollow capital ship.</p>
+  <p><strong>Kesh</strong> takes the helm wide. The first volley comes as a line, slow enough to read, and she rolls the ship off it. <strong>Odile</strong> and <strong>Vann</strong> pick two of the projectiles out of the air. The third goes into the dorsal plating and the shield generator goes dark, with the notification everyone already recognises: <em>switch it back on manually.</em></p>
+  <p>Vann leaves the turret to go do it. Which is when the swarm arrives &mdash; a dozen small things, individually nothing, and now there is one gunner covering the whole ship. Odile calls it: leave the shield, kill the swarm first. They eat the next volley with no shield up, and lose the starboard reactor to it.</p>
+  <p>Phase two. Kesh has worked out that the launcher cluster on the Queen's underside is a separate target, and puts the ship into a slow orbit to keep it exposed. Odile breaks it. The volley rate halves &mdash; permanently &mdash; and for the first time in ninety seconds nobody is being asked to be in two places.</p>
+  <p>Vann finally gets the reactor lit. Phase three arrives with one launcher already dead, which is the only reason it is survivable. She comes apart, the swarm winks out with her, and in the wreckage there is a relic sitting at Legendary that nobody in this crew has seen before &mdash; with a note attached about a module that will never quite stay on.</p>
+</div>
+
+<h2 id="reference">Reference</h2>
+
+<table class="data">
+  <tr><th>Term</th><th>Meaning</th></tr>
+  <tr><td class="k">Leech Queen</td><td>The boss. Canonical noun in code and on screen.</td></tr>
+  <tr><td class="k">Queen Gate</td><td>The condition admitting her to a solar system's boss roll: escalation already active.</td></tr>
+  <tr><td class="k">Host Skeleton</td><td>The vanilla boss structure her custom mesh is mounted on.</td></tr>
+  <tr><td class="k">Brood Path</td><td>Her optional parasite-launching attack, present only if the Leech runtime exists.</td></tr>
+  <tr><td class="k">Maintenance Burden</td><td>Existing mod concept &mdash; an operational quirk on a module. The Queen triggers its shutoff effect.</td></tr>
+  <tr><td class="k">Sector Escalation</td><td>Existing mod system. Its activation is the Queen Gate.</td></tr>
+</table>
+
+<p>Full definitions live in <code>handoff/CONTEXT.md</code>.</p>
+
+<hr />
+
+<h2 id="open">Open Questions</h2>
+
+<p>Everything below is tuning or pre-flight, not design. No open question changes the shape of the encounter.</p>
+
+<ul class="bullets">
+  <li><strong>Which vanilla boss is the <code>Host Skeleton</code>?</strong> Deferred to pre-flight rather than guessed. Selection criteria, in order: the most critical destroyable components, then the silhouette closest to the intended Queen shape.</li>
+  <li><strong>How many boss options does each system hold in vanilla?</strong> Decides whether a 25% weight is reachable by appending at all, or whether the pick itself must be patched. Requires a runtime dump; not readable from the decompile.</li>
+  <li><strong>Numbers.</strong> <code>QueenBossWeight</code>, <code>QueenRelicChance</code>, phase HP thresholds, volley cadence, swarm size. All config, all playtest-driven.</li>
+  <li><strong>Does she keep her own difficulty at high scalar?</strong> The proposal says yes &mdash; exclude her from enemy stat scaling so her numbers are authored rather than multiplied.</li>
+</ul>
+
+<h2 id="risks">Risks &amp; Mitigations</h2>
+
+<table class="data">
+  <tr><th>Risk</th><th>Mitigation</th></tr>
+  <tr><td class="k">Death spiral</td><td>Shutoffs arriving faster than a small crew can clear them. Mitigated by the delivery model &mdash; volleys are dodgeable and interceptable, so cadence is partly under crew control &mdash; and by the swarm being an attention tax rather than a damage source. Watch this in playtest with a crew of two.</td></tr>
+  <tr><td class="k">She is never seen</td><td>Gate + weight + non-replacement compounds into real rarity. Mitigated by dev commands that force the encounter, and by <code>QueenBossWeight</code> being a config knob rather than a constant.</td></tr>
+  <tr><td class="k">Players resent rolling her</td><td>The signature relic exists specifically to invert this. If playtest shows resentment persisting, raise <code>QueenRelicChance</code> before touching her difficulty.</td></tr>
+  <tr><td class="k">Mesh does not match hitboxes</td><td>Inherent to <code>Host Skeleton</code>. Mitigated by authoring the model against the skeleton's weak-point transforms rather than in isolation, which makes the skeleton choice a prerequisite for the art work rather than parallel to it.</td></tr>
+  <tr><td class="k">Weak-point layer unavailable</td><td>Design degrades to HP-only phases. Identity survives.</td></tr>
+  <tr><td class="k">Multiplayer desync</td><td>Her ability list is positionally serialised across the network. Registration order must be deterministic and identical everywhere, and the optional <code>Brood Path</code>'s presence must be host-broadcast rather than read from local config. Covered in detail in the design doc.</td></tr>
+</table>
+
+<h2 id="alternatives">Alternatives Considered</h2>
+
+<h3>A fourth elemental boss</h3>
+<p>Rejected. The three shipped bosses differ by damage type, so a fourth would be a fourth number. It is the cheapest option and the one that adds least.</p>
+
+<h3>Replacing the vanilla boss once escalation activates</h3>
+<p>Rejected. Deterministic and legible, but it deletes the Energy, Fire and Frost bosses from the back half of every run. A feature that removes content to add itself is a bad trade.</p>
+
+<h3>A new solar system that owns her</h3>
+<p>Rejected on scope. It needs a <code>SolarSystem</code> asset, a sector set, an environment theme, background objects and a sun &mdash; effectively a new biome, which is content-team work rather than mod work.</p>
+
+<h3>A fully authored boss prefab</h3>
+<p>Rejected. Full art control, at the price of runtime-grafting an entire networked NPC. The Upgrade Forge's graft covers a module with a power drain and a photon view; this would be an order of magnitude more surface, all of it in the part of the stack where mistakes are hardest to diagnose.</p>
+
+<h3>Weak points as the primary mechanic</h3>
+<p>Rejected as the <em>primary</em> axis, kept as a layer. Making dismantling the whole fight would require bespoke colliders and bespoke component placement &mdash; exactly the vanilla structure <code>Host Skeleton</code> exists to inherit. The two are mutually exclusive, and the reliable one wins.</p>
+
+<h3>Hard dependency on the Leech encounter</h3>
+<p>Rejected. Routing her attacks through <code>LeechEncounterController</code> would give perfect reuse of the <code>Concurrency Safety Rail</code>, and would also make her unbuildable until an unbuilt feature ships. Standalone with an optional integration point is the better trade.</p>
+
+<h3>Timed afflictions instead of shutoff triggers</h3>
+<p>Rejected in favour of the simpler model, which the crew already understands and the codebase already implements. See the callout under <a href="#volleys" style="color:var(--accent)">Volleys &amp; the Hull</a>.</p>
+
+<h3>Adds that repair her weak points</h3>
+<p>Deferred, not rejected. Vanilla has an ability for exactly this, and it would make target priority the skill of the fight. Held as a possible fourth-phase escalation rather than a baseline, because it risks turning the attention tax into a hard damage check.</p>
+
+<h2 id="future">Future Variants</h2>
+
+<ul class="bullets">
+  <li><strong>Brood Path.</strong> If the Leech Carrier encounter is ever built, her volleys gain a parasite-launching variant that defers entirely to the leech spawn arbitration and its concurrency cap. She becomes the source of the infestation the crew has been fighting all run &mdash; which is the fiction the name has been promising from the start.</li>
+  <li><strong>Repairing adds.</strong> The deferred alternative above, as a phase-four escalation at high scalar.</li>
+  <li><strong>Additional burden types.</strong> <code>HeatTick</code> and <code>ManualReset</code> are already reserved in the burden enum. If they ship, the Queen's impacts gain effect variety on top of location variety.</li>
+  <li><strong>A nested arena.</strong> If a dedicated <code>Sector</code> is ever authored, she stops borrowing other bosses' rooms and gets geometry designed around a stationary fight.</li>
+</ul>
+
+<div class="footer">
+  VoidCrewTerminus &middot; Leech Queen RFC &middot; companion: <a href="leech-queen-design.html">leech-queen-design.html</a> &middot; <a href="index.html">docs index</a>
+</div>
+
+</main>
+</body>
+</html>

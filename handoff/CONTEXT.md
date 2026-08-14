@@ -132,6 +132,38 @@ The hard limit of 2 Aux Fighters per run, regardless of how many Fighter Bays ar
 **Coop-gated launch**:
 The rule that undocking requires two crewmembers — one seated in the Aux Fighter, one cutting bay power. Recovery is symmetrical: someone must re-power the bay. A deliberate design constraint, not an oversight; the Aux Fighter is coop-only content.
 
+### Leech Queen boss
+
+**Leech Queen**:
+A new Pilgrimage boss — a stationary capital-scale enemy that holds position and cycles
+attacks at the player ship, in the manner of the vanilla solar-system bosses. Shares the
+Leech's art language and origin fiction; **mechanically independent** of the Leech Carrier
+encounter. Canonical noun for both code identifiers and the player-facing display name.
+_Note_: "Queen" names her place in the hive fiction, not a hard dependency — she does not
+require [[Leech]], [[Leech Missile]] or the Concurrency Safety Rail to function.
+_Avoid_: `LeechEncounter*` prefixes on her types (implies the coupling that was rejected);
+"Queen" unqualified; "Leech Boss".
+
+**Queen Gate**:
+The condition admitting the Leech Queen to a solar system's boss roll: Sector Escalation
+must already be active. Before the gate she is absent from the roll entirely; after it she
+competes with the vanilla boss rather than replacing it, at a configurable rate.
+_Avoid_: "boss unlock" — the Queen is never guaranteed, only made eligible.
+
+**Host Skeleton**:
+The vanilla boss structure a Leech Queen is mounted on — colliders, hit points, destroyable
+components, AI and network identity all stay vanilla. Only the visible geometry and the
+attack set are the mod's. Chosen so a custom-modelled boss never requires hand-grafting a
+networked NPC.
+_Avoid_: "reskin" — the attack set is authored too, not just the mesh.
+
+**Brood Path**:
+The Leech Queen's optional parasite-launching attack, registered only when the Leech runtime
+is present, and delegating all spawn arbitration to it — the Queen never counts parasites
+herself. Its presence must be host-broadcast, never read from per-player config, because
+ability registration is positional across the network stream.
+_Avoid_: giving the Queen her own parasite cap — the Concurrency Safety Rail has one owner.
+
 ### Shared
 
 **Per-run state**:

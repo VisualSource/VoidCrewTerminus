@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Leech Queen &mdash; System Design</title>
+  <style>
+    :root {
+      --bg:      #0f1117;
+      --surface: #181c27;
+      --border:  #2a2f42;
+      --accent:  #5c8aff;
+      --accent2: #9b59f5;
+      --text:    #d4d8e8;
+      --muted:   #7a80a0;
+      --code-bg: #12151f;
+      --tag-bg:  #1e2436;
+      --danger:  #e05c5c;
+      --warn:    #e0a35c;
+      --ok:      #5ce08a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 15.5px;
+      line-height: 1.75;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    nav {
+      width: 260px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 28px 20px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+    nav .logo {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+    nav .subtitle {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 28px;
+    }
+    nav ul { list-style: none; }
+    nav ul li { margin-bottom: 2px; }
+    nav ul li a {
+      display: block;
+      padding: 5px 10px;
+      border-radius: 6px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 13px;
+    }
+    nav ul li a:hover { color: var(--text); background: var(--border); }
+    nav .section-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--accent2);
+      margin: 18px 0 6px 10px;
+    }
+
+    main {
+      flex: 1;
+      padding: 56px 72px;
+      max-width: 880px;
+    }
+
+    h1 {
+      font-size: 30px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    .page-meta {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 40px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .page-meta .pill {
+      display: inline-block;
+      background: var(--tag-bg);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 2px 10px;
+      font-size: 11px;
+      margin-right: 6px;
+      color: var(--accent);
+    }
+
+    h2 {
+      font-size: 22px;
+      font-weight: 700;
+      color: #fff;
+      margin: 56px 0 16px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    h3 {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--accent);
+      margin: 32px 0 10px;
+    }
+    h4 {
+      font-size: 14px;
+      font-weight: 700;
+      color: #cfd6ee;
+      margin: 22px 0 8px;
+    }
+    p { margin-bottom: 16px; color: var(--text); }
+    p.lead {
+      font-size: 17px;
+      color: #e8ebf5;
+      line-height: 1.7;
+      margin-bottom: 22px;
+    }
+    ul.bullets, ol.bullets { margin: 0 0 16px 24px; }
+    ul.bullets li, ol.bullets li { margin-bottom: 8px; }
+
+    strong { color: #fff; }
+    em { color: var(--text); }
+
+    code {
+      font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+      font-size: 13px;
+      background: var(--tag-bg);
+      padding: 1px 6px;
+      border-radius: 4px;
+      color: #a8c0ff;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px 18px;
+      overflow-x: auto;
+      margin: 14px 0 22px;
+    }
+    pre code {
+      background: none;
+      padding: 0;
+      font-size: 12.5px;
+      color: #c8d2f0;
+      line-height: 1.65;
+    }
+
+    .callout {
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin: 20px 0;
+      font-size: 14px;
+      border-left: 4px solid;
+    }
+    .callout.note   { background: #1a2035; border-color: var(--accent);  color: #b8c8f0; }
+    .callout.warn   { background: #241e12; border-color: var(--warn);    color: #e8d3b0; }
+    .callout.danger { background: #241212; border-color: var(--danger);  color: #e8c0c0; }
+    .callout.ok     { background: #122414; border-color: var(--ok);      color: #b8e8c8; }
+    .callout strong { color: inherit; font-weight: 700; }
+    .callout .label {
+      display: inline-block;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      font-size: 11px;
+      margin-right: 8px;
+    }
+
+    table.data {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      margin: 14px 0 22px;
+    }
+    table.data th {
+      text-align: left;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      padding: 0 14px 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    table.data td {
+      padding: 10px 14px 10px 0;
+      border-bottom: 1px solid #1a1f2e;
+      vertical-align: top;
+      color: var(--text);
+    }
+    table.data tr:last-child td { border-bottom: none; }
+    table.data td.k {
+      font-weight: 700;
+      color: #9cdcfe;
+      white-space: nowrap;
+    }
+    table.data td.muted { color: var(--muted); }
+
+    .phase {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent2);
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin: 12px 0;
+    }
+    .phase .phase-id {
+      display: inline-block;
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--accent2);
+      margin-bottom: 6px;
+    }
+    .phase .phase-title { font-weight: 700; color: #fff; display: block; margin-bottom: 6px; }
+    .phase p:last-child { margin-bottom: 0; }
+
+    hr { border: none; border-top: 1px solid var(--border); margin: 48px 0; }
+
+    .footer {
+      font-size: 12px;
+      color: var(--muted);
+      text-align: center;
+      margin-top: 56px;
+    }
+    .footer a { color: var(--accent); text-decoration: none; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">VoidCrewTerminus</div>
+  <div class="subtitle">Leech Queen &mdash; System Design</div>
+
+  <div class="section-label">Orientation</div>
+  <ul>
+    <li><a href="#context">Context</a></li>
+    <li><a href="#summary">System Summary</a></li>
+    <li><a href="#glossary">Glossary</a></li>
+    <li><a href="#vanilla">Vanilla Foundations</a></li>
+  </ul>
+
+  <div class="section-label">Systems</div>
+  <ul>
+    <li><a href="#gate">Queen Gate</a></li>
+    <li><a href="#skeleton">Host Skeleton</a></li>
+    <li><a href="#abilities">Ability Composition</a></li>
+    <li><a href="#shutoff">Impact &rarr; Shutoff</a></li>
+    <li><a href="#swarm">Swarm</a></li>
+    <li><a href="#phases-mech">Phases &amp; Criticals</a></li>
+    <li><a href="#reward">Reward Drop</a></li>
+  </ul>
+
+  <div class="section-label">Engineering</div>
+  <ul>
+    <li><a href="#architecture">Architecture</a></li>
+    <li><a href="#files">File Map</a></li>
+    <li><a href="#patches">Patch Surfaces</a></li>
+    <li><a href="#mp">Multiplayer Sync</a></li>
+    <li><a href="#config">Config &amp; Commands</a></li>
+    <li><a href="#preflight">Pre-Flight Verification</a></li>
+    <li><a href="#plan">Phased Plan</a></li>
+    <li><a href="#tests">Test Plan</a></li>
+    <li><a href="#risks">Known Risks</a></li>
+  </ul>
+</nav>
+
+<main>
+
+<h1>Leech Queen &mdash; System Design</h1>
+<div class="page-meta">
+  <span class="pill">Design</span>
+  <span class="pill">VoidCrewTerminus mod</span>
+  <span class="pill">Void Crew 1.3.0</span>
+  <span class="pill">Not scheduled</span>
+  <br /><br />
+  Technical design for the <strong>Leech Queen</strong> &mdash; a fourth Pilgrimage boss whose projectile volleys trigger module shutoffs inside the player ship while a swarm consumes the crew's capacity to fix them. For the intent-level companion, see <a href="leech-queen-rfc.html" style="color:var(--accent)">leech-queen-rfc.html</a>. Vocabulary is defined in <code>handoff/CONTEXT.md</code>.
+</div>
+
+<h2 id="context">Context</h2>
+
+<p>The TODO file at the project root names a wish under the Leech block: &ldquo;<em>boss leech queen</em>&rdquo;. This design realises it as a boss that shares the Leech's art language and origin fiction while depending on <strong>none</strong> of the Leech runtime, which is itself unbuilt.</p>
+
+<div class="callout warn">
+  <span class="label">Status</span>
+  <strong>Design only. Not scheduled.</strong> Implementation is gated on explicit user go-ahead, matching the Leech Carrier and Aux Fighter features. Three of this mod's designed features are currently unbuilt; this is the third.
+</div>
+
+<p>Dependencies on existing mod systems, all shipped:</p>
+
+<table class="data">
+  <tr><th>System</th><th>Used for</th></tr>
+  <tr><td class="k">Sector Escalation</td><td><code>IsScalingActive</code> is the <code>Queen Gate</code>.</td></tr>
+  <tr><td class="k">BossDefeatHook</td><td>Progression credit. Requires <em>no changes</em> &mdash; it keys off <code>EndlessQuest.IsBossObjective</code>, not off any specific asset.</td></tr>
+  <tr><td class="k">RandomShutoffBehavior</td><td>The shutoff effect and its crew-recovery loop, including the player notification.</td></tr>
+  <tr><td class="k">RelicTierData / PerkPool</td><td>The Legendary Cursed signature relic drop.</td></tr>
+  <tr><td class="k">ForgeNetSync / NetMessages</td><td>Message transport and the <code>PendingByViewId</code> pattern.</td></tr>
+  <tr><td class="k">AssetLoader</td><td>Bundle loading and shader relinking for the custom mesh.</td></tr>
+</table>
+
+<h2 id="summary">System Summary</h2>
+
+<p class="lead">A vanilla boss prefab is instantiated as normal by the vanilla boss objective. The mod then re-dresses it &mdash; swapping visible geometry for an authored mesh &mdash; and replaces its ability list with a composed set of projectile volleys and swarm spawns. Volley impacts on the player ship trigger a module shutoff at the point of contact. Vanilla's critical-component system provides weak points that permanently silence attacks. Nothing about the boss's structure, hit points, colliders, AI framework or network identity is authored by the mod.</p>
+
+<h2 id="glossary">Glossary</h2>
+
+<p>Canonical definitions live in <code>handoff/CONTEXT.md</code>. Repeated here for reading convenience.</p>
+
+<table class="data">
+  <tr><th>Term</th><th>Definition</th></tr>
+  <tr><td class="k">Leech Queen</td><td>A stationary capital-scale Pilgrimage boss. Shares the Leech's art language and origin fiction; mechanically independent of the Leech Carrier encounter.</td></tr>
+  <tr><td class="k">Queen Gate</td><td>The condition admitting her to a solar system's boss roll: <code>SectorEscalation.IsScalingActive</code>. Before it she is absent from the roll; after it she competes at a configurable weight.</td></tr>
+  <tr><td class="k">Host Skeleton</td><td>The vanilla boss structure she is mounted on &mdash; colliders, hit points, destroyable components, AI and network identity all stay vanilla.</td></tr>
+  <tr><td class="k">Brood Path</td><td>Her optional parasite-launching attack, registered only when the Leech runtime is present, delegating all spawn arbitration to it.</td></tr>
+</table>
+
+<h2 id="vanilla">Vanilla Foundations</h2>
+
+<p>Everything in this section was read from <code>.voidcrew/decompiled/</code> against Void Crew 1.3.0. Anything <em>not</em> readable from source is called out explicitly and routed to <a href="#preflight" style="color:var(--accent)">Pre-Flight</a>.</p>
+
+<h3>Boss generation</h3>
+
+<p>Pilgrimage is <code>QuestType.Pilgrimage</code>, generated by <code>EndlessQuest</code>. A boss section fires on the last sector of a solar system:</p>
+
+<pre><code>// Gameplay.Quests/EndlessQuest.cs
+private bool ShouldGenerateBossSection()
+    => context.SectorsUsedInSolarSystem + 1 == context.SectorsToUseInSolarSystem;
+
+private void PrepareBossSectionParameters()
+{
+    BossObjectiveConfig randomBossObjective =
+        parameters.SolarSystemBosses
+                  .GetOptionsForSolarSystem(parameters.SolarSystems[context.ActiveSolarSystemIndex])
+                  .GetRandomBossObjective(context.Random);
+    context.NextSectionParameters.MainObjectiveCount  = 1;
+    context.NextSectionParameters.ViableMainObjectives = new List&lt;ObjectiveDataRef&gt; { randomBossObjective.Objective };
+    context.NextSectionParameters.ViableSectors        = new List&lt;Sector&gt; { randomBossObjective.Sector };
+    context.NextSectionParameters.UseBossDrops        = true;
+    // ...
+}</code></pre>
+
+<p>Two facts follow, both load-bearing:</p>
+
+<ul class="bullets">
+  <li><strong>Bosses are keyed per solar system.</strong> <code>BossConfig.GetOptionsForSolarSystem</code> throws if a system has no options, and each <code>SolarSystemBossOptions</code> holds a <code>List&lt;BossObjectiveConfig&gt;</code>. A <code>BossObjectiveConfig</code> is just <code>{ ObjectiveDataRef Objective; Sector Sector; }</code> &mdash; an objective plus an arena.</li>
+  <li><strong>Generation happens at runtime, one section ahead.</strong> <code>EndCurrentSection()</code> calls <code>GenerateNextSection()</code> each time a section ends. So the <code>Queen Gate</code> can read live escalation state, with one section of lead time. It does <em>not</em> need to be decided at quest construction.</li>
+</ul>
+
+<p>The roll itself is uniform, with no weight field:</p>
+
+<pre><code>// Gameplay.Quests/SolarSystemBossOptions.cs
+public BossObjectiveConfig GetRandomBossObjective(Random rnd)
+    => BossOptions[rnd.Next(0, BossOptions.Count)];</code></pre>
+
+<div class="callout warn">
+  <span class="label">Consequence</span>
+  Simply appending to <code>BossOptions</code> yields <code>1/(n+1)</code> and nothing else. Since <code>n</code> is authored ScriptableObject data, if each live system holds exactly one boss then appending makes the Queen a <strong>50% coin flip</strong>. A configurable weight therefore requires patching the pick rather than mutating the list. See <a href="#patches" style="color:var(--accent)">Patch Surfaces</a>.
+</div>
+
+<h3>Boss AI framework</h3>
+
+<p>The &ldquo;sits in one spot and cycles attacks&rdquo; archetype is already factored:</p>
+
+<table class="data">
+  <tr><th>Type</th><th>Role</th></tr>
+  <tr><td class="k">HpDrivenBossSignalResolver</td><td>Advances <code>PhaseData.CurrentPhase</code> from HP thresholds; also advances it in <code>OnBehaviourEnd</code> when a <code>CastAbilitiesSequentiallyPhaseDrivenBeh</code> completes a cycle. Owns <code>OnAggroAbilityIndicesToActivate</code>.</td></tr>
+  <tr><td class="k">AIHpDrivenPhaseTransition</td><td><code>{ PhaseIndex, HPThresholdPercent }</code>. A list of these defines the phase ladder.</td></tr>
+  <tr><td class="k">CastAbilitiesSequentiallyPhaseDrivenBeh<br />CastAbilitiesRandomlyPhaseDrivenBeh</td><td>Per-phase ability rotation behaviours.</td></tr>
+  <tr><td class="k">ActiveShootProjectilesAbility</td><td>Projectile volleys through <code>NpcShooter</code>, with <code>WeaponIndices</code>, <code>ShootPatternOverride</code> and <code>ShootSequenceOverride</code>.</td></tr>
+  <tr><td class="k">SpawnReinforcementsAbility</td><td>Swarm spawning via <code>NpcAISpawn</code>. Carries <code>ShouldSpawnsDieWhenAIDies</code>, <code>delayBetweenSpawnsDeaths</code>, <code>DistributionSettings</code>, <code>PositioningConfig</code>, <code>SendsAttackCommandToSpawns</code>.</td></tr>
+  <tr><td class="k">RepairDestroyableComponentsAbility</td><td>Lets a boss heal its own criticals. Held for a future variant.</td></tr>
+</table>
+
+<p><code>BaseNpcAbility</code> is a plain <code>[Serializable]</code> class, <em>not</em> a <code>ScriptableObject</code>, held in a <code>[SerializeReference] List&lt;BaseNpcAbility&gt; Abilities</code> on <code>NpcAI</code>. The mod can therefore construct abilities with <code>new</code>, append them, and subclass for bespoke behaviour. Two hard limits apply:</p>
+
+<div class="callout danger">
+  <span class="label">Ability constraints</span>
+  <strong>1. Sixteen abilities maximum, total.</strong> <code>NpcAbilitiesActiveValuesMask()</code> packs one bit per ability index into a <code>short</code>, and <code>NpcAI</code> logs an error above 16. The Queen's attacks spend from the host boss's remaining budget.<br /><br />
+  <strong>2. Ability order must be byte-identical on every client.</strong> <code>WriteAbilitiesData</code> / <code>ReadAbilitiesData</code> are <em>positional</em> against a shared <code>PhotonStream</code>: a mask is written, then each active ability's payload in index order. One extra or missing ability does not merely desync that ability &mdash; it corrupts every read after it.
+</div>
+
+<h3>Weak points</h3>
+
+<p>Vanilla already implements &ldquo;destroy the sub-structures to kill the boss&rdquo;:</p>
+
+<pre><code>// CriticalDestroyableComponentController.cs
+public List&lt;DestroyableComponent&gt; CriticalDestroyableComponents;
+
+private void OnTrackedDestroyableDestroyed(DestroyableComponent destroyed)
+{
+    runtimeTrackedDestroyables.Remove(destroyed);
+    if (Ship.photonView.AmController &amp;&amp; runtimeTrackedDestroyables.Count &lt;= 0)
+        Ship.ApplyRawDamage(Ship.HitPoints, null);   // all criticals dead -> boss dies
+}</code></pre>
+
+<p><code>DestroyableComponent</code> exposes a public <code>Action&lt;DestroyableComponent&gt; OnKilled</code>, plus <code>MirrorDamageToParent</code>, <code>HideHealthBar</code>, <code>IsInvulnerable</code> and <code>DefenseType</code>. Wiring &ldquo;this critical dies &rarr; that attack stops&rdquo; is a subscription, not new machinery.</p>
+
+<p><strong>Not readable from source:</strong> whether a given vanilla boss prefab carries a <code>CriticalDestroyableComponentController</code> at all, and how many components are in its list. Authored prefab data. Routed to pre-flight.</p>
+
+<h3>The shutoff effect</h3>
+
+<p><code>RandomShutoffBehavior</code> already defines exactly the effect the Queen needs, and its recovery loop:</p>
+
+<ul class="bullets">
+  <li>It <strong>only ever turns a module off</strong>. Restoring power is the crew's job; the burden never restores it. There is no affliction state, no duration, nothing to expire.</li>
+  <li>It already exposes a trigger: <code>public void TriggerImmediately()</code>, used by the <code>!triggerburden</code> dev command.</li>
+  <li>The player notification already exists and is driven by the module's <em>real</em> power state via <code>PowerDrain.IsOn.OnChange</code>, never by the timer &mdash; so a vetoed request can never announce a shutoff that did not happen.</li>
+  <li><strong>Authority is owner, not host.</strong> <code>CellModule.TurnOff()</code> is <code>PowerDrain.IsOn.RequestChange()</code> &mdash; a local <code>ChangeResponsive</code> request, vetoable by <code>ChangeValidators</code>, owner-authoritative, replicated by vanilla <code>PowerDrain</code> sync. The file documents that ticking on non-owners causes thrash.</li>
+</ul>
+
+<div class="callout note">
+  <span class="label">Required seam</span>
+  <code>RequestPowerOff()</code> is <code>private</code>, and <code>RandomShutoffBehavior</code> only exists on modules burdened by a cursed relic &mdash; which most modules are not. The effect must be lifted out of the behaviour into a shared helper so that the burden's timer and the Queen's projectile impact become two <em>triggers</em> of one <em>effect</em>. Same extraction that already moved <code>EnemyScalingHelpers</code> out of <code>Features/Forge/</code>.
+</div>
+
+<h3>Escalation interaction</h3>
+
+<p><code>EnemyDensityPatch</code> patches only <code>AIDirector.Set/AddSpawner{Target,MaxTarget}Intensity</code>. <code>SpawnReinforcementsAbility</code> spawns through <code>NpcAISpawn</code>, bypassing <code>AIDirector</code> entirely &mdash; therefore <strong>the Queen's swarm is not amplified by density escalation</strong> at any scalar. Her numbers are authored.</p>
+
+<p>Her <em>hit points</em> are a different story: <code>EnemyStatScalingPatch</code> postfixes <code>DestroyableComponent.InitializeHealth</code> for Hollow/Remnant faction objects, and TODO line 18 records that boss exclusion was <strong>deferred</strong> because the <code>ObjectiveData</code>&rarr;spawned-ship link needed another pre-flight pass. This feature needs that link regardless, so it closes that debt.</p>
+
+<hr />
+
+<h2 id="gate">Queen Gate</h2>
+
+<p>Two conditions, evaluated at boss-section generation time:</p>
+
+<ol class="bullets">
+  <li><code>SectorEscalation.IsScalingActive</code> &mdash; i.e. <code>BossesDefeated &gt;= BossActivationThreshold</code> (default 2). While dormant, the Queen does not exist in the run at all.</li>
+  <li>A weighted roll at <code>QueenBossWeight</code> (default 25%), drawn from <code>context.Random</code>.</li>
+</ol>
+
+<div class="callout ok">
+  <span class="label">Determinism</span>
+  Drawing from <code>context.Random</code> &mdash; the quest's own seeded generator, which already drives <code>GetRandomBossObjective</code> &mdash; means every client computes the same result from the same seed and the same escalation state. <strong>No <code>ModMessage</code> is required for the gate</strong>, provided escalation state is already synced, which <code>ForgeNetSync</code> guarantees. Consuming a draw from <code>context.Random</code> does shift the generator's stream, so the gate must be evaluated <em>identically on every client</em> or subsequent generation diverges &mdash; it must not be conditional on anything local.
+</div>
+
+<p>She is eligible in <strong>every live solar system</strong>, and reuses whichever system's boss <code>Sector</code> she rolled into. One <code>Host Skeleton</code> is shared across all of them &mdash; she is the same creature wherever she nests.</p>
+
+<h2 id="skeleton">Host Skeleton</h2>
+
+<p>The vanilla boss is instantiated by the vanilla objective, unmodified. The mod intervenes afterwards, on the spawned instance:</p>
+
+<table class="data">
+  <tr><th>Stays vanilla</th><th>Becomes the mod's</th></tr>
+  <tr><td><code>OrbitObject</code>, hit points, <code>MaxHitPoints</code></td><td>Visible <code>Renderer</code> geometry (swapped)</td></tr>
+  <tr><td>Colliders and hit volumes</td><td><code>NpcAI.Abilities</code> contents</td></tr>
+  <tr><td><code>DestroyableComponent</code>s and their placement</td><td>Phase ladder values</td></tr>
+  <tr><td><code>NpcAI</code>, signal resolver, aggro</td><td>Materials, VFX, audio</td></tr>
+  <tr><td><code>PhotonView</code> and network identity</td><td>Reward drop</td></tr>
+</table>
+
+<div class="callout warn">
+  <span class="label">Art constraint</span>
+  Weak-point <em>placement</em> is inherited. The authored mesh must be modelled so that its readable features &mdash; sacs, vents, launcher clusters &mdash; land on top of the skeleton's existing <code>DestroyableComponent</code> transforms. Otherwise a player shoots a glowing sac and nothing happens, or shoots flat plating and kills a critical. <strong>The skeleton choice is therefore a prerequisite for the art work, not parallel to it.</strong>
+</div>
+
+<p>Bundle-loaded materials need the same shader relink the Forge already performs &mdash; <code>AssetLoader.RelinkBundleShaders</code> re-resolves each material's shader by name against the live build, without which bundle materials render solid black under any light.</p>
+
+<h2 id="abilities">Ability Composition</h2>
+
+<p>Her attack set is composed from existing ability classes wherever possible, spending from the 16-slot budget. Indicative composition:</p>
+
+<table class="data">
+  <tr><th>Slot</th><th>Ability</th><th>Purpose</th></tr>
+  <tr><td class="k">Volley A</td><td><code>ActiveShootProjectilesAbility</code></td><td>Primary line volley. Phase 1 onward.</td></tr>
+  <tr><td class="k">Volley B</td><td><code>ActiveShootProjectilesAbility</code></td><td>Second pattern, different arc. Phase 3.</td></tr>
+  <tr><td class="k">Swarm</td><td><code>SpawnReinforcementsAbility</code></td><td>Attention-tax adds. Phase 2 onward.</td></tr>
+  <tr><td class="k">Brood Path</td><td><code>ActiveShootProjectilesAbility</code> subclass</td><td><strong>Optional.</strong> Parasite volley; only registered when the Leech runtime exists.</td></tr>
+</table>
+
+<div class="callout danger">
+  <span class="label">Registration order</span>
+  Because serialisation is positional, <code>Brood Path</code> cannot be registered from a per-player config read. Its presence must travel with host-broadcast state, exactly as <code>DifficultyScalar</code> does. Registration order must be a fixed, literal sequence in code &mdash; never a dictionary walk, never a reflection scan, never conditional on anything a client decides locally.
+</div>
+
+<p>Whether the volleys need a bespoke subclass at all depends on how projectile impact is detected &mdash; see below. A custom subclass is viable and needs no Photon type registration, because ability payloads travel through the parent's stream via <code>WriteData</code>/<code>ReadData</code> rather than as serialised custom types.</p>
+
+<h2 id="shutoff">Impact &rarr; Shutoff</h2>
+
+<p>The core mechanic, and the only genuinely new logic in the feature.</p>
+
+<h4>1. Detect the impact</h4>
+<p>Queen projectiles hitting the player ship arrive through the damage path. <code>DestroyableComponent.ApplyHitDamage(float damage, OrbitObject source, DamageType damageType, Vector3 point, Quaternion rotation, bool friendlyFire)</code> carries both the <code>source</code> and the impact <code>point</code> &mdash; enough to identify a Queen hit and locate it in world space.</p>
+
+<h4>2. Select the victim module (host)</h4>
+<p>The host resolves the <code>CellModule</code> whose position is nearest the impact <code>point</code>. Host arbitration is mandatory here: if each client picked independently, clients would disagree about which module went dark. Candidate filtering &mdash; skip already-dark modules, skip modules the crew deliberately powered down, apply a minimum re-trigger interval per module &mdash; belongs entirely on the host.</p>
+
+<h4>3. Route to the module's owner</h4>
+<p>The host broadcasts the decision keyed by <code>photonView.ViewID</code>. The <strong>owner of that module</strong> performs the shutoff, because <code>PowerDrain.IsOn</code> is owner-authoritative. This is the <code>PendingByViewId</code> pattern already used by <code>ForgeNetSync</code> for views that have not yet resolved locally.</p>
+
+<h4>4. Apply the effect</h4>
+<p>The owner calls the extracted shutoff helper: request <code>IsOn = false</code>, log declines loudly (a vetoed <code>RequestChange</code> is otherwise a silent no-op &mdash; the failure mode that left Phase 6's density scaling dead for a whole phase), and let the existing <code>PowerDrain.IsOn.OnChange</code> handler produce the player notification from the real power state.</p>
+
+<h4>5. Recovery</h4>
+<p>Nothing. Recovery is the crew walking to the module and switching it back on &mdash; identical to a normal <code>RandomShutoff</code>, with no mod-side state to clear.</p>
+
+<div class="callout ok">
+  <span class="label">Why there is no affliction state</span>
+  An earlier iteration of this design tracked per-module afflictions with durations, stacking rules and expiry, all needing sync. Modelling the impact as a <em>trigger of an existing effect</em> rather than an <em>application of a new one</em> deletes that entire subsystem. Note that writing into <code>ForgeSnapshot.Burdens</code> instead would be actively wrong: <code>WithBurdenAdded</code> is idempotent per type and burdens persist for the run, so each module could be hit exactly once, permanently &mdash; the attack would become a no-op within seconds and a won fight would leave the ship crippled.
+</div>
+
+<h2 id="swarm">Swarm</h2>
+
+<p>A single <code>SpawnReinforcementsAbility</code>, configured as an attention tax rather than a threat:</p>
+
+<ul class="bullets">
+  <li><code>ShouldSpawnsDieWhenAIDies = true</code> with the built-in <code>delayBetweenSpawnsDeaths</code> stagger &mdash; no mop-up phase after the kill, which matters because the crew jumps immediately from a boss sector.</li>
+  <li>Weak, numerous, low damage. No drops.</li>
+  <li><code>SendsAttackCommandToSpawns</code> so they engage without waiting to acquire.</li>
+  <li>Not amplified by density escalation (see <a href="#vanilla" style="color:var(--accent)">Vanilla Foundations</a>), so swarm size is a pure tuning value.</li>
+</ul>
+
+<h2 id="phases-mech">Phases &amp; Criticals</h2>
+
+<p>Three <code>AIHpDrivenPhaseTransition</code> entries form the spine. Each phase adds; destroyed criticals subtract.</p>
+
+<table class="data">
+  <tr><th>Phase</th><th>Trigger</th><th>Active</th></tr>
+  <tr><td class="k">1</td><td>Aggro</td><td>Volley A</td></tr>
+  <tr><td class="k">2</td><td>HP threshold</td><td>Volley A + Swarm</td></tr>
+  <tr><td class="k">3</td><td>HP threshold</td><td>Volley A + Volley B + Swarm, higher cadence</td></tr>
+</table>
+
+<p>Each <code>CriticalDestroyableComponent</code> is mapped to one ability. On its <code>OnKilled</code>, that ability is permanently deactivated and excluded from future phase rotations. The mapping must be host-arbitrated in the sense that all clients derive it from the same fixed table &mdash; the ability must remain <em>present</em> in the list (positional serialisation) and merely inert.</p>
+
+<div class="callout warn">
+  <span class="label">Degradation path</span>
+  If the chosen skeleton carries fewer criticals than there are abilities to map, the surplus abilities simply have no silencing critical. If it carries none, or no controller at all, the encounter runs as HP-phases-only. Identity survives; a layer is lost. This must be verified before the art brief is written, since it also determines what the mesh needs to make shootable.
+</div>
+
+<h2 id="reward">Reward Drop</h2>
+
+<p>Vanilla boss drops proceed untouched (<code>UseBossDrops = true</code> and the chapter drop config are already set by <code>PrepareBossSectionParameters</code>). On top, a host-rolled chance at a Legendary <code>Cursed Relic</code> carrying a Queen <code>Signature Perk</code>.</p>
+
+<ul class="bullets">
+  <li><strong>Host-arbitrated roll</strong>, following <code>CursedRelicSpawnPatch</code> and <code>RelicReplicationPatch</code>, which already establish that all relic RNG belongs to the host.</li>
+  <li><strong>Tier is forced to Legendary</strong> and must bypass <code>SectorEscalation.DowngradeRelics</code> &mdash; the whole point is a guaranteed-tier trophy, and the loot reshape would otherwise be entitled to downgrade it.</li>
+  <li><strong>Cursed</strong>, so its perk pool includes downside perks and it can attach a <code>Maintenance Burden</code>. Thematically her signature following the crew home.</li>
+  <li><strong>Signature Perk</strong> registered in <code>PerkPool</code> against that relic identity, so it rolls only for her relic.</li>
+</ul>
+
+<hr />
+
+<h2 id="architecture">Architecture</h2>
+
+<p>The feature lives in its own directory and does not reach into <code>Features/Forge/</code>. The one shared thing &mdash; the shutoff effect &mdash; is extracted to a neutral location first.</p>
+
+<pre><code>Features/Queen/
+    QueenGate.cs                  Eligibility + weighted deterministic roll
+    QueenEncounter.cs             Host singleton: per-run state, boss instance tracking
+    QueenBodyBuilder.cs           Mesh swap + material relink on the spawned skeleton
+    QueenAbilityBuilder.cs        Deterministic ability construction and registration
+    QueenPhaseMap.cs              Phase ladder + critical-to-ability mapping
+    QueenImpactHandler.cs         Impact detection, victim selection (host)
+    QueenRewardRoll.cs            Legendary cursed signature relic drop
+
+Features/Modules/                 (new, shared)
+    ModuleShutoff.cs              Extracted effect: request power off, log declines
+
+Patches/
+    QueenBossRollPatch.cs         Weighted boss-option pick
+    QueenSpawnPatch.cs            Identify the spawned boss instance; hand to builder
+    BossStatScalingExclusion.cs   Exclude bosses from EnemyStatScalingPatch
+</code></pre>
+
+<h2 id="files">File Map</h2>
+
+<table class="data">
+  <tr><th>File</th><th>Responsibility</th></tr>
+  <tr><td class="k">QueenGate.cs</td><td>Pure function of (escalation state, weight, RNG draw) &rarr; bool. Unit-testable with no Unity dependency.</td></tr>
+  <tr><td class="k">QueenEncounter.cs</td><td>Host singleton. Per-run reset on <code>HostStartSession</code>. Tracks the live boss instance and its critical-to-ability map.</td></tr>
+  <tr><td class="k">QueenBodyBuilder.cs</td><td>Swaps renderers on the spawned skeleton, relinks shaders, parents authored geometry to the skeleton's weak-point transforms.</td></tr>
+  <tr><td class="k">QueenAbilityBuilder.cs</td><td>Constructs abilities in a <strong>fixed literal order</strong> and appends to <code>NpcAI.Abilities</code>. Enforces the 16-slot budget with a loud error.</td></tr>
+  <tr><td class="k">QueenPhaseMap.cs</td><td>Phase thresholds; subscribes <code>DestroyableComponent.OnKilled</code> to silence mapped abilities.</td></tr>
+  <tr><td class="k">QueenImpactHandler.cs</td><td>Host-side victim selection from impact point; broadcasts by view id; per-module re-trigger cooldown.</td></tr>
+  <tr><td class="k">ModuleShutoff.cs</td><td>The extracted effect. Owner-only. Logs <code>ChangeValidator</code> declines. Used by both <code>RandomShutoffBehavior</code> and the Queen.</td></tr>
+  <tr><td class="k">QueenRewardRoll.cs</td><td>Host-only drop roll; forces Legendary and bypasses relic downgrade.</td></tr>
+</table>
+
+<h2 id="patches">Patch Surfaces</h2>
+
+<table class="data">
+  <tr><th>Target</th><th>Kind</th><th>Purpose</th></tr>
+  <tr><td class="k">EndlessQuest.PrepareBossSectionParameters</td><td>Postfix</td><td>Apply the <code>Queen Gate</code>: substitute the Queen's objective into <code>ViableMainObjectives</code> when the weighted roll passes. Private instance method &mdash; reach via <code>AccessTools</code>.</td></tr>
+  <tr><td class="k">SolarSystemBossOptions.GetRandomBossObjective</td><td>Alternative</td><td>Weighted pick instead of uniform. A struct method; patchable but the postfix above is preferred since it has access to solar-system context.</td></tr>
+  <tr><td class="k">Boss instance spawn</td><td>TBD</td><td><strong>Pre-flight blocker.</strong> The <code>ObjectiveData</code>&rarr;spawned-ship link deferred at TODO line 18. Needed to reach the instance at all.</td></tr>
+  <tr><td class="k">DestroyableComponent.ApplyHitDamage</td><td>Postfix</td><td>Detect Queen projectile impacts on player-ship components; hand <code>point</code> to the impact handler. Filter on faction and source to keep the hot path cheap.</td></tr>
+  <tr><td class="k">DestroyableComponent.InitializeHealth</td><td>Existing</td><td>Add a boss exclusion to the shipped <code>EnemyStatScalingPatch</code>, using the link above.</td></tr>
+</table>
+
+<div class="callout warn">
+  <span class="label">Hot path</span>
+  <code>ApplyHitDamage</code> runs for every hit on every damageable object in the sector. The postfix must exit on the cheapest possible check &mdash; is a Queen encounter live at all &mdash; before doing anything else.
+</div>
+
+<h2 id="mp">Multiplayer Sync</h2>
+
+<p><code>MPType.All</code> applies: every player has the mod, so every client runs identical construction code. That is what makes deterministic registration achievable; it is not a licence to skip it.</p>
+
+<table class="data">
+  <tr><th>Concern</th><th>Model</th></tr>
+  <tr><td class="k">Queen Gate</td><td><strong>No message.</strong> Deterministic draw from <code>context.Random</code> plus already-synced escalation state. Must be evaluated identically everywhere, since it consumes from the shared generator stream.</td></tr>
+  <tr><td class="k">Body / abilities</td><td><strong>No message.</strong> Every client builds the same body and the same ability list in the same fixed order from the same spawned skeleton.</td></tr>
+  <tr><td class="k">Phase transitions</td><td>Vanilla. <code>DataNetworkedPhase</code> + <code>CommandTransitionPhase</code> already replicate phases; <code>HpDrivenBossSignalResolver</code> only advances on the controller.</td></tr>
+  <tr><td class="k">Critical destroyed</td><td>Vanilla. <code>DestroyableComponent</code> is <code>IPunObservable</code> with a <code>DestroyRemote</code> path; <code>OnKilled</code> fires locally on each client.</td></tr>
+  <tr><td class="k">Victim module selection</td><td><strong>One new message.</strong> Host decides which module; broadcast keyed by <code>photonView.ViewID</code>.</td></tr>
+  <tr><td class="k">Shutoff execution</td><td><strong>Owner-only</strong>, not host. <code>PowerDrain.IsOn</code> is owner-authoritative and replicated by vanilla sync.</td></tr>
+  <tr><td class="k">Reward drop</td><td>Host-only roll, existing relic replication path.</td></tr>
+  <tr><td class="k">Late joiner</td><td>Boss instance and phase are vanilla-replicated. Mod-side state to send: the critical-to-ability silencing map. Extend the existing state snapshot.</td></tr>
+  <tr><td class="k">Host migration</td><td>Re-derive authority from <code>IsMasterClient</code>, as <code>ForgeNetSync</code> already does on <code>OnMasterClientSwitched</code>.</td></tr>
+</table>
+
+<h2 id="config">Config &amp; Commands</h2>
+
+<table class="data">
+  <tr><th>Key</th><th>Default</th><th>Meaning</th></tr>
+  <tr><td class="k">EnableLeechQueen</td><td>true</td><td>Feature switch. <strong>Host value is authoritative</strong> and must be broadcast &mdash; a client-local false would desync ability registration.</td></tr>
+  <tr><td class="k">QueenBossWeight</td><td>0.25</td><td>Probability she wins an eligible boss roll.</td></tr>
+  <tr><td class="k">QueenRelicChance</td><td>0.50</td><td>Chance of the Legendary cursed signature relic. Coupled to her difficulty &mdash; raise this before lowering her numbers.</td></tr>
+  <tr><td class="k">QueenShutoffCooldown</td><td>tbd</td><td>Minimum seconds between shutoffs on the same module. The main anti-spiral knob.</td></tr>
+  <tr><td class="k">QueenSwarmSize</td><td>tbd</td><td>Adds per spawn cycle.</td></tr>
+</table>
+
+<h4>Dev commands</h4>
+<p>Non-negotiable for testability: she is gated behind two boss defeats and a weighted roll, so she cannot be reached reliably by playing.</p>
+<ul class="bullets">
+  <li><code>!queenspawn</code> &mdash; force the next boss section to resolve to the Queen.</li>
+  <li><code>!queentrigger</code> &mdash; fire a volley immediately, or apply an impact at a named module.</li>
+  <li><code>!queeninfo</code> &mdash; dump gate state, live phase, and which criticals have silenced which abilities.</li>
+  <li><code>!bossoptions</code> &mdash; dump <code>SolarSystemBosses</code> per system. Doubles as the pre-flight tool below.</li>
+</ul>
+
+<h2 id="preflight">Pre-Flight Verification</h2>
+
+<div class="callout danger">
+  <span class="label">Blocking</span>
+  All of the following require a <strong>live install</strong>. The reference-only NuGet <code>Assembly-CSharp.dll</code> has empty method bodies, and none of these facts are in <code>.voidcrew/decompiled/</code> &mdash; two of them are authored ScriptableObject/prefab data that no decompiler can produce.
+</div>
+
+<ol class="bullets">
+  <li><strong>Boss options inventory.</strong> Dump <code>BossConfig.SolarSystemConfig</code> per live solar system: how many <code>BossOptions</code> each holds. Decides whether a weighted pick is required (it almost certainly is) and what appending would actually cost.</li>
+  <li><strong><code>ObjectiveData</code>&rarr;spawned-ship link.</strong> The blocker deferred at TODO line 18. Establish how to get from the active boss objective to the spawned boss <code>OrbitObject</code>. Everything else depends on this. Also unblocks boss exclusion from stat scaling.</li>
+  <li><strong>Critical component inventory per boss prefab.</strong> For each of the three vanilla bosses: does it carry a <code>CriticalDestroyableComponentController</code>, and how many components? Selects the <code>Host Skeleton</code> and determines whether the weak-point layer exists at all.</li>
+  <li><strong>Existing ability count per boss prefab.</strong> How many of the 16 <code>NpcAI.Abilities</code> slots vanilla already uses on the chosen skeleton. Determines the Queen's actual budget.</li>
+  <li><strong>Skeleton geometry.</strong> Export the chosen skeleton's collider layout and weak-point transforms as the art brief's reference frame.</li>
+  <li><strong>Player-ship impact path.</strong> Confirm that <code>DestroyableComponent.ApplyHitDamage</code> is the path NPC projectiles take into player-ship components, and confirm which clients it runs on.</li>
+  <li><strong>Module ownership.</strong> Confirm who owns a player-ship <code>CellModule</code>'s <code>PhotonView</code> in practice, so the shutoff routing targets the right peer.</li>
+</ol>
+
+<h2 id="plan">Phased Plan</h2>
+
+<div class="phase">
+  <span class="phase-id">Phase 0</span>
+  <span class="phase-title">Pre-flight</span>
+  <p>All seven items above, against a live install. <strong>Nothing else starts until item 2 is solved</strong> &mdash; without the objective-to-instance link there is no boss to modify. Output: skeleton selection, ability budget, weak-point inventory, art reference frame.</p>
+</div>
+
+<div class="phase">
+  <span class="phase-id">Phase 1</span>
+  <span class="phase-title">Shutoff extraction</span>
+  <p>Lift the effect out of <code>RandomShutoffBehavior</code> into <code>Features/Modules/ModuleShutoff.cs</code>. Behaviour becomes a trigger over the shared effect. <strong>Pure refactor &mdash; no behaviour change, verified by existing burden tests plus <code>!triggerburden</code>.</strong> Ships independently of the rest.</p>
+</div>
+
+<div class="phase">
+  <span class="phase-id">Phase 2</span>
+  <span class="phase-title">Gate + substitution</span>
+  <p><code>QueenGate</code> and the <code>PrepareBossSectionParameters</code> postfix. Substitute a vanilla boss objective as a stand-in so the roll can be proven before any Queen content exists. Test: <code>!queenspawn</code> forces it; the gate stays shut while escalation is dormant; two clients agree on every roll.</p>
+</div>
+
+<div class="phase">
+  <span class="phase-id">Phase 3</span>
+  <span class="phase-title">Boss reach + stat exclusion</span>
+  <p>Use the Phase 0 link to get the spawned instance. Add boss exclusion to <code>EnemyStatScalingPatch</code>, closing the TODO line 18 debt. Test: a boss at scalar 6 has vanilla hit points.</p>
+</div>
+
+<div class="phase">
+  <span class="phase-id">Phase 4</span>
+  <span class="phase-title">Ability composition</span>
+  <p><code>QueenAbilityBuilder</code>: deterministic construction, fixed order, 16-slot budget enforcement. Volleys and swarm, no interior effects yet. Test: two clients, extended fight, no ability desync; a deliberate order mismatch is caught by the budget/order assertion rather than by corrupt reads.</p>
+</div>
+
+<div class="phase">
+  <span class="phase-id">Phase 5</span>
+  <span class="phase-title">Impact &rarr; shutoff</span>
+  <p><code>QueenImpactHandler</code> plus the new message. Host selects victim, owner executes via <code>ModuleShutoff</code>. Test: volley impacts darken the nearest module on all clients; declines are logged; the cooldown prevents the same module being hammered.</p>
+</div>
+
+<div class="phase">
+  <span class="phase-id">Phase 6</span>
+  <span class="phase-title">Phases + criticals</span>
+  <p>Phase ladder and the critical-to-ability silencing map, including the HP-only degradation path. Test: destroying a mapped critical permanently stops that attack, on both clients; all criticals destroyed kills her via the vanilla controller.</p>
+</div>
+
+<div class="phase">
+  <span class="phase-id">Phase 7</span>
+  <span class="phase-title">Body</span>
+  <p>Blender authoring against the Phase 0 reference frame, bundle export, <code>QueenBodyBuilder</code>, shader relink. Test: she renders correctly under sector lighting; shooting a visually-readable feature kills the critical underneath it.</p>
+</div>
+
+<div class="phase">
+  <span class="phase-id">Phase 8</span>
+  <span class="phase-title">Reward</span>
+  <p>Signature perk registration, host-rolled Legendary cursed drop, downgrade bypass. Test: the relic drops at Legendary at any scalar; its signature perk rolls only for it; all clients see one relic.</p>
+</div>
+
+<div class="phase">
+  <span class="phase-id">Phase 9</span>
+  <span class="phase-title">Tuning</span>
+  <p>Playtest with crews of two, three and four. The specific thing being measured is <strong>whether the crew ever loses on queue length rather than on a mistake</strong>. Primary knob is <code>QueenShutoffCooldown</code>, then swarm size, then volley cadence.</p>
+</div>
+
+<h2 id="tests">Test Plan</h2>
+
+<h3>Unit (xunit, no Unity)</h3>
+<ul class="bullets">
+  <li><code>QueenGate</code>: shut while dormant; opens at threshold; weight honoured; same seed &rarr; same result across repeated evaluation.</li>
+  <li>Critical-to-ability map: silencing is idempotent; unmapped criticals are no-ops; all-silenced leaves a valid rotation.</li>
+  <li>Ability order: the builder produces a byte-identical sequence for identical inputs, and rejects a build exceeding the slot budget.</li>
+  <li>Victim selection: nearest-module resolution given a point and a module set; already-dark modules skipped; cooldown respected.</li>
+</ul>
+
+<h3>In-game, solo</h3>
+<ul class="bullets">
+  <li>Gate shut before escalation; open after; <code>!queenspawn</code> forces the encounter.</li>
+  <li>Volley impact darkens the expected module and produces the existing notification.</li>
+  <li>Crew restore works; no mod state lingers afterwards.</li>
+  <li>Phase ladder advances on HP; criticals silence attacks; all criticals kills her.</li>
+  <li>Reward drops at Legendary; signature perk rolls only for that relic.</li>
+  <li><code>BossDefeatHook</code> counts her &mdash; <code>BossesDefeated</code> increments, scalar bumps.</li>
+</ul>
+
+<h3>In-game, two clients</h3>
+<ul class="bullets">
+  <li>Both clients roll the Queen for the same seed, and both see the same body and ability list.</li>
+  <li>Sustained fight with no ability desync &mdash; specifically, no ability behaving as though reading another's payload.</li>
+  <li>A shutoff decided by the host appears on the correct module on both machines.</li>
+  <li>Late joiner mid-fight receives the silencing map and sees the correct phase.</li>
+  <li>Host migration mid-fight: the new host continues arbitrating impacts.</li>
+  <li>One relic drop total, not one per client.</li>
+</ul>
+
+<h2 id="risks">Known Risks</h2>
+
+<table class="data">
+  <tr><th>Risk</th><th>Severity</th><th>Mitigation</th></tr>
+  <tr><td class="k">Objective&rarr;instance link unsolved</td><td>Blocking</td><td>Phase 0 item 2. The feature does not exist without it. Already a known debt from Phase 6.</td></tr>
+  <tr><td class="k">Ability slot budget exhausted</td><td>High</td><td>Depends on how many slots the chosen skeleton already uses. Measured in Phase 0 item 4. Mitigation is to replace vanilla abilities rather than append, or to pick a skeleton with a smaller set.</td></tr>
+  <tr><td class="k">Positional desync</td><td>High</td><td>Fixed literal registration order; host-broadcast feature switch; explicit assertion on list length and order in the builder. Never a local config read.</td></tr>
+  <tr><td class="k">No criticals on any boss prefab</td><td>Medium</td><td>Degrade to HP-only phases. Detected in Phase 0 item 3, i.e. before the art brief commits.</td></tr>
+  <tr><td class="k">Mesh/collider mismatch</td><td>Medium</td><td>Author against the exported reference frame. Skeleton selection precedes art.</td></tr>
+  <tr><td class="k">Death spiral in small crews</td><td>Medium</td><td>Volleys are dodgeable and interceptable; swarm is non-lethal; <code>QueenShutoffCooldown</code> is the direct knob. Explicitly measured in Phase 9.</td></tr>
+  <tr><td class="k">Hot-path cost in ApplyHitDamage</td><td>Low</td><td>Earliest-possible exit on &ldquo;is a Queen encounter live&rdquo;.</td></tr>
+  <tr><td class="k">Vetoed shutoff requests</td><td>Low</td><td>Already solved by the existing behaviour's pattern: log declines loudly, drive notifications from real power state.</td></tr>
+  <tr><td class="k">Relic downgraded by loot reshape</td><td>Low</td><td>Explicit bypass in <code>QueenRewardRoll</code>; covered by a solo test at low scalar.</td></tr>
+</table>
+
+<div class="footer">
+  VoidCrewTerminus &middot; Leech Queen system design &middot; companion: <a href="leech-queen-rfc.html">leech-queen-rfc.html</a> &middot; <a href="index.html">docs index</a>
+</div>
+
+</main>
+</body>
+</html>
