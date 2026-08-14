@@ -78,14 +78,20 @@ public class ForgeInteractable : AbstractInteractable
     // InteractionInfo, which the HUD renders as no prompt rather than crashing.
     private static InteractionInfo _insertInfo;
     private static InteractionInfo _defaultInfo;
+    private static InteractionInfo _commitInfo;
+    private static InteractionInfo _alloyInfo;
     private static bool _infosResolved;
 
     public static InteractionInfo InfoFor(ForgeInteractableKind kind)
     {
         EnsureInfos();
-        return kind == ForgeInteractableKind.RelicTube || kind == ForgeInteractableKind.ModuleSocket
-            ? _insertInfo
-            : _defaultInfo;
+        return kind switch
+        {
+            ForgeInteractableKind.RelicTube or ForgeInteractableKind.ModuleSocket => _insertInfo,
+            ForgeInteractableKind.CommitButton => _commitInfo,
+            ForgeInteractableKind.AlloyTerminal => _alloyInfo,
+            _ => _defaultInfo,
+        };
     }
 
     private static void EnsureInfos()
@@ -104,12 +110,35 @@ public class ForgeInteractable : AbstractInteractable
 
         _insertInfo ??= EmptyInfo();
         _defaultInfo ??= EmptyInfo();
+        _commitInfo = ActionInfo("Commit");
+        _alloyInfo = ActionInfo("Feed Alloy");
     }
 
     private static InteractionInfo EmptyInfo()
     {
         var info = ScriptableObject.CreateInstance<InteractionInfo>();
         info.Interactions = new List<InteractionDescription>();
+        return info;
+    }
+
+    // CommitButton/AlloyTerminal have no vanilla InteractionInfo asset to borrow, so build
+    // one: same interact key binding as _insertInfo (the same F prompt already shown on the
+    // relic tubes and module socket — vanilla's generic "action key", e.g. toggling a
+    // module's power) with our own label swapped in, instead of the default's empty
+    // Interactions list, which the HUD renders as no prompt at all.
+    private static InteractionInfo ActionInfo(string label)
+    {
+        var info = ScriptableObject.CreateInstance<InteractionInfo>();
+        var source = _insertInfo.Interactions is { Count: > 0 } ? _insertInfo.Interactions[0] : null;
+        info.Interactions = new List<InteractionDescription>
+        {
+            new()
+            {
+                InteractionType = source?.InteractionType ?? InteractionDescription.EInteractionType.Press,
+                Key = source?.Key ?? new DefaultableLocalizedString { FallBackString = "Interact" },
+                Description = new DefaultableLocalizedString { FallBackString = label },
+            },
+        };
         return info;
     }
 }
