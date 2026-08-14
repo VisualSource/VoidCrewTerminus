@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Void Crew Chat Bugs &mdash; Research Notes</title>
+  <style>
+    :root {
+      --bg:      #0f1117;
+      --surface: #181c27;
+      --border:  #2a2f42;
+      --accent:  #5c8aff;
+      --accent2: #9b59f5;
+      --text:    #d4d8e8;
+      --muted:   #7a80a0;
+      --code-bg: #12151f;
+      --tag-bg:  #1e2436;
+      --danger:  #e05c5c;
+      --warn:    #e0a35c;
+      --ok:      #5ce08a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 15.5px;
+      line-height: 1.75;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    nav {
+      width: 260px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 28px 20px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+    nav .logo {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+    nav .subtitle {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 28px;
+    }
+    nav ul { list-style: none; }
+    nav ul li { margin-bottom: 2px; }
+    nav ul li a {
+      display: block;
+      padding: 5px 10px;
+      border-radius: 6px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 13px;
+    }
+    nav ul li a:hover { color: var(--text); background: var(--border); }
+    nav .section-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--accent2);
+      margin: 18px 0 6px 10px;
+    }
+    nav .back {
+      display: block;
+      margin-top: 26px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--muted);
+      text-decoration: none;
+    }
+    nav .back:hover { color: var(--accent); }
+
+    main {
+      flex: 1;
+      padding: 56px 72px;
+      max-width: 900px;
+    }
+
+    h1 {
+      font-size: 30px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    .page-meta {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 40px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .page-meta .pill {
+      display: inline-block;
+      background: var(--tag-bg);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 2px 10px;
+      font-size: 11px;
+      margin-right: 6px;
+      color: var(--accent);
+    }
+
+    h2 {
+      font-size: 22px;
+      font-weight: 700;
+      color: #fff;
+      margin: 56px 0 16px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    h3 {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--accent);
+      margin: 32px 0 10px;
+    }
+    p { margin-bottom: 16px; color: var(--text); }
+    p.lead {
+      font-size: 17px;
+      color: #e8ebf5;
+      line-height: 1.7;
+      margin-bottom: 22px;
+    }
+    ul.bullets, ol.bullets { margin: 0 0 16px 24px; }
+    ul.bullets li, ol.bullets li { margin-bottom: 10px; }
+
+    strong { color: #fff; }
+    em { color: var(--text); }
+
+    main a { color: var(--accent); text-decoration: none; }
+    main a:hover { text-decoration: underline; }
+
+    pre, code {
+      font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+      font-size: 13px;
+    }
+    code {
+      background: var(--tag-bg);
+      padding: 1px 6px;
+      border-radius: 4px;
+      color: #a8c0ff;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px 24px;
+      overflow-x: auto;
+      margin: 14px 0 20px;
+      line-height: 1.6;
+    }
+    pre code { background: none; padding: 0; color: var(--text); }
+
+    /* Syntax tones */
+    .kw  { color: #7ec4ff; }
+    .ty  { color: #9cdcfe; }
+    .mth { color: #dcdcaa; }
+    .cm  { color: #608b4e; }
+    .str { color: #ce9178; }
+    .num { color: #b5cea8; }
+    .exc { color: #e08c8c; }
+
+    .patch-label {
+      display: inline-block;
+      background: #1a1f2e;
+      border: 1px solid var(--border);
+      border-radius: 6px 6px 0 0;
+      border-bottom: none;
+      padding: 5px 14px;
+      font-size: 11px;
+      color: var(--muted);
+      font-family: 'Cascadia Code', monospace;
+      margin-bottom: -1px;
+    }
+    .patch-label + pre { border-radius: 0 8px 8px 8px; margin-top: 0; }
+
+    .callout {
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin: 20px 0;
+      font-size: 14px;
+      border-left: 4px solid;
+    }
+    .callout.note   { background: #1a2035; border-color: var(--accent);  color: #b8c8f0; }
+    .callout.warn   { background: #241e12; border-color: var(--warn);    color: #e8d3b0; }
+    .callout.danger { background: #241212; border-color: var(--danger);  color: #e8c0c0; }
+    .callout.ok     { background: #122414; border-color: var(--ok);      color: #b8e8c8; }
+    .callout strong { color: inherit; font-weight: 700; }
+    .callout a { color: inherit; text-decoration: underline; }
+    .callout .label {
+      display: inline-block;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      font-size: 11px;
+      margin-right: 8px;
+    }
+
+    table.data {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      margin: 14px 0 22px;
+    }
+    table.data th {
+      text-align: left;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      padding: 0 14px 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    table.data td {
+      padding: 10px 14px 10px 0;
+      border-bottom: 1px solid #1a1f2e;
+      vertical-align: top;
+      color: var(--text);
+    }
+    table.data tr:last-child td { border-bottom: none; }
+    table.data td.k {
+      font-weight: 700;
+      color: #9cdcfe;
+      white-space: nowrap;
+    }
+    table.data td.muted { color: var(--muted); }
+
+    blockquote {
+      border-left: 3px solid var(--border);
+      background: var(--surface);
+      border-radius: 0 8px 8px 0;
+      padding: 14px 20px;
+      margin: 14px 0 20px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    blockquote ul { list-style: none; }
+    blockquote li { margin-bottom: 4px; }
+    blockquote li:before { content: "\2022  "; color: var(--accent2); }
+
+    .verdict {
+      display: flex;
+      gap: 14px;
+      margin: 24px 0 8px;
+      flex-wrap: wrap;
+    }
+    .verdict .card {
+      flex: 1 1 300px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--border);
+      border-radius: 8px;
+      padding: 16px 20px;
+    }
+    .verdict .card.fixed  { border-left-color: var(--ok); }
+    .verdict .card.open   { border-left-color: var(--danger); }
+    .verdict .card .tag {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      display: block;
+      margin-bottom: 6px;
+    }
+    .verdict .card.fixed .tag { color: var(--ok); }
+    .verdict .card.open  .tag { color: var(--danger); }
+    .verdict .card .title { font-weight: 700; color: #fff; display: block; margin-bottom: 6px; }
+    .verdict .card p { font-size: 13.5px; color: var(--muted); margin: 0; }
+
+    hr { border: none; border-top: 1px solid var(--border); margin: 48px 0; }
+
+    .footer {
+      font-size: 12px;
+      color: var(--muted);
+      text-align: center;
+      margin-top: 56px;
+    }
+    .footer a { color: var(--accent); text-decoration: none; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">VoidCrewTerminus</div>
+  <div class="subtitle">Chat Bugs &mdash; Research Notes</div>
+
+  <div class="section-label">Overview</div>
+  <ul>
+    <li><a href="#summary">Summary</a></li>
+    <li><a href="#symptoms">The two symptoms</a></li>
+  </ul>
+
+  <div class="section-label">Symptom 2 &mdash; input eaten</div>
+  <ul>
+    <li><a href="#s2-mechanism">Mechanism</a></li>
+    <li><a href="#s2-permanent">Why it's permanent</a></li>
+    <li><a href="#s2-afk">There is no AFK system</a></li>
+    <li><a href="#s2-fix">Fix shipped</a></li>
+  </ul>
+
+  <div class="section-label">Symptom 1 &mdash; nothing sends</div>
+  <ul>
+    <li><a href="#s1-vivox">The Vivox channel race</a></li>
+    <li><a href="#s1-arm">A second way to fail</a></li>
+  </ul>
+
+  <div class="section-label">Attribution</div>
+  <ul>
+    <li><a href="#voidmanager">VoidManager is orthogonal</a></li>
+    <li><a href="#terminus">Terminus is not implicated</a></li>
+  </ul>
+
+  <div class="section-label">Limits</div>
+  <ul>
+    <li><a href="#unknowns">What couldn't be determined</a></li>
+    <li><a href="#sources">Sources</a></li>
+  </ul>
+
+  <a class="back" href="index.html">&larr; All documentation</a>
+</nav>
+
+<main>
+
+<h1>Void Crew Chat Bugs &mdash; Research Notes</h1>
+<div class="page-meta">
+  <span class="pill">Research</span>
+  <span class="pill">Void Crew 1.3.0</span>
+  <span class="pill">Unity 2022.3.62</span>
+  <span class="pill">VoidManager 1.2.11</span>
+  <span class="pill">2026-07-19</span>
+  <br /><br />
+  Written after the 26-07-19 two-client test, where chat problems blocked client-side command testing entirely: the non-host could not run <code>!difficulty</code>, which in turn made it <em>look</em> like escalation state wasn't syncing. It was &mdash; the logs show <code>&rarr; sent</code> / <code>&larr; applied</code> pairs matching on non-default values (see <code>TODO</code>, 8-E).
+</div>
+
+<h2 id="summary">Summary</h2>
+
+<p class="lead">Two chat symptoms were reported during multiplayer testing. Both are <strong>vanilla game bugs</strong>. Neither is caused by VoidCrewTerminus, and neither is fixed by VoidManager. One has a mod-side workaround, which is shipped; the other does not, and is documented here only.</p>
+
+<div class="callout ok">
+  <span class="label">Bottom line</span>
+  The chat failures are not a mod regression. Symptom 2 is fixed by <code>ChatInputFixPatch</code>; symptom 1 is an un-awaited async race in the game's Vivox lifecycle that a Harmony patch cannot safely reorder.
+</div>
+
+<h2 id="symptoms">The two symptoms</h2>
+
+<div class="verdict">
+  <div class="card open">
+    <span class="tag">Symptom 1 &middot; not fixed</span>
+    <span class="title">Chat sends nothing</span>
+    <p>Messages appear to send &mdash; the sender sees their own line &mdash; but the other player sees nothing. Caused by an empty Vivox text channel; documented, deliberately not patched.</p>
+  </div>
+  <div class="card fixed">
+    <span class="tag">Symptom 2 &middot; fixed</span>
+    <span class="title">Chat input is "eaten"</span>
+    <p>A player who goes AFK for even a second can no longer use chat; keystrokes vanish and Enter stops opening the box. Caused by a stale text-editor selection plus a latched character state.</p>
+  </div>
+</div>
+
+<hr />
+
+<h2 id="s2-mechanism">Symptom 2 &mdash; Mechanism</h2>
+
+<p><code>UI.Chat.TextChatVE.GetMessage()</code> blanks the field while it still holds focus and a live cursor:</p>
+
+<div class="patch-label">UI.Chat/TextChatVE.cs &mdash; decompiled</div>
+<pre><code><span class="kw">public</span> <span class="kw">string</span> <span class="mth">GetMessage</span>()
+{
+    <span class="kw">string</span> text = ((TextInputBaseField&lt;<span class="kw">string</span>&gt;)(<span class="kw">object</span>)inputField).text;
+    ((BaseField&lt;<span class="kw">string</span>&gt;)(<span class="kw">object</span>)inputField).value = <span class="str">""</span>;   <span class="cm">// cursorIndex/selectIndex still index the OLD string</span>
+    <span class="kw">return</span> text;
+}</code></pre>
+
+<p><code>TextChatVE.HideInput()</code> only toggles CSS classes:</p>
+
+<div class="patch-label">UI.Chat/TextChatVE.cs &mdash; decompiled</div>
+<pre><code><span class="kw">public</span> <span class="kw">void</span> <span class="mth">HideInput</span>()
+{
+    ((VisualElement)<span class="kw">this</span>).<span class="mth">RemoveFromClassList</span>(<span class="str">"text-chat__active"</span>);
+    inputContainer.<span class="mth">AddToClassList</span>(<span class="str">"chat-log-input__disabled"</span>);
+}</code></pre>
+
+<p>There is <strong>no <code>Blur()</code> and no <code>SelectNone()</code> anywhere in the chat code</strong>. The UIElements panel therefore keeps routing keydown events into a hidden text editor whose selection range now points past the end of an empty string. The next keystroke throws:</p>
+
+<div class="patch-label">Player log &mdash; repeats on every keypress</div>
+<pre><code><span class="exc">ArgumentOutOfRangeException: Specified argument was out of the range of valid values.
+Parameter name: startIndex</span>
+  System.String.Insert (System.Int32 startIndex, System.String value)
+  UnityEngine.TextEditingUtilities.ReplaceSelection (System.String replace)
+  UnityEngine.TextEditingUtilities.Insert (System.Char c)
+  UnityEngine.UIElements.KeyboardTextEditorEventHandler.OnKeyDown (...)
+  ...
+  UnityEngine.UIElements.PanelEventHandler.Update ()</code></pre>
+
+<p>That exact stack appears repeatedly in the captured player log. Unity's own issue tracker documents this signature as throwing <strong>on every keypress</strong> once the indices desync:</p>
+
+<ul class="bullets">
+  <li><a href="https://issuetracker.unity3d.com/issues/argumentoutofrangeexception-errors-are-thrown-everytime-a-keyboard-key-is-pressed-when-renaming-a-component-in-ui-builder-with-a-symbol-and-changing-the-name-after-label-attribute-warning">ArgumentOutOfRangeException thrown every time a keyboard key is pressed (UI Builder rename)</a></li>
+  <li><a href="https://issuetracker.unity3d.com/issues/attempting-to-edit-bone-data-via-textfields-in-skinningeditor-leads-to-argumentoutofrangeexception">TextFields in SkinningEditor lead to ArgumentOutOfRangeException in ReplaceSelection</a></li>
+</ul>
+
+<p><code>SetMessage()</code> has the same hazard via <code>SetValueWithoutNotify</code>.</p>
+
+<div class="callout note">
+  <span class="label">The game already knows the pattern</span>
+  <code>UI/UIToolkitNavigationExtensions.OnGainedFocus</code> does it properly &mdash; the chat widget simply doesn't.
+</div>
+
+<div class="patch-label">UI/UIToolkitNavigationExtensions.cs &mdash; the correct pattern</div>
+<pre><code>nav.FocusLostCallback = <span class="kw">delegate</span> {
+    ((TextInputBaseField&lt;<span class="kw">string</span>&gt;)(<span class="kw">object</span>)tf).<span class="mth">SelectNone</span>();
+    ((Focusable)tf).<span class="mth">Blur</span>();
+};</code></pre>
+
+<h2 id="s2-permanent">Why it's permanent, not transient</h2>
+
+<p><code>Gameplay.Chat.TextChat.OpenChat</code> early-returns unless the <code>"TextChatting"</code> character state is false:</p>
+
+<div class="patch-label">Gameplay.Chat/TextChat.cs &mdash; decompiled</div>
+<pre><code><span class="kw">if</span> (!StateManager.<span class="mth">GetState</span>(((Component)LocalPlayer.I).gameObject, <span class="str">"TextChatting"</span>))
+{
+    <span class="mth">SetInput</span>(); _chatUI.<span class="mth">ShowInput</span>(); _frameOpened = Time.frameCount; _chatOpened = <span class="kw">true</span>;
+}</code></pre>
+
+<p><code>SetInput()</code> sets that state true; <strong>only <code>RemoveInput()</code> clears it</strong> &mdash; and <code>RemoveInput()</code> is itself guarded:</p>
+
+<div class="patch-label">Gameplay.Chat/TextChat.cs &mdash; decompiled</div>
+<pre><code><span class="kw">private</span> <span class="kw">void</span> <span class="mth">RemoveInput</span>()
+{
+    <span class="kw">if</span> (Object.<span class="mth">op_Implicit</span>((Object)(<span class="kw">object</span>)LocalPlayer.I))
+    {
+        InputActionMapRequests.<span class="mth">RemoveRequest</span>(<span class="kw">this</span>);
+        StateManager.<span class="mth">SetState</span>(((Component)LocalPlayer.I).gameObject, <span class="str">"TextChatting"</span>, <span class="kw">false</span>);
+        _textingEnabled = <span class="kw">false</span>;
+    }
+}</code></pre>
+
+<div class="callout danger">
+  <span class="label">The latch</span>
+  If <code>LocalPlayer.I</code> is momentarily null (respawn, scene transition) the cleanup silently skips, the flag stays true, and <code>OpenChat</code> refuses on every subsequent Enter. Nothing else in the codebase resets it. There is <strong>no timeout and no recovery path</strong>.
+</div>
+
+<h2 id="s2-afk">There is no AFK system</h2>
+
+<p>Grepped the full decompiled source for <code>AFK</code>, <code>Afk</code>, <code>IdleTimer</code>, <code>idleTime</code>, <code>AwayFromKeyboard</code>, <code>InactivityTimeout</code> &mdash; zero hits outside unrelated AI code (<code>ActTimedIdle</code>). "AFK" is the community's name for what is actually a window-focus / state-latch symptom. The log's <code>--- OnApplicationFocused: False</code> / <code>True</code> lines come from <code>MenuScreenController.OnApplicationFocus</code>.</p>
+
+<h2 id="s2-fix">Fix shipped</h2>
+
+<p>Implemented in <code>VoidCrewTerminus/Patches/ChatInputFixPatch.cs</code>:</p>
+
+<table class="data">
+  <tr><th>Patch</th><th>Target</th><th>Effect</th></tr>
+  <tr><td class="k">Postfix</td><td class="k">TextChatVE.GetMessage</td><td><code>SelectNone()</code> + <code>Blur()</code> after the field is blanked</td></tr>
+  <tr><td class="k">Postfix</td><td class="k">TextChatVE.HideInput</td><td>Same, for closing chat without sending</td></tr>
+  <tr><td class="k">Prefix</td><td class="k">TextChat.OpenChat</td><td>Clears a stale <code>"TextChatting"</code> state via the game's own <code>RemoveInput()</code></td></tr>
+</table>
+
+<p>The prefix works precisely because <code>OpenChat</code> dereferences <code>LocalPlayer.I</code> &mdash; by then the player reference is alive, so the cleanup that failed earlier now succeeds.</p>
+
+<div class="callout note">
+  <span class="label">Degradation</span>
+  Config gate: <code>EnableChatInputFix</code> (default on). All members resolved via <code>AccessTools</code> with one-shot logging, so a game update that moves the vanilla UI makes the fix inert and <em>says so</em> rather than failing <code>CreateAndPatchAll</code>.
+</div>
+
+<hr />
+
+<h2 id="s1-vivox">Symptom 1 &mdash; The Vivox channel race</h2>
+
+<p><code>VivoxAdapter.SendTextMessage</code> returns silently when the channel isn't in the dictionary:</p>
+
+<div class="patch-label">VivoxAdapter.cs &mdash; decompiled</div>
+<pre><code><span class="kw">public</span> <span class="kw">void</span> <span class="mth">SendTextMessage</span>(<span class="kw">string</span> message)
+{
+    <span class="kw">if</span> (!channelUsers.<span class="mth">TryGetValue</span>(textChannel, <span class="kw">out var</span> value))
+    {
+        <span class="kw">return</span>;                       <span class="cm">// silent — no log, no error</span>
+    }
+    <span class="kw">foreach</span> (VivoxParticipant value3 <span class="kw">in</span> value.Forward.Values) { ... }
+    <span class="mth">FireMessageReceivedEvent</span>(VivoxService.Instance.SignedInPlayerId, message);   <span class="cm">// local echo</span>
+}</code></pre>
+
+<p>Two consequences: messages are sent as <strong>per-recipient direct messages</strong> rather than to the group channel, so an empty participant list transmits nothing; and the sender still gets a <strong>local echo</strong>, so chat looks like it works from their side.</p>
+
+<p><code>textChannel</code> goes empty because of an un-awaited race in <code>VoipBoostrap.OnJoinedRoom</code>:</p>
+
+<div class="patch-label">VoipBoostrap.cs &mdash; decompiled</div>
+<pre><code><span class="kw">public</span> <span class="kw">void</span> <span class="mth">OnJoinedRoom</span>()
+{
+    Debug.<span class="mth">Log</span>((<span class="kw">object</span>)(<span class="str">"[VIVOX] JOINED ROOM: "</span> + PhotonNetwork.CurrentRoom.Name));
+    VoipService.Instance?.<span class="mth">LeaveChannels</span>();      <span class="cm">// returns Task — discarded, never awaited</span>
+    <span class="kw">if</span> (VoipService.Instance != <span class="kw">null</span>)
+    {
+        VoipService.Instance.<span class="mth">JoinChannels</span>();    <span class="cm">// fires immediately</span>
+    }
+}</code></pre>
+
+<p><code>LeaveChannels()</code> wraps <code>LeaveAllChannelsAsync()</code> and also does <code>AudioChannel = ""</code>, <code>textChannel = ""</code>, <code>channelUsers.Clear()</code>. If the in-flight leave resolves <em>after</em> the joins are issued, it tears down the channels just joined. The captured log shows exactly that ordering:</p>
+
+<div class="patch-label">Player log &mdash; leave resolves after join</div>
+<pre><code>[VIVOX] Joining channel: 677419_chat
+[VIVOX] Joining channel: 677419_audio
+...
+[VIVOX] Left channel: 677419_audio
+[VIVOX] Left channel: 677419_chat</code></pre>
+
+<p>The fingerprint is the follow-on error, with a <strong>blank channel name</strong> and an <strong>empty participant list</strong>:</p>
+
+<div class="patch-label">Player log &mdash; the fingerprint</div>
+<pre><code><span class="exc">[Vivox] Player not found.</span>
+ name: DCyBHwT2BsszBpRxEYWWhIk8DAJu
+ channel:
+Players in channel:</code></pre>
+
+<p>That comes from <code>GetParticipant</code>, which prints <code>AudioChannel</code> &mdash; blank because <code>LeaveChannels</code> emptied it. (Secondary bug: <code>GetParticipant</code> ignores its own <code>channel</code> parameter and always indexes <code>AudioChannel</code>.)</p>
+
+<div class="callout warn">
+  <span class="label">Not fixed deliberately</span>
+  A fix means reordering async Vivox lifecycle from a Harmony patch; getting it wrong breaks voice chat as well as text. Worth an upstream report.
+</div>
+
+<h2 id="s1-arm">A second, independent way chat can fail to arm</h2>
+
+<p><code>TextChat.OnEnable</code> subscribes the chat hotkeys only inside an async continuation:</p>
+
+<div class="patch-label">Gameplay.Chat/TextChat.cs &mdash; decompiled</div>
+<pre><code>VoipService.Instance.ChatEnabled.<span class="mth">ContinueWith</span>(<span class="kw">delegate</span>(Task&lt;<span class="kw">bool</span>&gt; task) {
+    <span class="kw">if</span> (task.IsFaulted) Debug.<span class="mth">LogError</span>(...);
+    <span class="kw">if</span> (task.Result) <span class="mth">EnableChatInput</span>();      <span class="cm">// rethrows if faulted; continuation dies here</span>
+});</code></pre>
+
+<p><code>ChatEnabled</code> is a <strong>property that starts a fresh task on every access</strong> (<code>PAL.Privileges.HasCommunicationsPrivilege(false)</code>), so the three call sites get unrelated tasks with no ordering between them. The continuations also run on the ThreadPool &mdash; no <code>TaskScheduler.FromCurrentSynchronizationContext()</code>, which <code>VivoxAdapter</code> itself passes correctly elsewhere &mdash; so <code>InputAction.performed</code> delegate lists get mutated off the main thread. A disable/enable pair landing out of order leaves the component enabled with zero handlers attached, and Enter does nothing.</p>
+
+<hr />
+
+<h2 id="voidmanager">VoidManager is orthogonal</h2>
+
+<p>Its README's only chat claims, verbatim:</p>
+
+<blockquote>
+  <ul>
+    <li>Unlocks mouse while using text chat</li>
+    <li>Chat input history</li>
+    <li>Command Auto-complete via tab key-press</li>
+  </ul>
+</blockquote>
+
+<p>The plugin description says <em>"minor Chat improvements"</em>. The word "fixes" does not appear.</p>
+
+<p>All three of its chat patches are <strong>postfix-only and purely additive</strong>:</p>
+
+<table class="data">
+  <tr><th>Patch</th><th>Target</th><th>Purpose</th></tr>
+  <tr><td class="k">ChatCommandDetectPatch</td><td class="k">TextChatVE.GetMessage</td><td>Route <code>/</code> commands</td></tr>
+  <tr><td class="k">PublicCommandDetectPatch</td><td class="k">TextChat.IncomingMessage</td><td>Parse <code>!</code> commands</td></tr>
+  <tr><td class="k">TextChatVEPatch</td><td class="k">ShowInput / HideInput</td><td>Raise <code>ChatWindowOpened/Closed</code> events</td></tr>
+</table>
+
+<p>Nothing prefixes, transpiles, or replaces <code>OpenChat</code>, <code>SetInput</code>, <code>RemoveInput</code>, <code>EnableChatInput</code>, <code>DisableChatInput</code>, <code>OnEnable</code>, or <code>OnDisable</code>. Nothing touches the <code>"TextChatting"</code> state or field focus.</p>
+
+<div class="callout note">
+  <span class="label">Aggravating, not causal</span>
+  <code>CursorUnlock</code> is driven by the <code>ShowInput</code>/<code>HideInput</code> postfixes, so if the game latches into a state where <code>HideInput</code> never runs, VoidManager leaves the cursor unlocked &mdash; which makes the breakage <em>feel</em> worse but is not its cause.
+</div>
+
+<h2 id="terminus">VoidCrewTerminus is not implicated</h2>
+
+<p>This mod only <em>consumes</em> <code>VoidManager.Chat.Router</code> to register commands. Its full Harmony target list is gameplay/UI-context only:</p>
+
+<pre><code>AIDirector      BuildBox                 CarryableFactoryLogic   CarryableInteract
+CompositeWeaponBuildBox                  ContextInfoProvider     Deconstruct
+DestroyableComponent                     FabricationTab          HubShipManager
+LootManager     OrbitObject              RecycleTab              SpawnerProfile</code></pre>
+
+<p>&mdash; nothing touching chat, input, or focus. (<code>ChatInputFixPatch</code> above is the first, added <em>after</em> this research.)</p>
+
+<hr />
+
+<h2 id="unknowns">What could not be determined</h2>
+
+<ul class="bullets">
+  <li><strong><code>InputActionsGameConfigTable</code> is a <code>ScriptableObject</code> loaded from <code>Resources</code></strong>, so which actions are enabled/disabled per input state lives in an asset, not in code. A third candidate mechanism &mdash; <code>InputActionMapRequests</code> promoting <code>MenuScreenController</code> above <code>TextChat</code> on the request stack and disabling the very actions needed to escape &mdash; is therefore plausible but <strong>unconfirmed</strong>. Related defects visible in code: <code>SetTopState()</code> skips entirely when the request list empties (last state stays latched), and <code>MenuScreenController</code> only ever calls <code>AddOrChangeRequest</code>, never <code>RemoveRequest</code>.</li>
+  <li><strong>The engine-internal step from "exception during dispatch" to "all later keydowns dropped"</strong> is inferred from Unity's issue reports, not read from source. The stale-index throw is proven; the exact dispatcher state left behind is not.</li>
+  <li><strong>The chat UXML/USS is not available</strong>, so whether <code>chat-log-input__disabled</code> sets <code>display: none</code> &mdash; which would change the focus semantics &mdash; is unverified.</li>
+  <li><strong>VoidManager 1.2.11's binary was not inspected</strong> (only 1.2.7 and 1.2.10 are in the local NuGet cache). Chat strings are identical between those two and the master-branch source is labelled 1.2.11, so drift is unlikely but unconfirmed.</li>
+  <li><strong>Upstream issue tracker not fully checked.</strong> <code>Nihility-Shift/VoidManager</code> reports 0 issues, but its README badges point at <code>Void-Crew-Modding-Team/VoidManager</code>, which may hold the real tracker. Not checked.</li>
+  <li><strong>No deterministic repro was found for either symptom.</strong> Both are timing-dependent. The fix for symptom 2 is therefore reasoned from source, not validated against a reproduction.</li>
+</ul>
+
+<h2 id="sources">Sources</h2>
+
+<ul class="bullets">
+  <li>Decompiled game source, <code>.voidcrew/decompiled/Assembly-CSharp/</code>: <code>Gameplay.Chat/TextChat.cs</code>, <code>UI.Chat/TextChatVE.cs</code>, <code>VivoxAdapter.cs</code>, <code>VoipBoostrap.cs</code>, <code>CG.Input/InputActionMapRequests.cs</code>, <code>MenuScreenController.cs</code>, <code>UI/UIToolkitNavigationExtensions.cs</code></li>
+  <li><a href="https://github.com/Nihility-Shift/VoidManager">VoidManager README</a> and <code>VoidManager/Chat/</code> source</li>
+  <li>Unity Issue Tracker entries linked above</li>
+  <li>Player logs <code>VoidCrewTerminus-LogOutput-2026-07-20_00-44-00.log</code> (client) and <code>&hellip;00-44-03.log</code> (host)</li>
+</ul>
+
+<div class="footer">
+  VoidCrewTerminus &middot; research notes &middot; <a href="index.html">documentation index</a>
+</div>
+
+</main>
+</body>
+</html>

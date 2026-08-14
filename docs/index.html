@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VoidCrewTerminus &mdash; Documentation Index</title>
+  <style>
+    :root {
+      --bg:      #0f1117;
+      --surface: #181c27;
+      --border:  #2a2f42;
+      --accent:  #5c8aff;
+      --accent2: #9b59f5;
+      --text:    #d4d8e8;
+      --muted:   #7a80a0;
+      --code-bg: #12151f;
+      --tag-bg:  #1e2436;
+      --danger:  #e05c5c;
+      --warn:    #e0a35c;
+      --ok:      #5ce08a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 15.5px;
+      line-height: 1.75;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    nav {
+      width: 260px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 28px 20px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+    nav .logo {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+    nav .subtitle {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 28px;
+    }
+    nav ul { list-style: none; }
+    nav ul li { margin-bottom: 2px; }
+    nav ul li a {
+      display: block;
+      padding: 5px 10px;
+      border-radius: 6px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 13px;
+    }
+    nav ul li a:hover { color: var(--text); background: var(--border); }
+    nav .section-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--accent2);
+      margin: 18px 0 6px 10px;
+    }
+
+    main {
+      flex: 1;
+      padding: 56px 72px;
+      max-width: 1080px;
+    }
+
+    h1 { font-size: 30px; font-weight: 700; color: #fff; margin-bottom: 8px; }
+    .page-meta {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 40px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .page-meta .pill {
+      display: inline-block;
+      background: var(--tag-bg);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 2px 10px;
+      font-size: 11px;
+      margin-right: 6px;
+      color: var(--accent);
+    }
+
+    h2 {
+      font-size: 22px;
+      font-weight: 700;
+      color: #fff;
+      margin: 52px 0 8px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    h2:first-of-type { margin-top: 0; }
+    h3 {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--accent);
+      margin: 30px 0 4px;
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    p { margin-bottom: 16px; color: var(--text); }
+    p.lead { font-size: 17px; color: #e8ebf5; line-height: 1.7; margin-bottom: 22px; }
+    p.section-note { font-size: 13.5px; color: var(--muted); margin: 0 0 18px; }
+
+    strong { color: #fff; }
+    code {
+      font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+      font-size: 13px;
+      background: var(--tag-bg);
+      padding: 1px 6px;
+      border-radius: 4px;
+      color: #a8c0ff;
+    }
+
+    /* ── Status chips ── */
+    .chip {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: var(--tag-bg);
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .chip.shipped   { background: #122414; color: var(--ok); }
+    .chip.unverified{ background: #241e12; color: var(--warn); }
+    .chip.design    { background: #1e3055; color: #7ec4ff; }
+    .chip.unbuilt   { background: #2a1e35; color: #c586c0; }
+    .chip.md        { background: #1a1f2e; color: var(--muted); }
+    .chip.vanilla   { background: #241212; color: #e08c8c; }
+
+    /* ── Card grid ── */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 14px;
+      margin: 14px 0 8px;
+    }
+    a.card {
+      display: block;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 20px;
+      text-decoration: none;
+      color: inherit;
+      transition: border-color .12s ease, transform .12s ease;
+    }
+    a.card:hover {
+      border-color: var(--accent);
+      border-left-color: var(--accent);
+      transform: translateY(-1px);
+    }
+    a.card.is-rfc      { border-left-color: #7ec4ff; }
+    a.card.is-design   { border-left-color: var(--accent2); }
+    a.card.is-guide    { border-left-color: var(--ok); }
+    a.card.is-research { border-left-color: var(--warn); }
+    a.card.is-md       { border-left-color: #3a4258; }
+
+    a.card .kind {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      display: block;
+      margin-bottom: 5px;
+    }
+    a.card .title {
+      display: block;
+      font-size: 15.5px;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1.4;
+      margin-bottom: 6px;
+    }
+    a.card .desc {
+      display: block;
+      font-size: 13.5px;
+      color: var(--muted);
+      line-height: 1.6;
+      margin-bottom: 10px;
+    }
+    a.card .path {
+      display: block;
+      font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+      font-size: 11.5px;
+      color: #5a6180;
+    }
+    a.card .chips { margin-bottom: 8px; display: flex; gap: 5px; flex-wrap: wrap; }
+
+    .callout {
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin: 20px 0;
+      font-size: 14px;
+      border-left: 4px solid;
+    }
+    .callout.note   { background: #1a2035; border-color: var(--accent);  color: #b8c8f0; }
+    .callout.warn   { background: #241e12; border-color: var(--warn);    color: #e8d3b0; }
+    .callout .label {
+      display: inline-block;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      font-size: 11px;
+      margin-right: 8px;
+    }
+    .callout a { color: inherit; text-decoration: underline; }
+    .callout code { background: rgba(0,0,0,.25); color: inherit; }
+
+    table.data {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      margin: 14px 0 22px;
+    }
+    table.data th {
+      text-align: left;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      padding: 0 14px 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    table.data td {
+      padding: 10px 14px 10px 0;
+      border-bottom: 1px solid #1a1f2e;
+      vertical-align: top;
+      color: var(--text);
+    }
+    table.data tr:last-child td { border-bottom: none; }
+    table.data td.k { font-weight: 700; color: #9cdcfe; white-space: nowrap; }
+    table.data a { color: var(--accent); text-decoration: none; }
+    table.data a:hover { text-decoration: underline; }
+
+    hr { border: none; border-top: 1px solid var(--border); margin: 48px 0; }
+
+    .footer { font-size: 12px; color: var(--muted); text-align: center; margin-top: 56px; }
+    .footer a { color: var(--accent); text-decoration: none; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">VoidCrewTerminus</div>
+  <div class="subtitle">Documentation Index</div>
+
+  <div class="section-label">Orientation</div>
+  <ul>
+    <li><a href="#start">Start here</a></li>
+    <li><a href="#map">Doc types</a></li>
+  </ul>
+
+  <div class="section-label">Features</div>
+  <ul>
+    <li><a href="#forge">Upgrade Forge</a></li>
+    <li><a href="#leech">Leech Carrier</a></li>
+    <li><a href="#fighter">Aux Fighter</a></li>
+  </ul>
+
+  <div class="section-label">Reference</div>
+  <ul>
+    <li><a href="#guides">Modder's guides</a></li>
+    <li><a href="#research">Research notes</a></li>
+    <li><a href="#decisions">Decisions (ADR)</a></li>
+  </ul>
+
+  <div class="section-label">Working docs</div>
+  <ul>
+    <li><a href="#qa">Test plans</a></li>
+    <li><a href="#handoff">Handoffs &amp; glossary</a></li>
+    <li><a href="#project">Project files</a></li>
+  </ul>
+</nav>
+
+<main>
+
+<h1>VoidCrewTerminus &mdash; Documentation Index</h1>
+<div class="page-meta">
+  <span class="pill">Void Crew 1.3.0</span>
+  <span class="pill">BepInEx 5 + Harmony + VoidManager</span>
+  <span class="pill">net472</span>
+  <br /><br />
+  Every design, reference and working document in this repository, grouped by what it's for. Feature work follows a fixed shape: an <strong>RFC</strong> proposes it in player-facing terms, a <strong>Design</strong> doc pins down the implementation, and a <strong>test plan</strong> proves it in-game.
+</div>
+
+<h2 id="start">Start here</h2>
+
+<div class="callout note">
+  <span class="label">New to the repo</span>
+  Read <a href="../CLAUDE.md">CLAUDE.md</a> for project layout and build commands, then <a href="../handoff/CONTEXT.md">handoff/CONTEXT.md</a> for the vocabulary &mdash; every other document assumes those terms. <a href="harmony-patch-guide.html">harmony-patch-guide.html</a> is the fastest way into how patching works here.
+</div>
+
+<h2 id="map">Doc types</h2>
+
+<table class="data">
+  <tr><th>Type</th><th>Answers</th><th>Where</th></tr>
+  <tr><td class="k">RFC</td><td>What is this feature, in player-facing terms, and why build it?</td><td><code>docs/*-rfc.html</code></td></tr>
+  <tr><td class="k">Design</td><td>How is it built &mdash; patch surfaces, state, multiplayer authority, phases.</td><td><code>docs/*-design.html</code></td></tr>
+  <tr><td class="k">Guide</td><td>Reusable reference on the game and the modding stack, not on one feature.</td><td><code>docs/*-guide.html</code></td></tr>
+  <tr><td class="k">Research</td><td>Investigation of a specific problem, with sources and explicit unknowns.</td><td><code>docs/*-research.html</code></td></tr>
+  <tr><td class="k">ADR</td><td>One decision, its alternatives, and its consequences.</td><td><code>docs/adr/</code></td></tr>
+  <tr><td class="k">Test plan</td><td>What to do in-game and which log line proves it worked.</td><td><code>handoff/phase-*-test-plan.md</code></td></tr>
+  <tr><td class="k">Handoff</td><td>Session state for picking work back up, plus the shared glossary.</td><td><code>handoff/</code></td></tr>
+</table>
+
+<hr />
+
+<h2 id="forge">Upgrade Forge</h2>
+<h3>Module progression L3 &rarr; L10 <span class="chip shipped">shipped</span> <span class="chip unverified">MP partly verified</span></h3>
+<p class="section-note">The mod's flagship system: a new installable Forge module that consumes relics to raise other modules past their vanilla level cap, with tiered relics, rolled perks, cursed drawbacks and sector escalation. All progression is per-run. Eight phases built; Phase 8 multiplayer sync is only partly verified in-game.</p>
+
+<div class="cards">
+  <a class="card is-rfc" href="upgrade-forge-rfc.html">
+    <span class="kind">RFC</span>
+    <span class="title">Upgrade Forge &mdash; RFC</span>
+    <span class="desc">The proposal: why extend module levels at all, what the crew does with the Forge, and what stays out of scope.</span>
+    <span class="path">docs/upgrade-forge-rfc.html</span>
+  </a>
+  <a class="card is-design" href="upgrade-forge-design.html">
+    <span class="kind">Design &middot; authoritative</span>
+    <span class="title">Upgrade Forge &mdash; System Design</span>
+    <span class="desc">The mod-side overlay, relic tiers, perk pools, Forge Meter, Sector Escalation and the phase breakdown. The reference test plans point back to.</span>
+    <span class="path">docs/upgrade-forge-design.html</span>
+  </a>
+  <a class="card is-guide" href="upgrade-forge-prefab-authoring.html">
+    <span class="kind">Authoring guide</span>
+    <span class="title">Upgrade Forge &mdash; Prefab Authoring</span>
+    <span class="desc">The named-transform contract between <code>UpgradeForgeModuleCell.prefab</code> and the runtime wiring, for editing the prefab in Unity.</span>
+    <span class="path">docs/upgrade-forge-prefab-authoring.html</span>
+  </a>
+</div>
+
+<h2 id="leech">Leech Carrier</h2>
+<h3>EVA-forcing combat encounter <span class="chip design">design complete</span> <span class="chip unbuilt">not built</span></h3>
+<p class="section-note">A deep-sector enemy that fires Leech Missiles; on impact they deploy parasites onto the hull that degrade nearby modules until a crewmember EVAs out and burns them off with the multi-tool. Gated behind <code>DifficultyScalar &ge; 2</code> from the Forge's escalation system. Implementation was never authorized.</p>
+
+<div class="cards">
+  <a class="card is-rfc" href="leech-rfc.html">
+    <span class="kind">RFC</span>
+    <span class="title">Leech Carrier Encounter &mdash; RFC</span>
+    <span class="desc">The encounter as players meet it: the missile, the 1&ndash;3 Leeches, the hold-to-remove EVA interaction, and the difficulty gate.</span>
+    <span class="path">docs/leech-rfc.html</span>
+  </a>
+  <a class="card is-design" href="leech-design.html">
+    <span class="kind">Design</span>
+    <span class="title">Leech Carrier Encounter &mdash; System Design</span>
+    <span class="desc">Technical companion: how a vanilla enemy is patched to carry the weapon, how Leeches attach and network, and how it extends Sector Escalation.</span>
+    <span class="path">docs/leech-design.html</span>
+  </a>
+</div>
+
+<h2 id="fighter">Aux Fighter</h2>
+<h3>Single-seat craft carried by the ship <span class="chip design">design only</span> <span class="chip unbuilt">not scheduled</span></h3>
+<p class="section-note">A Fighter Bay module that clamps a one-seat craft to the hull's exterior. Module power <em>is</em> the docking mechanism, which makes launch a two-crew job and a power outage an emergency. Larger than the Forge; captured while fresh rather than queued.</p>
+
+<div class="cards">
+  <a class="card is-rfc" href="aux-fighter-rfc.html">
+    <span class="kind">RFC</span>
+    <span class="title">Aux Fighter &amp; Fighter Bay &mdash; RFC</span>
+    <span class="desc">The design in player terms: launch and recovery, power as the latch, the narrow anti-fighter combat role, and what the jump costs a pilot left outside.</span>
+    <span class="path">docs/aux-fighter-rfc.html</span>
+  </a>
+  <a class="card is-design" href="aux-fighter-design.html">
+    <span class="kind">Design</span>
+    <span class="title">Aux Fighter &mdash; System Design</span>
+    <span class="desc">The five-state latch machine, the <code>SpaceCraft</code> and cockpit seat, PhotonView ownership transfer, patch surfaces and the phased build.</span>
+    <span class="path">docs/aux-fighter-design.html</span>
+  </a>
+</div>
+
+<hr />
+
+<h2 id="guides">Modder's guides</h2>
+<p class="section-note">Feature-independent reference on the game and the stack. Written against Void Crew 1.3.0; check <code>.voidcrew/manifest.json</code> against the installed game before trusting type details after an update.</p>
+
+<div class="cards">
+  <a class="card is-guide" href="harmony-patch-guide.html">
+    <span class="kind">Guide &middot; Harmony 2.x</span>
+    <span class="title">HarmonyPatch &mdash; Modder's Guide</span>
+    <span class="desc">Patch types, <code>[HarmonyPatch]</code> targeting forms, injected parameters, transpilers, and the pitfalls that bite in this project.</span>
+    <span class="path">docs/harmony-patch-guide.html</span>
+  </a>
+  <a class="card is-guide" href="gamelibs-guide.html">
+    <span class="kind">Guide &middot; game API</span>
+    <span class="title">VoidCrew.GameLibs &mdash; Modder's Guide</span>
+    <span class="desc">The game's own types: enemies and the AI director, ships and modules, loot, damage. Bodies are <code>throw null</code> stubs &mdash; patch, don't call.</span>
+    <span class="path">docs/gamelibs-guide.html</span>
+  </a>
+  <a class="card is-guide" href="ingame-ui-modding-guide.html">
+    <span class="kind">Guide &middot; UI</span>
+    <span class="title">In-Game UI Modding &mdash; Modder's Guide</span>
+    <span class="desc">The full UI toolkit &mdash; patches, <code>ModSettingsMenu</code>, <code>GUITools</code>, messaging, runtime assets &mdash; worked through one example: hiding the helm tactical map.</span>
+    <span class="path">docs/ingame-ui-modding-guide.html</span>
+  </a>
+  <a class="card is-guide" href="chat-command-spawn-api.html">
+    <span class="kind">Guide &middot; commands</span>
+    <span class="title">Chat Commands &amp; Item Spawning</span>
+    <span class="desc">Registering <code>/</code> and <code>!</code> commands through VoidManager's router, and spawning items and objects over Photon from a command handler.</span>
+    <span class="path">docs/chat-command-spawn-api.html</span>
+  </a>
+</div>
+
+<h2 id="research">Research notes</h2>
+
+<div class="cards">
+  <a class="card is-research" href="chat-bug-research.html">
+    <span class="kind">Research &middot; 2026-07-19</span>
+    <span class="title">Void Crew Chat Bugs</span>
+    <div class="chips"><span class="chip vanilla">vanilla bugs</span><span class="chip shipped">1 of 2 fixed</span></div>
+    <span class="desc">Why multiplayer chat drops messages and why input gets "eaten" after a focus loss. Both are game bugs, not mod regressions: a stale UIElements selection plus a latched <code>"TextChatting"</code> state, and an un-awaited Vivox channel race.</span>
+    <span class="path">docs/chat-bug-research.html</span>
+  </a>
+</div>
+
+<h2 id="decisions">Decisions (ADR)</h2>
+
+<div class="cards">
+  <a class="card is-md" href="adr/0001-mod-side-overlay-not-prefab-replacement.md">
+    <span class="kind">ADR-0001 &middot; accepted</span>
+    <span class="title">Mod-side overlay, not prefab replacement</span>
+    <div class="chips"><span class="chip md">markdown</span></div>
+    <span class="desc">Why module levels live in a <code>ConditionalWeakTable</code> with Harmony stat postfixes instead of ~70 authored L4&ndash;L10 prefabs slotted into the vanilla BuildBox swap chain.</span>
+    <span class="path">docs/adr/0001-mod-side-overlay-not-prefab-replacement.md</span>
+  </a>
+</div>
+
+<hr />
+
+<h2 id="qa">Test plans</h2>
+<p class="section-note">Each plan names the exact log line that proves a system works. Phase 6 was once marked "shipped" while enemy density was a silent no-op, so from Phase 7 on <strong>nothing counts as verified until its causal line appears in a captured <code>BepInEx/LogOutput.log</code></strong>.</p>
+
+<div class="cards">
+  <a class="card is-md" href="../handoff/phase-6-test-plan.md">
+    <span class="kind">Test plan &middot; Phase 6</span>
+    <span class="title">Sector Escalation</span>
+    <div class="chips"><span class="chip md">markdown</span><span class="chip shipped">shipped</span></div>
+    <span class="desc">Loot tier biasing, enemy density, enemy HP and damage, plus the activation gate &mdash; each verified alone, then end-to-end.</span>
+    <span class="path">handoff/phase-6-test-plan.md</span>
+  </a>
+  <a class="card is-md" href="../handoff/phase-7-test-plan.md">
+    <span class="kind">Test plan &middot; Phase 7</span>
+    <span class="title">Signatures, Cursed relics, Maintenance Burden</span>
+    <div class="chips"><span class="chip md">markdown</span><span class="chip unverified">unverified in-game</span></div>
+    <span class="desc">Five tests, each proving one causal chain end-to-end in a real log. Supersedes the older per-sub-phase plans for day-to-day QA.</span>
+    <span class="path">handoff/phase-7-test-plan.md</span>
+  </a>
+  <a class="card is-md" href="../handoff/phase-8-test-plan.md">
+    <span class="kind">Test plan &middot; Phase 8</span>
+    <span class="title">Multiplayer sync</span>
+    <div class="chips"><span class="chip md">markdown</span><span class="chip unverified">re-verification required</span></div>
+    <span class="desc">Meter and escalation state, the alloy hop, cursed marker sync, authoritative commit. Four of seven had real evidence before the 2026-08-14 net-layer refactor reset it.</span>
+    <span class="path">handoff/phase-8-test-plan.md</span>
+  </a>
+</div>
+
+<h2 id="handoff">Handoffs &amp; glossary</h2>
+
+<div class="cards">
+  <a class="card is-md" href="../handoff/CONTEXT.md">
+    <span class="kind">Glossary &middot; read first</span>
+    <span class="title">CONTEXT.md &mdash; ubiquitous language</span>
+    <div class="chips"><span class="chip md">markdown</span></div>
+    <span class="desc">The mod's design vocabulary, with the words to avoid. Upgrade Forge, Forge Meter, Module Level, Relic Tier, Perk Slot, and the Aux Fighter terms the design docs assume.</span>
+    <span class="path">handoff/CONTEXT.md</span>
+  </a>
+  <a class="card is-md" href="../handoff/upgrade-forge-handoff.md">
+    <span class="kind">Handoff &middot; 2026-06-26</span>
+    <span class="title">Upgrade Forge implementation</span>
+    <div class="chips"><span class="chip md">markdown</span><span class="chip design">historical</span></div>
+    <span class="desc">The pre-implementation handoff for the Forge: what to read, what not to re-derive, and the finalized plan as it stood before Phase 1.</span>
+    <span class="path">handoff/upgrade-forge-handoff.md</span>
+  </a>
+  <a class="card is-md" href="../handoff/leech-handoff.md">
+    <span class="kind">Handoff &middot; 2026-06-26</span>
+    <span class="title">Leech Carrier implementation</span>
+    <div class="chips"><span class="chip md">markdown</span><span class="chip unbuilt">not authorized</span></div>
+    <span class="desc">Design complete, plan finalized, implementation never authorized. Branch <code>features/rfc-leach</code>. Start here if the encounter is ever picked up.</span>
+    <span class="path">handoff/leech-handoff.md</span>
+  </a>
+</div>
+
+<h2 id="project">Project files</h2>
+
+<div class="cards">
+  <a class="card is-md" href="../CLAUDE.md">
+    <span class="kind">Project</span>
+    <span class="title">CLAUDE.md</span>
+    <div class="chips"><span class="chip md">markdown</span></div>
+    <span class="desc">Layout, build commands, key files, the entry flow, and the hard-won rules &mdash; including why plugin <code>Awake()</code> must never touch <code>PhotonNetwork</code>.</span>
+    <span class="path">CLAUDE.md</span>
+  </a>
+  <a class="card is-md" href="../TODO">
+    <span class="kind">Project &middot; running log</span>
+    <span class="title">TODO</span>
+    <div class="chips"><span class="chip md">plain text</span></div>
+    <span class="desc">The authoritative record of phase status and test evidence. Test plans reconcile against it; when a plan and the TODO disagree, the TODO won last.</span>
+    <span class="path">TODO</span>
+  </a>
+  <a class="card is-md" href="../README.md">
+    <span class="kind">Project &middot; Thunderstore</span>
+    <span class="title">README.md</span>
+    <div class="chips"><span class="chip md">markdown</span><span class="chip unverified">generated</span></div>
+    <span class="desc">The shipped package readme. Generated from <code>ReleaseFiles/PluginInfo.config</code> at build time &mdash; edit the config, not this file.</span>
+    <span class="path">README.md</span>
+  </a>
+</div>
+
+<div class="callout warn">
+  <span class="label">Note</span>
+  Markdown and plain-text entries above open as raw source in a browser. They're meant to be read in the editor &mdash; the links are here so the index stays a complete map rather than an HTML-only one.
+</div>
+
+<div class="footer">
+  VoidCrewTerminus &middot; documentation index &middot; <a href="https://hutlihutgames.github.io/void_crew_modding_documentation/">Void Crew modding docs</a>
+</div>
+
+</main>
+</body>
+</html>
