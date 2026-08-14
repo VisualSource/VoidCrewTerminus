@@ -1,3 +1,7 @@
+## 0.0.14
+- new forge module
+- fixed assets shaders loading
+- fixed prompts for commit and alloy insert
 ## 0.0.13
 - fixed floating but?
 - fix metam assets not being included in the asset bundle
