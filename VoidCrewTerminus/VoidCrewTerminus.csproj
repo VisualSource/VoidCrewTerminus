@@ -4,7 +4,7 @@
     <AssemblyName>VoidCrewTerminus</AssemblyName>
     <Description>
     </Description>
-    <Version>0.0.13</Version>
+    <Version>0.0.14</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
     <RestoreAdditionalProjectSources>
@@ -89,7 +89,7 @@
   <!--
     The zip is LOCATED BY GLOB, not rebuilt from $(Version). ZipBuilder.ps1 names
     it from PluginVersion in PluginInfo.config, while MSBuild's $(Version) is
-    evaluated at project-load time — two independent sources for one filename. If
+    evaluated at project-load time - two independent sources for one filename. If
     they ever disagree, a reconstructed path simply doesn't exist.
 
     Every failure here is now a hard Error. The previous version guarded the Exec
@@ -103,13 +103,10 @@
       <MetemBundles Include="$(MSBuildProjectDirectory)\..\Assets\*.metem_ext" />
       <ReleaseZips Include="$(OutDir)Releases\*.zip" />
     </ItemGroup>
-    <Error Condition="'@(MetemBundles)' == ''"
-           Text="No asset bundles found in $(MSBuildProjectDirectory)\..\Assets — the release zip would ship without them." />
-    <Error Condition="'@(ReleaseZips)' == ''"
-           Text="No release zip found in $(OutDir)Releases — cannot append asset bundles. Did ExecPostBuild run, and is ZipOutput=true in PluginInfo.config?" />
-    <Error Condition="'@(ReleaseZips->Count())' != '1'"
-           Text="Expected exactly 1 release zip in $(OutDir)Releases but found @(ReleaseZips->Count()): @(ReleaseZips). Clean the output directory — appending to the wrong zip would ship assets against a stale version." />
+    <Error Condition="'@(MetemBundles)' == ''" Text="No asset bundles found in $(MSBuildProjectDirectory)\..\Assets - the release zip would ship without them." />
+    <Error Condition="'@(ReleaseZips)' == ''" Text="No release zip found in $(OutDir)Releases - cannot append asset bundles. Did ExecPostBuild run, and is ZipOutput=true in PluginInfo.config?" />
+    <Error Condition="'@(ReleaseZips-&gt;Count())' != '1'" Text="Expected exactly 1 release zip in $(OutDir)Releases but found @(ReleaseZips-&gt;Count()): @(ReleaseZips). Clean the output directory - appending to the wrong zip would ship assets against a stale version." />
     <Exec Command="%25WINDIR%25\System32\WindowsPowerShell\v1.0\powershell.exe -NonInteractive -NoProfile -ExecutionPolicy Unrestricted -Command &quot;Compress-Archive -Path '%(MetemBundles.FullPath)' -DestinationPath '@(ReleaseZips)' -Update&quot;" />
-    <Message Importance="high" Text="Appended @(MetemBundles->Count()) asset bundle(s) to @(ReleaseZips): @(MetemBundles->'%(Filename)%(Extension)', ', ')" />
+    <Message Importance="high" Text="Appended @(MetemBundles-&gt;Count()) asset bundle(s) to @(ReleaseZips): @(MetemBundles-&gt;'%(Filename)%(Extension)', ', ')" />
   </Target>
 </Project>

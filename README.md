@@ -11,13 +11,13 @@ Void Crew Community Modding Discord: \
 
 Version [0.0.1]  
 Developed by [VisualSource]  
-Requires:  BepInEx-BepInExPack-5.4.2100, NihilityShift-VoidManager-1.2.10
+Requires:  BepInEx-BepInExPack-5.4.2305, NihilityShift-VoidManager-1.2.11
     
 ---------------------
 
 ### 💡 Function(s)
 
-- VoidCrewTerminus
+- Expansion mod for void crew
 
 ### 🎮 Client Usage
 

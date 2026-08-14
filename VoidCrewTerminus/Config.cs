@@ -8,6 +8,23 @@ namespace VoidCrewTerminus;
 
 internal static class TerminusConfig
 {
+    // Every entry below is a triplet: a `const` default, the ConfigEntry bound to
+    // it, and a typed accessor that reads it.
+    //
+    // The accessors exist because a ConfigEntry is null until Init() runs — far
+    // later than some static initialisers, and never at all under the test host —
+    // so every read site used to spell `X?.Value ?? <literal>`. That put the
+    // default in two places (the attribute and the read), and read sites were
+    // duplicated 2-6× each, so the same number appeared up to six times with
+    // nothing keeping the copies in step.
+    //
+    // Passing the const into the attribute keeps the literal in exactly ONE
+    // place: attribute arguments must be constant expressions, and BindConfig
+    // takes `object`, so a const boxes cleanly and Init's runtime type check
+    // still sees the right type.
+    //
+    // Read config through the accessor, never through `Entry?.Value ?? default`.
+
     // Defined entries as static ConfigEntry<TYPE> NAME
     // Assigned via reflection in Init(); suppress "never assigned" warning.
 #pragma warning disable CS0649
@@ -18,90 +35,153 @@ internal static class TerminusConfig
     [BindConfig("dev", false, "Enable dev mode")]
     internal static ConfigEntry<bool> EnableDevMode;
 
-    [BindConfig("lobby", 0.6f, "Duration fade affect between ship when after ship selection")]
-    internal static ConfigEntry<float> LobbyShipFadeDuration;
+    // Dev commands read this ~31 times. Unbound reads as false so a command can
+    // never fire before Init() has run.
+    internal static bool DevMode => EnableDevMode?.Value ?? false;
 
-    [BindConfig("lobby", 3f, "Per-frame time budget (ms) for building hangar ship visuals during preload; lower = smoother scene start, slower build")]
+    private const float DefaultLobbyShipFadeDuration = 0.6f;
+    [BindConfig("lobby", DefaultLobbyShipFadeDuration, "Duration fade affect between ship when after ship selection")]
+    internal static ConfigEntry<float> LobbyShipFadeDuration;
+    internal static float ShipFadeDuration => LobbyShipFadeDuration?.Value ?? DefaultLobbyShipFadeDuration;
+
+    private const float DefaultLobbyShipBuildBudgetMs = 3f;
+    [BindConfig("lobby", DefaultLobbyShipBuildBudgetMs, "Per-frame time budget (ms) for building hangar ship visuals during preload; lower = smoother scene start, slower build")]
     internal static ConfigEntry<float> LobbyShipBuildBudgetMs;
+    internal static float ShipBuildBudgetMs => LobbyShipBuildBudgetMs?.Value ?? DefaultLobbyShipBuildBudgetMs;
 
     // Upgrade Forge — cost curve
-    [BindConfig("forge", "1,1,2,2,3,3,4", "Comma-separated relic cost per module level step L4..L10 (default: 1,1,2,2,3,3,4 = 16 total to hit L10)")]
+    private const string DefaultForgeCostCurve = "1,1,2,2,3,3,4";
+    [BindConfig("forge", DefaultForgeCostCurve, "Comma-separated relic cost per module level step L4..L10 (default: 1,1,2,2,3,3,4 = 16 total to hit L10)")]
     internal static ConfigEntry<string> ForgeCostCurve;
+    internal static string CostCurveRaw => ForgeCostCurve?.Value ?? DefaultForgeCostCurve;
 
     // Upgrade Forge — meter & progression
-    [BindConfig("forge", 20f, "Forge Meter fill per successful sector jump")]
+    private const float DefaultForgeMeterPerSectorJump = 20f;
+    [BindConfig("forge", DefaultForgeMeterPerSectorJump, "Forge Meter fill per successful sector jump")]
     internal static ConfigEntry<float> ForgeMeterPerSectorJump;
+    internal static float MeterPerSectorJump => ForgeMeterPerSectorJump?.Value ?? DefaultForgeMeterPerSectorJump;
 
-    [BindConfig("forge", 1f, "Forge Meter fill per alloy spent at the Alloy Terminal")]
+    private const float DefaultForgeMeterPerAlloy = 1f;
+    [BindConfig("forge", DefaultForgeMeterPerAlloy, "Forge Meter fill per alloy spent at the Alloy Terminal")]
     internal static ConfigEntry<float> ForgeMeterPerAlloy;
+    internal static float MeterPerAlloy => ForgeMeterPerAlloy?.Value ?? DefaultForgeMeterPerAlloy;
 
-    [BindConfig("forge", 10, "Alloys consumed per Alloy Terminal use")]
+    private const int DefaultAlloyTerminalSpendPerUse = 10;
+    [BindConfig("forge", DefaultAlloyTerminalSpendPerUse, "Alloys consumed per Alloy Terminal use")]
     internal static ConfigEntry<int> AlloyTerminalSpendPerUse;
+    internal static int AlloySpendPerUse => AlloyTerminalSpendPerUse?.Value ?? DefaultAlloyTerminalSpendPerUse;
 
-    [BindConfig("forge", 100f, "Forge Meter threshold for L1→L2; multiplied by ForgeMeterLevelMultiplier each subsequent level")]
+    private const float DefaultForgeMeterBaseThreshold = 100f;
+    [BindConfig("forge", DefaultForgeMeterBaseThreshold, "Forge Meter threshold for L1→L2; multiplied by ForgeMeterLevelMultiplier each subsequent level")]
     internal static ConfigEntry<float> ForgeMeterBaseThreshold;
+    internal static float MeterBaseThreshold => ForgeMeterBaseThreshold?.Value ?? DefaultForgeMeterBaseThreshold;
 
-    [BindConfig("forge", 1.5f, "Multiplicative scale applied to meter threshold per Forge level")]
+    private const float DefaultForgeMeterLevelMultiplier = 1.5f;
+    [BindConfig("forge", DefaultForgeMeterLevelMultiplier, "Multiplicative scale applied to meter threshold per Forge level")]
     internal static ConfigEntry<float> ForgeMeterLevelMultiplier;
+    internal static float MeterLevelMultiplier => ForgeMeterLevelMultiplier?.Value ?? DefaultForgeMeterLevelMultiplier;
 
     // Upgrade Forge — perk roll chances (0–1)
-    [BindConfig("forge", 0.25f, "Perk roll chance when upgrading with a Common relic")]
+    private const float DefaultPerkRollChanceCommon = 0.25f;
+    [BindConfig("forge", DefaultPerkRollChanceCommon, "Perk roll chance when upgrading with a Common relic")]
     internal static ConfigEntry<float> PerkRollChanceCommon;
+    internal static float PerkChanceCommon => PerkRollChanceCommon?.Value ?? DefaultPerkRollChanceCommon;
 
-    [BindConfig("forge", 0.40f, "Perk roll chance when upgrading with a Rare relic")]
+    private const float DefaultPerkRollChanceRare = 0.40f;
+    [BindConfig("forge", DefaultPerkRollChanceRare, "Perk roll chance when upgrading with a Rare relic")]
     internal static ConfigEntry<float> PerkRollChanceRare;
+    internal static float PerkChanceRare => PerkRollChanceRare?.Value ?? DefaultPerkRollChanceRare;
 
-    [BindConfig("forge", 0.75f, "Perk roll chance when upgrading with a Legendary relic")]
+    private const float DefaultPerkRollChanceLegendary = 0.75f;
+    [BindConfig("forge", DefaultPerkRollChanceLegendary, "Perk roll chance when upgrading with a Legendary relic")]
     internal static ConfigEntry<float> PerkRollChanceLegendary;
+    internal static float PerkChanceLegendary => PerkRollChanceLegendary?.Value ?? DefaultPerkRollChanceLegendary;
 
     // Upgrade Forge — sector escalation
-    [BindConfig("forge", 0.05f, "Fractional multiplier added to enemy HP and damage per DifficultyScalar tick (minor boost — density is the primary axis)")]
+    //
+    // The three enemy-pressure knobs below are read together on every scaling
+    // path; go through Escalation.EscalationIntensity.Current rather than
+    // reading them individually.
+    private const float DefaultEscalationStatScalarPerJump = 0.05f;
+    [BindConfig("forge", DefaultEscalationStatScalarPerJump, "Fractional multiplier added to enemy HP and damage per DifficultyScalar tick (minor boost — density is the primary axis)")]
     internal static ConfigEntry<float> EscalationStatScalarPerJump;
+    internal static float StatScalarPerJump => EscalationStatScalarPerJump?.Value ?? DefaultEscalationStatScalarPerJump;
 
-    [BindConfig("forge", 0.12f, "Fractional multiplier added to enemy spawner intensity per DifficultyScalar tick (primary escalation axis — deeper sectors bring more enemies). At the default cap of 10, density tops out at 1 + 10*0.12 = 2.2x.")]
+    private const float DefaultEscalationDensityScalarPerJump = 0.12f;
+    [BindConfig("forge", DefaultEscalationDensityScalarPerJump, "Fractional multiplier added to enemy spawner intensity per DifficultyScalar tick (primary escalation axis — deeper sectors bring more enemies). At the default cap of 10, density tops out at 1 + 10*0.12 = 2.2x.")]
     internal static ConfigEntry<float> EscalationDensityScalarPerJump;
+    internal static float DensityScalarPerJump => EscalationDensityScalarPerJump?.Value ?? DefaultEscalationDensityScalarPerJump;
 
-    [BindConfig("forge", 10, "Upper cap on the effective DifficultyScalar used for ENEMY scaling (density + HP + damage). Raw scalar keeps climbing (loot tier / display), but enemy pressure plateaus here so deep runs stay survivable and don't spawn an unbounded number of networked ships. Set 0 to disable the cap (uncapped linear growth).")]
+    private const int DefaultEscalationScalarCap = 10;
+    [BindConfig("forge", DefaultEscalationScalarCap, "Upper cap on the effective DifficultyScalar used for ENEMY scaling (density + HP + damage). Raw scalar keeps climbing (loot tier / display), but enemy pressure plateaus here so deep runs stay survivable and don't spawn an unbounded number of networked ships. Set 0 to disable the cap (uncapped linear growth).")]
     internal static ConfigEntry<int> EscalationScalarCap;
+    internal static int ScalarCap => EscalationScalarCap?.Value ?? DefaultEscalationScalarCap;
 
-    [BindConfig("forge", 2, "Number of boss objectives that must be defeated in a run before any escalation (density, HP, damage, loot tier biasing) takes effect. DifficultyScalar and BossesDefeated still accumulate during the warm-up so scaling kicks in with full accumulated intensity once the threshold is crossed.")]
+    private const int DefaultEscalationBossActivationThreshold = 2;
+    [BindConfig("forge", DefaultEscalationBossActivationThreshold, "Number of boss objectives that must be defeated in a run before any escalation (density, HP, damage, loot tier biasing) takes effect. DifficultyScalar and BossesDefeated still accumulate during the warm-up so scaling kicks in with full accumulated intensity once the threshold is crossed.")]
     internal static ConfigEntry<int> EscalationBossActivationThreshold;
+    internal static int BossActivationThreshold => EscalationBossActivationThreshold?.Value ?? DefaultEscalationBossActivationThreshold;
 
-    [BindConfig("forge", 0.15f, "Base chance (0-1) that a spawned relic is flagged as Cursed. Per-relic modifiers in RelicTierData.BaseCurseChanceModifier are added on top, plus a DifficultyScalar bonus. Applies from the first sector — curses are NOT gated on the escalation boss threshold.")]
+    private const float DefaultRelicBaseCurseChance = 0.15f;
+    [BindConfig("forge", DefaultRelicBaseCurseChance, "Base chance (0-1) that a spawned relic is flagged as Cursed. Per-relic modifiers in RelicTierData.BaseCurseChanceModifier are added on top, plus a DifficultyScalar bonus. Applies from the first sector — curses are NOT gated on the escalation boss threshold.")]
     internal static ConfigEntry<float> RelicBaseCurseChance;
+    internal static float BaseCurseChance => RelicBaseCurseChance?.Value ?? DefaultRelicBaseCurseChance;
 
-    [BindConfig("forge", 0.03f, "Additional cursed chance per DifficultyScalar tick — deeper sectors produce more cursed relics. Note DifficultyScalar only starts climbing once escalation activates, so in practice this is flat during warm-up.")]
+    private const float DefaultEscalationCurseChancePerScalar = 0.03f;
+    [BindConfig("forge", DefaultEscalationCurseChancePerScalar, "Additional cursed chance per DifficultyScalar tick — deeper sectors produce more cursed relics. Note DifficultyScalar only starts climbing once escalation activates, so in practice this is flat during warm-up.")]
     internal static ConfigEntry<float> EscalationCurseChancePerScalar;
+    internal static float CurseChancePerScalar => EscalationCurseChancePerScalar?.Value ?? DefaultEscalationCurseChancePerScalar;
 
-    [BindConfig("forge", 0.50f, "Hard ceiling (0-1) on the final cursed chance, applied after base + per-relic modifier + scalar bonus. Without it the uncapped DifficultyScalar drives curse chance to 100% in deep runs (every relic cursed). Set 1 to disable the ceiling.")]
+    private const float DefaultRelicMaxCurseChance = 0.50f;
+    [BindConfig("forge", DefaultRelicMaxCurseChance, "Hard ceiling (0-1) on the final cursed chance, applied after base + per-relic modifier + scalar bonus. Without it the uncapped DifficultyScalar drives curse chance to 100% in deep runs (every relic cursed). Set 1 to disable the ceiling.")]
     internal static ConfigEntry<float> RelicMaxCurseChance;
+    internal static float MaxCurseChance => RelicMaxCurseChance?.Value ?? DefaultRelicMaxCurseChance;
 
     // Maintenance Burden (Phase 7-C) — when a cursed relic is consumed in a
     // successful commit, an independent roll decides whether the module also
     // takes on a burden. Perk roll is unaffected.
-    [BindConfig("forge", 0.75f, "Chance a successful commit consuming ≥1 cursed relic attaches the relic's baked Maintenance Burden to the target module — 'high chance' per design intent")]
+    private const float DefaultBurdenApplicationChance = 0.75f;
+    [BindConfig("forge", DefaultBurdenApplicationChance, "Chance a successful commit consuming ≥1 cursed relic attaches the relic's baked Maintenance Burden to the target module — 'high chance' per design intent")]
     internal static ConfigEntry<float> BurdenApplicationChance;
+    internal static float BurdenChance => BurdenApplicationChance?.Value ?? DefaultBurdenApplicationChance;
 
-    [BindConfig("forge", 30f, "RandomShutoff burden — minimum seconds between shutoff events (the burden only turns the module OFF; the crew restores it manually)")]
+    private const float DefaultBurdenIntervalMinSeconds = 30f;
+    [BindConfig("forge", DefaultBurdenIntervalMinSeconds, "RandomShutoff burden — minimum seconds between shutoff events (the burden only turns the module OFF; the crew restores it manually)")]
     internal static ConfigEntry<float> BurdenIntervalMinSeconds;
+    internal static float BurdenMinInterval => BurdenIntervalMinSeconds?.Value ?? DefaultBurdenIntervalMinSeconds;
 
-    [BindConfig("forge", 90f, "RandomShutoff burden — maximum seconds between shutoff events")]
+    private const float DefaultBurdenIntervalMaxSeconds = 90f;
+    [BindConfig("forge", DefaultBurdenIntervalMaxSeconds, "RandomShutoff burden — maximum seconds between shutoff events")]
     internal static ConfigEntry<float> BurdenIntervalMaxSeconds;
+    internal static float BurdenMaxInterval => BurdenIntervalMaxSeconds?.Value ?? DefaultBurdenIntervalMaxSeconds;
 
-    [BindConfig("forge", 20f, "RandomShutoff burden — minimum seconds of uptime after the crew restores power before the burden may cut it again. Guards against a shutoff landing immediately after someone walks over and switches the module back on")]
+    private const float DefaultBurdenRestoreGraceSeconds = 20f;
+    [BindConfig("forge", DefaultBurdenRestoreGraceSeconds, "RandomShutoff burden — minimum seconds of uptime after the crew restores power before the burden may cut it again. Guards against a shutoff landing immediately after someone walks over and switches the module back on")]
     internal static ConfigEntry<float> BurdenRestoreGraceSeconds;
+    internal static float BurdenRestoreGrace => BurdenRestoreGraceSeconds?.Value ?? DefaultBurdenRestoreGraceSeconds;
 
-    [BindConfig("fixes", true, "Work around two vanilla chat bugs: the chat text field is never blurred/deselected when cleared (which makes Unity throw on every later keypress and 'eat' input), and the 'TextChatting' state can latch on so chat never reopens. Turn off if it interferes with anything. See docs/chat-bug-research.md")]
+    // Opt-OUT, so an unbound read must be true: the fix works around a vanilla
+    // bug that eats keyboard input, and defaulting it off before Init() would
+    // reintroduce that.
+    private const bool DefaultEnableChatInputFix = true;
+    [BindConfig("fixes", DefaultEnableChatInputFix, "Work around two vanilla chat bugs: the chat text field is never blurred/deselected when cleared (which makes Unity throw on every later keypress and 'eat' input), and the 'TextChatting' state can latch on so chat never reopens. Turn off if it interferes with anything. See docs/chat-bug-research.md")]
     internal static ConfigEntry<bool> EnableChatInputFix;
+    internal static bool ChatInputFixEnabled => EnableChatInputFix?.Value ?? DefaultEnableChatInputFix;
 
-    [BindConfig("forge", 3, "DifficultyScalar at which Rare relics start dropping (below this, Rares in the loot pool are downgraded to Common)")]
+    private const int DefaultEscalationRareUnlockScalar = 3;
+    [BindConfig("forge", DefaultEscalationRareUnlockScalar, "DifficultyScalar at which Rare relics start dropping (below this, Rares in the loot pool are downgraded to Common)")]
     internal static ConfigEntry<int> EscalationRareUnlockScalar;
+    internal static int RareUnlockScalar => EscalationRareUnlockScalar?.Value ?? DefaultEscalationRareUnlockScalar;
 
-    [BindConfig("forge", 6, "DifficultyScalar at which Legendary relics start dropping (below this, Legendaries in the loot pool are downgraded to Rare)")]
+    private const int DefaultEscalationLegendaryUnlockScalar = 6;
+    [BindConfig("forge", DefaultEscalationLegendaryUnlockScalar, "DifficultyScalar at which Legendary relics start dropping (below this, Legendaries in the loot pool are downgraded to Rare)")]
     internal static ConfigEntry<int> EscalationLegendaryUnlockScalar;
+    internal static int LegendaryUnlockScalar => EscalationLegendaryUnlockScalar?.Value ?? DefaultEscalationLegendaryUnlockScalar;
 
-    [BindConfig("forge", 1, "DifficultyScalar bump applied when a boss objective is defeated (in addition to the boss's tier-ceiling unlock)")]
+    private const int DefaultEscalationBossScalarBonus = 1;
+    [BindConfig("forge", DefaultEscalationBossScalarBonus, "DifficultyScalar bump applied when a boss objective is defeated (in addition to the boss's tier-ceiling unlock)")]
     internal static ConfigEntry<int> EscalationBossScalarBonus;
+    internal static int BossScalarBonus => EscalationBossScalarBonus?.Value ?? DefaultEscalationBossScalarBonus;
 
 #pragma warning restore CS0649
 
