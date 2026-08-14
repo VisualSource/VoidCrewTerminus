@@ -125,12 +125,34 @@ public class AssetLoader
                 go.GetComponent<CarryableBaseAsset>() == null &&
                 go.GetComponent<PlayerShipVisuals>() == null)
             {
+                RelinkBundleShaders(go);
                 GraftModuleComponents(go);
                 _modulePrefabs[go.name] = go;
                 RegisterModulePrefab(go, vca);
                 continue;
             }
             RuntimeAssetsAPI.LoadAsset(asset);
+        }
+    }
+
+    // AssetBundle-loaded materials reference a shader *copy* that wasn't compiled
+    // with the same keyword/variant set as the one baked into the player build —
+    // a well-known Unity/HDRP AssetBundle pitfall. The material's properties are
+    // all correct, but it renders solid black under any light. RuntimeAssets'
+    // own PlayerShipVisualsLoader hits the same issue for bundle-loaded ship
+    // cosmetics and fixes it by re-resolving each material's shader by name
+    // against the live build; the game's RuntimeAssetConverter never applies
+    // that fix to module prefabs, and neither did we until now. Runs on
+    // sharedMaterials since this operates on the prefab asset, not an instance.
+    private static void RelinkBundleShaders(GameObject prefab)
+    {
+        foreach (var rend in prefab.GetComponentsInChildren<Renderer>(true))
+        {
+            foreach (var mat in rend.sharedMaterials)
+            {
+                if (mat == null || mat.shader == null) continue;
+                mat.shader = Shader.Find(mat.shader.name);
+            }
         }
     }
 

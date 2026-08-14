@@ -1,15 +1,15 @@
 ManifestFileVersion: 0
-CRC: 3022820570
+CRC: 2256215492
 Hashes:
   AssetFileHash:
     serializedVersion: 2
-    Hash: 78a1c563c5ec0312ae33260abbba119d
+    Hash: 96ff19f34d506ac3edaf663605296c08
   TypeTreeHash:
     serializedVersion: 2
-    Hash: 00f9846e5d5ae84a51222d54e7f2d589
+    Hash: b0670209ab2cddf80312e4ad03c09f49
   IncrementalBuildHash:
     serializedVersion: 2
-    Hash: 78a1c563c5ec0312ae33260abbba119d
+    Hash: 96ff19f34d506ac3edaf663605296c08
 HashAppended: 0
 ClassTypes:
 - Class: 1
@@ -20,6 +20,8 @@ ClassTypes:
   Script: {instanceID: 0}
 - Class: 23
   Script: {instanceID: 0}
+- Class: 28
+  Script: {instanceID: 0}
 - Class: 33
   Script: {instanceID: 0}
 - Class: 43
@@ -28,20 +30,35 @@ ClassTypes:
   Script: {instanceID: 0}
 - Class: 65
   Script: {instanceID: 0}
+- Class: 108
+  Script: {instanceID: 0}
+- Class: 114
+  Script: {fileID: 11500000, guid: 7a68c43fe1f2a47cfa234b5eeaa98012, type: 3}
 - Class: 114
   Script: {fileID: -1283557461, guid: 689f8d4caec5d3a6c9ffa267e0de12b9, type: 3}
 - Class: 114
   Script: {fileID: 11500000, guid: 2c1366d1ab7cf3c40a4c8294e15a07ce, type: 3}
 - Class: 115
   Script: {instanceID: 0}
-- Class: 136
+- Class: 135
   Script: {instanceID: 0}
-SerializeReferenceClassIdentifiers: []
+SerializeReferenceClassIdentifiers:
+- AssemblyName: Unity.RenderPipelines.HighDefinition.Runtime
+  ClassName: UnityEngine.Rendering.HighDefinition.BoolScalableSettingValue
+- AssemblyName: Unity.RenderPipelines.HighDefinition.Runtime
+  ClassName: UnityEngine.Rendering.HighDefinition.IntScalableSettingValue
 Assets:
-- Assets/Mods/VoidCrewTerminus/Modals/UpgradeForge.glb
+- Assets/Mods/VoidCrewTerminus/Modals/UpgradeModuleExteior.prefab
+- Assets/Mods/VoidCrewTerminus/Materials/Grid.png
+- Assets/Mods/VoidCrewTerminus/Modals/UpgradeModuleInterior.fbx
+- Assets/Mods/VoidCrewTerminus/Materials/ForgeExterior.mat
 - Assets/Mods/VoidCrewTerminus/Materials/Glass.mat
-- Assets/Mods/VoidCrewTerminus/Materials/UpgradeForge_Default.mat
-- Assets/Mods/VoidCrewTerminus/Materials/Forge_Filled.mat
+- Assets/Mods/VoidCrewTerminus/Modals/UpgradeModuleExteior.fbx
+- Assets/Mods/VoidCrewTerminus/Materials/ModuleExteriorBlinds_Normal.png
+- Assets/Mods/VoidCrewTerminus/Materials/ModuleExteriorBlinds_Mask.png
+- Assets/Mods/VoidCrewTerminus/Materials/ModuleExterior_Mask.png
+- Assets/Mods/VoidCrewTerminus/Materials/ModuleExterior_normal.png
+- Assets/Mods/VoidCrewTerminus/Materials/TestMat.mat
+- Assets/Mods/VoidCrewTerminus/Materials/ForgeExterior_Blinds.mat
 - Assets/Mods/VoidCrewTerminus/UpgradeForgeModuleCell.prefab
-- Assets/Mods/VoidCrewTerminus/Materials/Forge_Highlight.mat
 Dependencies: []
