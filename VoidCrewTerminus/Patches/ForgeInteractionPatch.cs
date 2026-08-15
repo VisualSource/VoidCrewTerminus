@@ -64,9 +64,12 @@ internal static class ForgeCompositeBuildBoxAttachBehavior
 // player's primary interact input: it receives whatever AbstractInteractable the
 // RaycastHandler currently targets, both empty-handed and while carrying. When the
 // target is one of our ForgeInteractables we take over completely (insert relic /
-// load box / commit) and skip the vanilla flow. Everything else — including grabbing
-// docked relics or the docked BuildBox straight back out of the Forge — stays
-// vanilla; UpgradeForgeBehavior.Update reconciles state afterwards.
+// load box) and skip the vanilla flow. Everything else — including grabbing docked
+// relics or the docked BuildBox straight back out of the Forge, AND the Commit
+// button (ForgeCommitInteractable, held via a different vanilla input pathway
+// entirely — EnvironmentInteract, not this Ability) — stays vanilla, which for a
+// non-Grabbable/non-SocketInteractable target is a harmless no-op; UpgradeForgeBehavior.
+// Update reconciles state afterwards.
 [HarmonyPatch(typeof(CarryableInteract), nameof(CarryableInteract.StartInteraction))]
 internal static class ForgeCarryableInteractPatch
 {
@@ -82,7 +85,7 @@ internal static class ForgeCarryableInteractPatch
         if (player == null || player.IsBusy || LockInteractionRef(__instance))
             return false;
 
-        forgeTarget.Forge.HandleInteraction(forgeTarget, player);
+        forgeTarget.Forge.HandleInteraction(forgeTarget.Kind, forgeTarget.Anchor, player);
         return false;
     }
 }

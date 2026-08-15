@@ -71,8 +71,17 @@ public class ForgeModuleState : IModifierSource
             _perkSlots[i] = i < snapshot.PerkSlots.Count ? snapshot.PerkSlots[i] : null;
         _burdens.Clear();
         for (int i = 0; i < snapshot.Burdens.Count; i++)
-            if (snapshot.Burdens[i] != BurdenType.None && !_burdens.Contains(snapshot.Burdens[i]))
-                _burdens.Add(snapshot.Burdens[i]);
+        {
+            var burden = snapshot.Burdens[i];
+            if (burden == BurdenType.None || _burdens.Contains(burden)) continue;
+            if (!CanCarry(burden))
+            {
+                BepinPlugin.Log?.LogDebug(
+                    $"[Forge] {_module?.name} cannot carry {burden} (AutoPowerOn) — dropped from overlay.");
+                continue;
+            }
+            _burdens.Add(burden);
+        }
         RefreshMods();
         SyncBurdenBehaviors();
     }
@@ -84,10 +93,27 @@ public class ForgeModuleState : IModifierSource
     {
         if (burden == BurdenType.None) return;
         if (_burdens.Contains(burden)) return;
+        if (!CanCarry(burden)) return;
         _burdens.Add(burden);
         RefreshMods();
         SyncBurdenBehaviors();
     }
+
+    // Whether this module can actually suffer the given burden. RandomShutoff
+    // requests CellModule.TurnOff(), which vanilla's own PowerDrain.
+    // ValidatePowerTurnOff vetoes outright for AutoPowerOn modules — Reactors,
+    // Power Generators, anything the game insists on keeping self-powered
+    // (Gameplay.Power/PowerDrain.cs: "if (AutoPowerOn && !newVal && CanTurnOn())
+    // return false"). Rolling the burden onto one anyway means the cursed relic
+    // is consumed, the causal log says "APPLIED", and the module is never
+    // actually affected for the rest of the run — so it's excluded here, at the
+    // one place both the fresh-commit and the reconstruct/late-joiner paths
+    // meet a live module reference.
+    private bool CanCarry(BurdenType burden) => burden switch
+    {
+        BurdenType.RandomShutoff => _module?.PowerDrain == null || !_module.PowerDrain.AutoPowerOn,
+        _ => true,
+    };
 
     // Remove all applied mods and detach from the module.
     public void Cleanup()

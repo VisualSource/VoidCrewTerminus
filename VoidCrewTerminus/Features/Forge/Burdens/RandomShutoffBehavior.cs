@@ -77,6 +77,7 @@ public sealed class RandomShutoffBehavior : MaintenanceBurdenBehavior
         {
             _graceUntil = Time.time + TerminusConfig.BurdenRestoreGrace;
             ScheduleNextShutoff();
+            _loggedDecline = false; // a fresh power-on deserves a fresh warning if the next attempt is also vetoed
         }
     }
 
@@ -123,6 +124,7 @@ public sealed class RandomShutoffBehavior : MaintenanceBurdenBehavior
 
     private bool _loggedIdle;
     private bool _loggedOwnership;
+    private bool _loggedDecline;
 
     private void LogIdleOnce()
     {
@@ -149,7 +151,11 @@ public sealed class RandomShutoffBehavior : MaintenanceBurdenBehavior
 
     // Requests the shutoff and surfaces the result. A declined request would
     // otherwise be invisible; log it so a validator veto can't quietly neuter
-    // the burden.
+    // the burden. ForgeModuleState.CanCarry already keeps this burden off
+    // AutoPowerOn modules (the one veto we know about), so a decline here means
+    // some OTHER ChangeValidator is blocking it — worth knowing about, but not
+    // worth a warning every retry-interval for the rest of the run, so this
+    // logs only the first decline per power-cycle (reset in OnPowerStateChanged).
     private void RequestPowerOff()
     {
         if (Module == null || Module.PowerDrain == null) return;
@@ -160,8 +166,13 @@ public sealed class RandomShutoffBehavior : MaintenanceBurdenBehavior
             Module.PowerDrain.IsOn.RequestChange(
                 false,
                 onSuccess: () => BepinPlugin.Log?.LogDebug($"[Burden] {ModuleName()} shutoff applied (IsOn->False)."),
-                onFail: () => BepinPlugin.Log?.LogWarning(
-                    $"[Burden] {ModuleName()} shutoff DECLINED by a ChangeValidator — burden had no effect this cycle."));
+                onFail: () =>
+                {
+                    if (_loggedDecline) return;
+                    _loggedDecline = true;
+                    BepinPlugin.Log?.LogWarning(
+                        $"[Burden] {ModuleName()} shutoff DECLINED by a ChangeValidator — burden had no effect this cycle.");
+                });
         }
         finally
         {

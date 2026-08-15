@@ -23,9 +23,12 @@ namespace VoidCrewTerminus.Forge;
 //     the BuildBox through reconstruction — ForgePersistPatch does the restoration.
 //
 // In-world interaction model (see also ForgeInteractionPatch):
-//   - BuildInteractables() spawns ForgeInteractable colliders on the prefab's named
-//     anchors: RelicTubeTarget (×6), InputTarget (module socket), and an optional
-//     CommitTarget. Clicks are routed here via the CarryableInteract prefix.
+//   - BuildInteractables() spawns click targets on the prefab's named anchors:
+//     RelicTubeTarget (×6), InputTarget (module socket), and an optional
+//     CommitTarget. Tubes/socket/alloy terminal are ForgeInteractable, routed here
+//     via the CarryableInteract prefix (a click). CommitTarget is a
+//     ForgeCommitInteractable, routed here via its own hold-completion — committing
+//     is irreversible, so it requires a deliberate hold rather than a click.
 //   - Inserted relics / the loaded BuildBox stay live in the world: they are docked
 //     kinematically to their anchor (LateUpdate keeps them pinned while the ship
 //     moves) and remain grabbable. Update() reconciles state when a player grabs a
@@ -406,7 +409,7 @@ public class UpgradeForgeBehavior : MonoBehaviour
             // box itself can be grabbed back out.
             CreateInteractable(_inputAnchor, ForgeInteractableKind.ModuleSocket, new Vector3(1.2f, 1.2f, 1.2f), layer);
         if (commitAnchor != null)
-            CreateInteractable(commitAnchor, ForgeInteractableKind.CommitButton, new Vector3(0.3f, 0.3f, 0.3f), layer);
+            CreateCommitInteractable(commitAnchor, new Vector3(0.3f, 0.3f, 0.3f), layer);
         else
             BepinPlugin.Log.LogWarning("[Forge] Prefab has no CommitTarget anchor — in-world commits unavailable (use !forgecommit).");
         if (alloyAnchor != null)
@@ -446,12 +449,47 @@ public class UpgradeForgeBehavior : MonoBehaviour
         }
     }
 
+    private void CreateInteractable(Transform anchor, ForgeInteractableKind kind, Vector3 size, int layer)
+    {
+        var go = BuildAnchorClickRegion(anchor, $"ForgeInteractable_{kind}", size, layer);
+
+        var fi = go.GetComponent<ForgeInteractable>();
+        if (fi == null) fi = go.AddComponent<ForgeInteractable>();
+        fi.Forge = this;
+        fi.Kind = kind;
+        fi.Anchor = anchor;
+        fi.ShowContextInfo = false;
+        fi.InteractionInfo = ForgeInteractable.InfoFor(kind);
+    }
+
+    // The Commit button is held, not clicked (see ForgeCommitInteractable) — a
+    // different component, driven by a different vanilla input pathway
+    // (EnvironmentInteract's Hold action, not CarryableInteract's fire1Action), so
+    // it can't share ForgeInteractable's AbstractInteractable base. Everything about
+    // *finding or building the click region itself* is identical, though.
+    private void CreateCommitInteractable(Transform anchor, Vector3 size, int layer)
+    {
+        var go = BuildAnchorClickRegion(anchor, "ForgeInteractable_CommitButton", size, layer);
+
+        var hc = go.GetComponent<ForgeCommitInteractable>();
+        if (hc == null) hc = go.AddComponent<ForgeCommitInteractable>();
+        hc.Forge = this;
+        hc.Anchor = anchor;
+        hc.ShowContextInfo = false;
+        // Must be set before Unity calls Start() (ClickerInteractable.SetClickable
+        // there would otherwise stomp the InteractionInfo assignment below back to
+        // whatever it captured — null — in Awake). See ForgeCommitInteractable's
+        // doc comment for the full lifecycle reasoning.
+        hc.DontSelfSetInteractionInfo = true;
+        hc.InteractionInfo = ForgeInteractable.InfoFor(ForgeInteractableKind.CommitButton);
+    }
+
     // Prefab authoring contract (all optional, plain Unity components so they survive
     // the metem bundle): a Collider on the anchor itself or on a child named
     // "ClickTarget" becomes the click region instead of the generated default box;
     // a disabled child named "Highlight" is shown while the player hovers; a disabled
     // child named "Filled" is shown while an item is docked on that anchor.
-    private void CreateInteractable(Transform anchor, ForgeInteractableKind kind, Vector3 size, int layer)
+    private static GameObject BuildAnchorClickRegion(Transform anchor, string generatedName, Vector3 size, int layer)
     {
         GameObject go;
         var authored = anchor.GetComponent<Collider>();
@@ -467,7 +505,7 @@ public class UpgradeForgeBehavior : MonoBehaviour
         }
         else
         {
-            go = new GameObject($"ForgeInteractable_{kind}");
+            go = new GameObject(generatedName);
             go.transform.SetParent(anchor, false);
             var col = go.AddComponent<BoxCollider>();
             col.isTrigger = true;
@@ -487,29 +525,26 @@ public class UpgradeForgeBehavior : MonoBehaviour
         ForgeAnchors.StripHelperColliders(anchor, ForgeAnchors.HighlightName);
         ForgeAnchors.StripHelperColliders(anchor, ForgeAnchors.FilledName);
 
-        var fi = go.GetComponent<ForgeInteractable>();
-        if (fi == null) fi = go.AddComponent<ForgeInteractable>();
-        fi.Forge = this;
-        fi.Kind = kind;
-        fi.Anchor = anchor;
-        fi.ShowContextInfo = false;
-        fi.InteractionInfo = ForgeInteractable.InfoFor(kind);
+        return go;
     }
 
-    // Entry point for all Forge clicks, invoked by the CarryableInteract prefix in
-    // ForgeInteractionPatch. Runs on the interacting player's client.
+    // Entry point for all Forge interactions. ForgeInteractable-backed kinds (tubes,
+    // module socket, alloy terminal) arrive via the CarryableInteract prefix in
+    // ForgeInteractionPatch; CommitButton arrives via ForgeCommitInteractable's own
+    // hold-completion (a different vanilla input pathway — see its doc comment).
+    // Runs on the interacting player's client.
     //
     // The rules themselves live in ForgeInteractionPolicy, which is Unity-free and
     // therefore testable; this reads the scene into facts, hands them over, and
     // carries out the answer. Everything decidable is decided before anything in
     // the world is touched.
-    public void HandleInteraction(ForgeInteractable target, LocalPlayer player)
+    public void HandleInteraction(ForgeInteractableKind kind, Transform anchor, LocalPlayer player)
     {
         // Captured before any mutation — ReleaseCarryable clears player.Payload.
         var payload = player.Payload;
-        var decision = ForgeInteractionPolicy.Decide(SnapshotView(), DescribeClick(target, payload));
+        var decision = ForgeInteractionPolicy.Decide(SnapshotView(), DescribeClick(kind, anchor, payload));
 
-        Apply(decision.Action, target, player, payload);
+        Apply(decision.Action, anchor, player, payload);
         if (!string.IsNullOrEmpty(decision.Message))
             Messaging.Notification(decision.Message);
     }
@@ -522,7 +557,7 @@ public class UpgradeForgeBehavior : MonoBehaviour
         capacity: Capacity,
         isAuthority: Net.ForgeNetSync.IsAuthority);
 
-    private ForgeClick DescribeClick(ForgeInteractable target, CarryableObject payload)
+    private ForgeClick DescribeClick(ForgeInteractableKind kind, Transform anchor, CarryableObject payload)
     {
         var box = payload as BuildBox;
         var carried = payload == null ? ForgePayload.None
@@ -533,13 +568,13 @@ public class UpgradeForgeBehavior : MonoBehaviour
         return new ForgeClick(
             payload: carried,
             carriedBoxLevel: box != null ? LevelOfBox(box) : 0,
-            target: target.Kind,
-            targetOccupied: target.Anchor == null || IsAnchorOccupied(target.Anchor));
+            target: kind,
+            targetOccupied: anchor == null || IsAnchorOccupied(anchor));
     }
 
     // Carry out a decision. Nothing here re-checks a rule the policy already
     // applied, and nothing here decides what to say about a refusal.
-    private void Apply(ForgeAction action, ForgeInteractable target, LocalPlayer player, CarryableObject payload)
+    private void Apply(ForgeAction action, Transform anchor, LocalPlayer player, CarryableObject payload)
     {
         switch (action)
         {
@@ -562,8 +597,8 @@ public class UpgradeForgeBehavior : MonoBehaviour
                     break;
                 }
                 player.Carrier.ReleaseCarryable();
-                _dock.Dock(payload.gameObject, target.Anchor);
-                BroadcastDock(payload.gameObject, target.Anchor, docked: true);
+                _dock.Dock(payload.gameObject, anchor);
+                BroadcastDock(payload.gameObject, anchor, docked: true);
                 break;
 
             case ForgeAction.Commit:

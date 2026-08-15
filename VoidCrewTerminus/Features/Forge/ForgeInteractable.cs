@@ -12,7 +12,7 @@ public enum ForgeInteractableKind
 {
     RelicTube,     // insert a held relic / status when empty-handed
     ModuleSocket,  // load a held BuildBox / commit when empty-handed
-    CommitButton,  // commit when empty-handed (CommitTarget anchor)
+    CommitButton,  // commit when empty-handed, held not clicked (CommitTarget anchor — see ForgeCommitInteractable)
     AlloyTerminal, // feed alloys into the Forge Meter (AlloyTarget anchor)
 }
 
@@ -21,6 +21,13 @@ public enum ForgeInteractableKind
 // and clicks reach us through the CarryableInteract.StartInteraction prefix in
 // ForgeInteractionPatch. Created at runtime by UpgradeForgeBehavior.BuildInteractables —
 // the shipped prefab carries only named anchor transforms, no game components.
+//
+// Covers every Forge interactable EXCEPT the Commit button, which is a
+// ForgeCommitInteractable instead (a hold-to-confirm gate on an irreversible
+// action needs a different vanilla base class entirely — see its doc comment).
+// ForgeInteractableKind.CommitButton still exists as a value here because
+// ForgeInteractionPolicy's click matrix is keyed by it regardless of which
+// component originates the interaction.
 public class ForgeInteractable : AbstractInteractable
 {
     public UpgradeForgeBehavior Forge;
@@ -110,7 +117,9 @@ public class ForgeInteractable : AbstractInteractable
 
         _insertInfo ??= EmptyInfo();
         _defaultInfo ??= EmptyInfo();
-        _commitInfo = ActionInfo("Commit");
+        // Hold, not Press — ForgeCommitInteractable requires a completed hold
+        // (see its doc comment), so the HUD prompt should say so.
+        _commitInfo = ActionInfo("Commit", InteractionDescription.EInteractionType.Hold);
         _alloyInfo = ActionInfo("Feed Alloy");
     }
 
@@ -125,8 +134,9 @@ public class ForgeInteractable : AbstractInteractable
     // one: same interact key binding as _insertInfo (the same F prompt already shown on the
     // relic tubes and module socket — vanilla's generic "action key", e.g. toggling a
     // module's power) with our own label swapped in, instead of the default's empty
-    // Interactions list, which the HUD renders as no prompt at all.
-    private static InteractionInfo ActionInfo(string label)
+    // Interactions list, which the HUD renders as no prompt at all. interactionType lets a
+    // caller override the borrowed Press default — Commit needs Hold (see ForgeCommitInteractable).
+    private static InteractionInfo ActionInfo(string label, InteractionDescription.EInteractionType? interactionType = null)
     {
         var info = ScriptableObject.CreateInstance<InteractionInfo>();
         var source = _insertInfo.Interactions is { Count: > 0 } ? _insertInfo.Interactions[0] : null;
@@ -134,7 +144,7 @@ public class ForgeInteractable : AbstractInteractable
         {
             new()
             {
-                InteractionType = source?.InteractionType ?? InteractionDescription.EInteractionType.Press,
+                InteractionType = interactionType ?? source?.InteractionType ?? InteractionDescription.EInteractionType.Press,
                 Key = source?.Key ?? new DefaultableLocalizedString { FallBackString = "Interact" },
                 Description = new DefaultableLocalizedString { FallBackString = label },
             },
