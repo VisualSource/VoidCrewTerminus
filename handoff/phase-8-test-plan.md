@@ -14,7 +14,7 @@ under `phase 8`. Reproduced here so this plan and the TODO agree.
 | Test | Status | Evidence / blocker (see `TODO` phase 8 for full detail) |
 |---|---|---|
 | **T1** state converge | ✔ **verified** 26-07-19 | Non-default values crossed both ways: host `→ sent {scalar=2,bosses=2}` / client `← applied {scalar=2,bosses=2}`. The 26-07-18 run proved only *transport* (every value was a default, so an identical log would appear if nothing propagated) — 26-07-19 closed that gap. |
-| T1 step 3 — client alloy feed | ☐ open | Never exercised in any recorded session. |
+| T1 step 3 — client alloy feed | ~ **partial** 26-08-14 | Client spammed `→ sent alloy-spend request to host` 30x; host correctly declined every time (`← alloy-spend request from #2: Not enough alloys (7/10)`) — so the request→host round-trip fires. **But** this run predates the AlloySpendResultMessage fix (see [Session findings](#session-findings--26-08-14-2-client-playtest) below): the client got zero feedback for any of the 30 attempts, which is now fixed in code. Still need one run with enough alloys to see a **successful** spend converge end-to-end. |
 | **T2** live progression + loot determinism | ~ **partial** 26-07-18 | Determinism half cleared: both machines independently produced seed `-1434881419` and identical `C7/R17/L1 → C25/R0/L0`, so state arrived before loot setup. **But that was the scalar=0 trivial case** — needs one run with escalation active. Live host-award tracking (step 1) not recorded. |
 | **T3** cursed live sync | ✔ **verified** 26-07-18 | `viewID=2043 (RandomShutoff)` sent and applied — matching ViewID *and* burden type, non-trivial data on both sides. |
 | **T4** client-operated commit | ☐ open | No `→ sent commit request` in either log. Was blocked by the 8-D placer-local bug — **that bug is now fixed, so this is retestable and is the untested half of 8-C.** |
@@ -93,6 +93,61 @@ has been. Concrete checks, to promote into T8/T9:
   back out. `→ sent dock item=N anchor=K` / `← applied dock item=N`.
 
 Worth adding as T8/T9 next time this plan is opened.
+
+**Update 26-08-14:** the basic dock-sync *wire path* for 8-E is now confirmed
+working at the mechanics level — the 26-08-14 2-client session shows clean
+`→ sent dock item=N anchor=K forge=M to all` / `← applied dock item=N anchor=K
+on forge=M` pairs for both a relic (anchor≥0) and the module box (anchor=-1),
+values matching on both sides. What's NOT fine is a race that fires spurious
+*undocks* on top of that (see [Session findings](#session-findings--26-08-14-2-client-playtest)) —
+now fixed in `AnchorDock.cs`, not yet re-verified. 8-D (client-placed module
+overlay) still has no direct log evidence either way from this session.
+
+## Session findings — 26-08-14 2-client playtest
+
+A non-scripted 2-client session (not a T1-T7 run) surfaced 7 user-reported bugs,
+independent of this plan's scenarios but overlapping its machinery. Full
+per-bug detail lives in `TODO` under `8-F`; summarized here for anything that
+touches the sync layer this plan covers:
+
+- **Dock/undock race, CONFIRMED + FIXED (code only):** relic viewID=2038 flapped
+  dock→undock→dock→undock→dock on both machines within ~15 log lines with no
+  player actually letting go — e.g. host `← applied dock item=2038` immediately
+  followed by the HOST'S OWN spurious `[Forge] undock ... was=(0.00,0.00,0.00)`
+  → `→ sent undock item=2038 ... to all`. Root cause: `AnchorDock.Reconcile`
+  read a momentarily-null `CarryableObject.Carrier` — a race against
+  `ApplyRemoteDock`, since the mirrored `ForgeDockMessage` can land before
+  Photon's own carry-release sync clears `Carrier` locally — as "player let it
+  go", undocking (and re-broadcasting) a release nobody performed. This is very
+  likely the same root cause behind the user's "relics/buildbox just fall out,
+  needs multiple tries to stick" and "floating buildbox after pickup" reports:
+  the spurious `Undock()` calls `ReleaseRigidbody` while the item is still
+  actually docked. Fixed via a `_confirmedReleased` latch in `AnchorDock.cs`.
+  **Re-verify:** repeat T1/T8 dock scenarios and confirm no `→ sent undock`
+  appears without a matching player-initiated grab.
+- **Notifications host-only, CONFIRMED + FIXED (code only):** directly evidences
+  the T1-step-3 gap above — 30 alloy-spend requests, zero client-side feedback
+  on any of them. Also affects level-up toasts (`ApplyNetworkState`'s
+  level-up branch didn't notify before this fix). Now relayed via
+  `AlloySpendResultMessage` (alloy result) and a `ForgeMeterController.Notify`
+  seam (level-up). Directly relevant to **Known limitation #1** below, which
+  should be narrowed once re-verified — it will no longer be fully true.
+- **Buildbox loses forged label for non-deconstructing players, CONFIRMED +
+  FIXED (code only):** `Deconstruct.CreateBuildBox` ends in
+  `PhotonNetwork.Instantiate` exactly like `BuildBox.BuildModule`, so its
+  snapshot-save postfix only ran on the deconstructing player's machine; other
+  clients never got the overlay. Fixed by broadcasting via the existing
+  `ForgeNetSync.BroadcastBoxOverlay` (same wire format as `CommitResultMessage`).
+  This is a T4/T5-adjacent overlay-sync gap on the deconstruct side rather than
+  the commit side this plan's T4/T5 already cover — worth a dedicated check
+  next session: deconstruct on one client, confirm the OTHER client's box
+  tooltip shows the forged level immediately (not just after that client
+  rebuilds it).
+- **Not sync-related, no action here:** relic-rolling colliders (physics-only,
+  defensive fix pending confirmation) and a non-host client crash at session end
+  (root-caused to a vanilla NRE cascade during ship teardown-on-quit, no
+  VoidCrewTerminus/Harmony frame anywhere in the stack) — both tracked in `TODO`
+  8-F, not applicable to this plan's scenarios.
 
 ## Definition of done (read first)
 

@@ -219,6 +219,98 @@ In Progress:
                  [] RE-RUN T1-T7 after 8-REFACTOR — unit tests prove the gate algebra, nothing
                     proves a message crosses a real Photon room. Priority order: T6 (the
                     GetPlayer change), then T4/T5 (snapshot payload path), then T1.
+                8-F 2-client playtest findings (26-08-14 session) — 7 user-reported bugs triaged
+                against BOTH captured logs. 4 FIXED (code only, NOT yet re-verified in game), 1
+                defensive fix pending confirmation, 1 diagnosed as vanilla/unrelated, 2 not
+                re-investigated:
+                 ✔ FIX: dock/undock spurious-release race @done(26-08-14) (CONFIRMED in logs: relic
+                    viewID=2038 anchor=0 flaps dock→undock→dock→undock→dock on BOTH machines within
+                    ~15 log lines with no player actually grabbing it back out — e.g. host "← applied
+                    dock item=2038" is immediately followed by the HOST'S OWN "[Forge] undock ...
+                    was=(0.00,0.00,0.00), zeroed both bodies" → "→ sent undock item=2038 ... to all".
+                    Root cause: AnchorDock.Reconcile's only "still grabbed" signal was
+                    co.Carrier != null, which races ApplyRemoteDock — the mirrored ForgeDockMessage
+                    can land before Photon's own carry-release sync clears Carrier locally, so
+                    Reconcile reads a momentarily-null Carrier as "let go" and undocks + re-broadcasts
+                    a release nobody performed. Very likely ALSO the root cause of "relics/buildbox
+                    just fall out, needs multiple tries to stick" and "floating buildbox after
+                    pickup" — the spurious Undock() calls ReleaseRigidbody prematurely while the item
+                    is still actually docked, unfreezing a body the visuals still show anchored. FIX:
+                    new _confirmedReleased HashSet<GameObject> in AnchorDock.cs — Reconcile only
+                    treats an item as departed if Carrier is null AND it was already null on the
+                    PREVIOUS pass; Dock()/Undock()/ReleaseAll() keep the set in sync.
+                    VoidCrewTerminus/Features/Forge/AnchorDock.cs.)
+                 ✔ FIX: notifications host-only for level-up + alloy-spend result @done(26-08-14)
+                    (CONFIRMED in logs: client logged "→ sent alloy-spend request to host" 30x in a
+                    row with zero feedback; host logged "← alloy-spend request from #2: Not enough
+                    alloys (7/10)" 30x but nothing was ever relayed back — matches "notifications seem
+                    to be host-only" exactly. Root cause: Messaging.Notification only inserts into the
+                    CALLER's own chat window (VoidManager doesn't broadcast it), so a level-up or
+                    alloy-spend result computed host-side only ever appeared in the host's own chat.
+                    FIX: ForgeMeterController.Notify is now a swappable Action<string> seam, invoked
+                    from ApplyNetworkState's level-up branch so a synced level-up notifies every
+                    machine, not just whoever spent the alloys; new AlloySpendResultMessage +
+                    ForgeNetSync.SendAlloySpendResultTo/ApplyIncomingAlloySpendResult relay the host's
+                    accept/reject text back to the REQUESTING client specifically.)
+                 ✔ FIX: buildbox loses forged label/level for players other than the deconstructor
+                    @done(26-08-14) (User's precise report: label was lost for "a different player,
+                    looking at it well after the commit had finished" — a display/overlay-sync bug,
+                    not data loss; the level itself persisted, only the other player's tooltip never
+                    got told about it. Root cause: Deconstruct.CreateBuildBox, like BuildBox.
+                    BuildModule on the reverse path, ends in PhotonNetwork.Instantiate, so its
+                    postfix (which computes the ForgeStateStore snapshot) only runs on the
+                    deconstructing player's own machine — every other client's copy of the box
+                    arrives via Photon's remote-instantiation replication and never computes the
+                    snapshot locally. FIX: DeconstructCreateBuildBoxPatch now also calls
+                    ForgeNetSync.BroadcastBoxOverlay (reuses CommitResultMessage's wire format) so
+                    every other client's label updates too. VoidCrewTerminus/Patches/
+                    ForgePersistPatch.cs.)
+                 ~ DEFENSIVE FIX, NOT CONFIRMED: colliders don't stop relics/buildbox rolling inside
+                    the Forge @26-08-14 (Prefab colliders are fine — re-checked the actual
+                    UpgradeForgeModuleCell.prefab YAML: 8 solid, correctly-sized, correctly-layered
+                    BoxColliders exist. Corrects an earlier wrong claim of "no colliders at all". Real
+                    mechanism: relics/buildbox are ISimulatedBody — physics runs in the ship's OWN
+                    PhysicsScene (MovingSpacePlatform), which only mirrors in colliders explicitly
+                    passed to AddColliderObject(). Normally done by CellModule.OnPhotonInstantiate →
+                    BuildSocket.SetModule for a freshly built module; static tracing shows this SHOULD
+                    fire for our grafted CellModule too (same instantiation-data path as vanilla), so
+                    the true root cause is unconfirmed. Added defensive, self-diagnosing registration
+                    instead of guessing further: ForgeAttachHelper.TryAttach now always calls
+                    platform.AddColliderObject(module.gameObject) (idempotent) and logs via reflection
+                    into MovingSpacePlatform.colliderObjects whether it was already present or
+                    missing. VoidCrewTerminus/Patches/ForgeInteractionPatch.cs.
+                    [] VERIFY NEXT SESSION: look for "[Forge] Ship-platform collider registration for
+                    ...: was MISSING — registered it now." (confirms this was the bug) vs "...was
+                    already present..." (real cause is elsewhere — collider placement vs. mesh is the
+                    next thing to check).)
+                 [] DIAGNOSED, NOT A MOD BUG: non-host client crashed at session end @26-08-14 (the
+                    non-host log ends mid stack-trace with no "left room"/"Plugin resources unloaded"
+                    teardown lines, unlike the host's clean shutdown in the same run. Sequence: escort
+                    mission failed → "User quit from menu." → full ship teardown → a
+                    NullReferenceException cascade (FabricatorModule.get_ResolvedFabricatorTiers →
+                    ContextInfoViewModel → CarryableMod.GetHeader → PipModifierVE →
+                    StatTagCollection → CellModule/ModSocket.OnDestroy; also CameraShakeEffectTrigger
+                    → CentralShipComputerModule → CarryablesSocket.OnDestroy) fires on BOTH clients
+                    from the identical vanilla code path — host absorbs it (2 reps, teardown
+                    completes) but the non-host repeats it many more times and the process dies before
+                    finishing. NO VoidCrewTerminus/Harmony frame appears anywhere in the cascade — a
+                    vanilla engine race in ship-teardown-on-quit, not something our patches touch. No
+                    fix planned; worth noting next time whether it follows a FAILED mission
+                    specifically.)
+                 [] NOT RE-INVESTIGATED THIS SESSION: chat still bugged (same two known vanilla bugs
+                    from docs/chat-bug-research.md — SYMPTOM 1 "sends nothing" documented not fixed,
+                    SYMPTOM 2 "input eaten" has ChatInputFixPatch.cs; both patches' resolve logs were
+                    present with no matching exceptions in either log, so needs a more specific repro:
+                    does typing do nothing, does Enter do nothing, or does the message just not arrive
+                    for others?).
+                 [] NOT RE-INVESTIGATED THIS SESSION: non-host toggling dev mode did not enable chat
+                    commands for that player (static read of ~30 dev commands shows no host/auth
+                    gating — DevMode is a local BepInEx config value — so the failure mode is still
+                    unexplained; next step is toggle dev mode then try the simplest command
+                    (!forgestate) and see whether it silently no-ops or the toggle itself isn't
+                    sticking).
+                 ✔ make dev + full test suite green after every fix above @done(26-08-14) (262
+                    passed, 6 skipped, 268 total.)
         [] 8-* full-run 2-client soak once A/B/C individually verified
         Cleanup:
                 UI pass (grilled 26-07-18; one patch point for all 3 hover surfaces):
