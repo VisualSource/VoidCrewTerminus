@@ -25,6 +25,10 @@ internal sealed class AnchorDock
 {
     private readonly Dictionary<GameObject, Transform> _docked = new();
 
+    // Items docked here whose Carrier has been directly observed null at least
+    // once since docking — see Dock() and Reconcile() for why this exists.
+    private readonly HashSet<GameObject> _confirmedReleased = new();
+
     // Reused across frames: Reconcile runs every Update and must not allocate.
     private readonly List<KeyValuePair<GameObject, Transform>> _departedScratch = new();
 
@@ -40,6 +44,23 @@ internal sealed class AnchorDock
         _docked[item] = anchor;
 
         var co = item.GetComponent<CarryableObject>();
+
+        // A dock mirrored from another client (ApplyRemoteDock in
+        // UpgradeForgeBehavior) can race the placer's own carry-release: our
+        // custom dock message is a separate RPC from Photon's own carry/ownership
+        // sync, so it can arrive here before Carrier has actually cleared on this
+        // machine. Reconcile must not mistake that stale non-null read for "a
+        // player just grabbed this back out" (see the note there) — so an item
+        // only becomes eligible to be reported as departed once we've actually
+        // observed Carrier go null while it's docked here. A normal local dock
+        // (the placer's own machine, where ReleaseCarryable already ran
+        // synchronously) already has Carrier == null at this point, so it's
+        // confirmed immediately and behaves exactly as before.
+        if (co == null || co.Carrier == null)
+            _confirmedReleased.Add(item);
+        else
+            _confirmedReleased.Remove(item);
+
         // Freeze the simulation body too, not just the main one — otherwise it
         // keeps integrating in the platform's physics scene the whole time the
         // item is docked, which is what the per-frame pin was accumulating into.
@@ -53,6 +74,7 @@ internal sealed class AnchorDock
     {
         if (item == null || !_docked.TryGetValue(item, out var anchor)) return false;
         _docked.Remove(item);
+        _confirmedReleased.Remove(item);
         ForgeAnchors.SetFilled(anchor, false);
         ReleaseRigidbody(item);
         return true;
@@ -89,13 +111,29 @@ internal sealed class AnchorDock
         {
             var go = kv.Key;
             if (go == null) { _departedScratch.Add(kv); continue; }
+
             var co = go.GetComponent<CarryableObject>();
-            if (co != null && co.Carrier != null) _departedScratch.Add(kv);
+            bool carried = co != null && co.Carrier != null;
+
+            if (!carried)
+            {
+                // Carrier has now been observed clear while docked, so a later
+                // non-null read is trustworthy evidence of an actual grab rather
+                // than the mirrored-dock race described in Dock().
+                _confirmedReleased.Add(go);
+                continue;
+            }
+
+            if (_confirmedReleased.Contains(go))
+                _departedScratch.Add(kv);
+            // else: Carrier is still reading stale-non-null from before the
+            // mirrored dock's release caught up here — wait rather than bounce it.
         }
 
         foreach (var kv in _departedScratch)
         {
             _docked.Remove(kv.Key);
+            _confirmedReleased.Remove(kv.Key);
             ForgeAnchors.SetFilled(kv.Value, false);
             if (kv.Key == null) continue;
             ReleaseRigidbody(kv.Key);
@@ -115,6 +153,7 @@ internal sealed class AnchorDock
             ReleaseRigidbody(kv.Key);
         }
         _docked.Clear();
+        _confirmedReleased.Clear();
     }
 
     // ---- physics ----------------------------------------------------------
