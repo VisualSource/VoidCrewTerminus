@@ -1,7 +1,9 @@
 using System.Collections.Generic;
+using CG;
 using CG.Client.Player.Interactions;
 using CG.Client.Ship.Interactions;
 using CG.Game.Player;
+using CG.Input;
 using Client.Player.Interactions;
 using HarmonyLib;
 using UnityEngine;
@@ -34,9 +36,6 @@ public class ForgeInteractable : AbstractInteractable
     public ForgeInteractableKind Kind;
     public Transform Anchor;
 
-    private Transform _highlight;
-    private bool _highlightResolved;
-
     // Click colliders surround the items docked on their anchors, so they would
     // swallow every click aimed at those items. When an anchor is occupied and the
     // player's hands are empty, step aside: RaycastHandler then skips this trigger
@@ -65,18 +64,17 @@ public class ForgeInteractable : AbstractInteractable
         set => base.IsInteractive = value;
     }
 
-    // Optional prefab-authored hover feedback: a disabled child named "Highlight"
-    // under the anchor is shown while the player's raycast targets this interactable.
-    // Resolved lazily — Anchor is assigned after AddComponent runs Awake.
+    // No outline yet, deliberately: unlike Commit (LeverBox) and Deconstruct
+    // (Handle), this covers RelicTube/ModuleSocket/AlloyTerminal, and which mesh
+    // each of those should scope its outline to hasn't been decided/modeled yet.
+    // Whole-module outlining for these was an assumption-of-convenience, not a
+    // requested design — pulled until that's actually settled, rather than
+    // outlining the whole Forge on every tube/socket/terminal hover in the
+    // meantime. base.Highlighted is still called (AbstractInteractable's; empty,
+    // harmless) to keep the override chain intact for whenever this is revisited.
     public override void Highlighted(bool isHighlighted)
     {
         base.Highlighted(isHighlighted);
-        if (!_highlightResolved && Anchor != null)
-        {
-            _highlight = ForgeAnchors.FindDeep(Anchor, ForgeAnchors.HighlightName);
-            _highlightResolved = true;
-        }
-        if (_highlight != null) _highlight.gameObject.SetActive(isHighlighted);
     }
 
     // HUD prompt assets are serialized private fields on vanilla components, so we
@@ -148,16 +146,45 @@ public class ForgeInteractable : AbstractInteractable
     // module's power) with our own label swapped in, instead of the default's empty
     // Interactions list, which the HUD renders as no prompt at all. interactionType lets a
     // caller override the borrowed Press default — Commit needs Hold (see ForgeCommitInteractable).
+    //
+    // KeyBindVE.Init resolves its icon by taking InteractionDescription.Key.FallBackString,
+    // stripping "<keybind>...</keybind>" tags, and looking THAT UP BY NAME as an InputAction
+    // (InputService.FindActionKey — a live search through InputActionAsset.actionMaps, not
+    // just a display string). _insertInfo's own Key names vanilla's regular click/interact
+    // action — correct for Press-type prompts (RelicTube/ModuleSocket/AlloyTerminal all
+    // borrow it verbatim), but Commit and Deconstruct are actually driven by
+    // HoldClickerInteractable's SEPARATE InputActionReferences.HoldAction (see that class),
+    // a different bound key/mouse-button than the click action. Borrowing the click action's
+    // Key for a Hold-type prompt made KeyBindVE resolve and display the CLICK action's icon
+    // (in practice a mouse-click glyph) instead of the Hold action's — even though
+    // InteractionType was already correctly set to Hold. Built fresh from the Hold action's
+    // OWN live name (read off ServiceBase<InputService>.Instance.InputActionReferences.HoldAction
+    // rather than hardcoded, so a rebind/rename in the Input Actions asset can't silently
+    // desync this from what HoldClickerInteractable itself actually listens on) instead of
+    // reusing source.Key for Hold-type prompts specifically.
     private static InteractionInfo ActionInfo(string label, InteractionDescription.EInteractionType? interactionType = null)
     {
         var info = ScriptableObject.CreateInstance<InteractionInfo>();
         var source = _insertInfo.Interactions is { Count: > 0 } ? _insertInfo.Interactions[0] : null;
+
+        DefaultableLocalizedString key;
+        if (interactionType == InteractionDescription.EInteractionType.Hold)
+        {
+            var holdActionName = ServiceBase<InputService>.Instance.InputActionReferences.HoldAction.action.name;
+            BepinPlugin.Log.LogDebug($"[Forge] Hold prompt \"{label}\" bound to action name \"{holdActionName}\".");
+            key = new DefaultableLocalizedString { FallBackString = $"<keybind>{holdActionName}</keybind>" };
+        }
+        else
+        {
+            key = source?.Key ?? new DefaultableLocalizedString { FallBackString = "Interact" };
+        }
+
         info.Interactions = new List<InteractionDescription>
         {
             new()
             {
                 InteractionType = interactionType ?? source?.InteractionType ?? InteractionDescription.EInteractionType.Press,
-                Key = source?.Key ?? new DefaultableLocalizedString { FallBackString = "Interact" },
+                Key = key,
                 Description = new DefaultableLocalizedString { FallBackString = label },
             },
         };

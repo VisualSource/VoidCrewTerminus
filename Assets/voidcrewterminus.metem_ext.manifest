@@ -1,15 +1,15 @@
 ManifestFileVersion: 0
-CRC: 1972825467
+CRC: 3664444999
 Hashes:
   AssetFileHash:
     serializedVersion: 2
-    Hash: fe87503de8576b6761460a9e6f181c57
+    Hash: 22242aabc03b66ba2db3c4e4053d0577
   TypeTreeHash:
     serializedVersion: 2
     Hash: b0670209ab2cddf80312e4ad03c09f49
   IncrementalBuildHash:
     serializedVersion: 2
-    Hash: fe87503de8576b6761460a9e6f181c57
+    Hash: 22242aabc03b66ba2db3c4e4053d0577
 HashAppended: 0
 ClassTypes:
 - Class: 1
@@ -48,6 +48,7 @@ SerializeReferenceClassIdentifiers:
 - AssemblyName: Unity.RenderPipelines.HighDefinition.Runtime
   ClassName: UnityEngine.Rendering.HighDefinition.IntScalableSettingValue
 Assets:
+- Assets/Mods/VoidCrewTerminus/UpgradeForgeBuildBox.prefab
 - Assets/Mods/VoidCrewTerminus/Modals/UpgradeModuleExteior.prefab
 - Assets/Mods/VoidCrewTerminus/Materials/Grid.png
 - Assets/Mods/VoidCrewTerminus/Modals/UpgradeModuleInterior.fbx

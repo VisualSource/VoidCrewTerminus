@@ -135,6 +135,8 @@ internal static class BossDefeatHook
             return;
         }
 
+        AssetLoader.EnsureBuildBoxTemplateReady();
+
         var playerShip = ClientGame.Current?.PlayerShip;
         if (playerShip == null) return;
 

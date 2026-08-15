@@ -337,27 +337,630 @@ In Progress:
                    moduleRef isn't mutated per-spawn.
                    Plugins.cs hot-reload teardown extended to sweep ForgeDeconstructInteractable too
                    (same reasoning as the Commit button's own entry above).
+
+                   REVISED — no custom crate mesh/animation after all. Turns out vanilla BuildBox
+                   crates have no per-module mesh or animation whatsoever: BuildBoxActor.Awake()
+                   (sits on the SAME GameObject as BuildBox — AbstractObjectActor<T>.Object is just
+                   GetComponent<T>()) discards whatever's on the prefab and rebuilds the crate at
+                   runtime from ONE shared BuildBoxVisualSettings ScriptableObject, keyed purely by
+                   BuildSize and tinted by category — every module in the game, vanilla included,
+                   shares it. So instead of modeling/exporting our own crate (animation-loss risk on
+                   export, plus not wanting ripped game assets), AssetLoader.EnsureBuildBoxVisualsWired
+                   grafts a real BuildBoxActor onto our prefab and wires its two private fields
+                   (buildBoxVisualSettings, diodes) via reflection off a live vanilla donor — a
+                   CellModule.BuildBoxRef found on the player's own ship, resolved through
+                   ResourcePaths + Resources.Load (same path CustomObjectPool itself uses for vanilla
+                   GUIDs). Deferred out of LoadBundle/GraftBuildBoxComponents (plugin Awake, too early
+                   — ResourcePaths/ship modules don't exist yet, same trap as the PhotonNetwork-at-Awake
+                   bug) to a lazy, idempotent call at both spawn sites (ForgeSpawnCommand,
+                   BossDefeatHook.AwardForgeBuildBox) — one-time lookup, not per-spawn, so it shouldn't
+                   repeat the old TryFindDonorBuildBoxGuid lag spike. GraftBuildBoxComponents also now
+                   grafts a generated BoxCollider (0.5m cube) since nothing authored provides one
+                   anymore — Grabbable.Collider is just a lazy GetComponent<Collider>().
                    CODE ONLY — NOT YET BUILT OR VERIFIED. Final setup to finish, Unity side then
                    in-game:
-                    [] Create a new prefab named EXACTLY "UpgradeForgeBuildBox" (matches
+                    ✔ Create a new prefab named EXACTLY "UpgradeForgeBuildBox" (matches @done(26-08-15 12:50)
                        UpgradeForgeBehavior.BuildBoxPrefabName — AssetLoader dispatches on this
                        name, a mismatch means it silently loads as nothing / logs a warning, not an
-                       error you'd notice at a glance).
-                    [] Give it the reused utility box mesh + a Collider (carry/grab physics reads
-                       this — GraftBuildBoxComponents adds Rigidbody/PhotonView but does NOT add a
-                       Collider, since the mesh should already carry one).
-                    [] Add a VoidCrewAsset marker component so the export tool stamps a GUID —
+                       error you'd notice at a glance). No mesh, no Collider, no Handle needed on
+                       this one anymore — just the bare marker below. (The old "reused utility box
+                       mesh" plan is superseded — see REVISED note above.)
+                    ✔ Add a VoidCrewAsset marker component so the export tool stamps a GUID — @done(26-08-15 12:51)
                        DO NOT add a BuildBox component; it isn't in the SDK's exposed types and
                        will just fail to add / not survive the bundle regardless (see the CODE
                        entry above for why). moduleRef is wired in code, not the Inspector.
-                    [] Move the already-modeled "Handle" lever part to live under the MODULE
+                    ✔ Move the already-modeled "Handle" lever part to live under the MODULE @done(26-08-15 12:51)
                        prefab (UpgradeForgeModuleCell), named EXACTLY "Handle" (matches
                        UpgradeForgeBehavior.DeconstructHandleName), with its own Collider (this is
                        the raycast target ForgeDeconstructInteractable attaches to directly).
-                    [] Export both prefabs (stamps/refreshes their VoidCrewAsset GUIDs) and rebuild
+                    ✔ Export both prefabs (stamps/refreshes their VoidCrewAsset GUIDs) and rebuild @done(26-08-15 12:52)
                        the .terminus bundle.
-                    [] VERIFY: !forgespawn produces the new dedicated box (not the old donor
-                       mesh), carries/installs normally, and the lag spike is gone.
+                    ✔ FIXED (26-08-15) — !forgespawn crashed every time (NullReferenceException,
+                       confirmed via in-game LogOutput.log): ObjectFactory.InstantiateSpaceObjectByGUID
+                       unconditionally looks the guid up in the VANILLA CloneStarObjectContainer and
+                       dereferences the result with no null check. Our BuildBox guid only exists in
+                       RuntimeAssetsRegister (AssetLoader deliberately bypasses the vanilla
+                       RuntimeAssetConverter for module-shaped prefabs the SDK can't convert — see
+                       AssetLoader.LoadBundle's doc comment), so that lookup always came back null.
+                       ForgeSpawnCommand now calls PhotonNetwork.Instantiate("#"+guid) directly
+                       (same thing CustomObjectPool does under the hood, minus the broken vanilla
+                       lookup) and replicates the two harmless steps by hand (assetGuid,
+                       ObjectRegistry.RegisterObject).
+                       ⚠ At the time: same root cause almost certainly breaks BuildBox.BuildModule
+                       (vanilla, CG.Ship.Object/BuildBox.cs) too — the actual "carry box to socket,
+                       ship builds the module" gameplay flow, since it calls the exact same
+                       ObjectFactory.InstantiateSpaceObjectByGUID with moduleRef.AssetGuid. Superseded
+                       by the proper fix below (RegisterRuntimeAsset) — see that entry.
+
+                    ✔ FIXED (26-08-15) — second bug found via live LogOutput.log after the first fix:
+                       box spawned with no crash but was completely invisible/non-interactable
+                       ("nothing there", confirmed by walking to the spot). Real cause:
+                       Client.Ship.Actor.BuildBoxActor.Awake() → GetMeshSetup() NREs on
+                       ((CellModule)moduleRef.Asset).BuildingConstraints because moduleRef.Asset
+                       returns null. Why: CloneStarObjectRef.IsRuntime is [NonSerialized] — Unity's
+                       prefab→instance clone (what PhotonNetwork.Instantiate does under the hood)
+                       does NOT carry NonSerialized fields across, so AssetLoader.LinkForgeBuildBox's
+                       one-time `moduleRef.IsRuntime = true` on the PREFAB asset is invisible on every
+                       spawned INSTANCE (silently resets to false), so Asset falls through to a
+                       vanilla ResourcePaths/Resources.Load lookup that can never find our guid.
+                       Fixed with a new Harmony patch, Patches/BuildBoxRuntimeRefPatch.cs — a Prefix
+                       on BuildBoxActor.Awake that re-stamps moduleRef.IsRuntime = true right before
+                       Awake reads it, gated to only guids RuntimeAssetsRegister actually knows about
+                       (vanilla BuildBox instances untouched). Since BuildBox.BuildModule/GetBuildSize
+                       (the real "install into ship socket" flow) read this exact same moduleRef.Asset,
+                       this ALSO covers the ⚠ concern above about the install flow — same broken field,
+                       same fix, one patch. Still worth an explicit VERIFY on the install flow itself
+                       though (not yet tested standalone).
+                       Minor/non-blocking leftover: the log also showed
+                       "Cannot instantiate objects with a parent which is persistent" once, from
+                       EnsureBuildBoxVisualsWired's Object.Instantiate(donorDiodes, boxPrefab.transform)
+                       — Unity refuses to parent a runtime instance under an AssetBundle-loaded
+                       (persistent) prefab transform and falls back to no parent instead. The diodes
+                       clone still ends up correctly referenced (BuildBoxActor.Awake repositions it via
+                       transform.position regardless of parent), so this is a one-time scene-root leak,
+                       not a functional bug — fine to leave, worth tidying later if it gets noisy.
+
+                    ✔ FIXED (26-08-15) — third bug: box spawned WITH visuals this time (confirms the
+                       IsRuntime fix above worked) but fell straight through the ship floor — "no
+                       colliders" as reported, even though GraftBuildBoxComponents does add one. Real
+                       cause, found in the same log: a KeyNotFoundException fires every single
+                       RepeatEventScheduler.FixedUpdate tick, from CarryableObject.UpdateAtmosphereData
+                       → SetPlatform → UpdateSector → GameSessionSector.AddOrbitObject → ... →
+                       CsObjectReference.IsInstanceOf → ResourceAssetContainer<CloneStarObjectContainer,
+                       ...>.GetItem(guid) — a bare Dictionary[] lookup with no TryGetValue, no
+                       fallback to RuntimeAssetsRegister. That's the SAME "our guid only lives in
+                       RuntimeAssetsRegister, vanilla code assumes CloneStarObjectContainer" gap as the
+                       ObjectFactory crash fixed above, just a different vanilla consumer of it — and
+                       since it's uncaught and fires every physics tick from inside the exact call
+                       chain that connects a CarryableObject to the ship's platform/simulation, it was
+                       plausibly aborting that connection before it completed each frame — consistent
+                       with "has a real collider but falls through the floor anyway."
+                       Rather than patch each individual vanilla call site that does this (whack-a-mole
+                       — who knows how many more there are), used the container's own first-class API
+                       for exactly this situation: ResourceAssetContainer<U,T,V>.RegisterRuntimeAsset
+                       (adds to both RuntimeDescriptions and the internal assetDefLUT dictionary, no
+                       reflection needed — it's public). New AssetLoader.EnsureRuntimeAssetsRegisteredInVanillaContainers,
+                       called as the first step of EnsureBuildBoxVisualsWired (same lazy/deferred/once
+                       timing — ResourceAssetContainerRegister isn't populated at plugin Awake either):
+                       registers both the module and BuildBox prefab guids into CloneStarObjectContainer
+                       with IsRuntime = true on the def's Ref (safe here — unlike the Awake case, this
+                       CloneStarObjectDef is a plain C# object that never goes through Unity's
+                       prefab-clone pipeline, so IsNonSerialized doesn't reset it). This should fix the
+                       falling-through-floor AND make BuildBox.BuildModule's own
+                       ObjectFactory.InstantiateSpaceObjectByGUID call succeed without needing
+                       ForgeSpawnCommand's bypass pattern repeated elsewhere.
+
+                       RETESTED — CloneStarObjectContainer registration confirmed working (log is
+                       fully clean now, KeyNotFoundException gone) but box STILL fell through the
+                       floor. Correction to the note above: the log's "New platform: PlayerShip"
+                       line is NOT evidence the box connected to the ship's simulated physics —
+                       that log comes from LocalPlayer.cs (the player's own platform transitions),
+                       not CarryableObject. So whether MovingSpacePlatform.AddSimulationObject ever
+                       actually ran for the box is still unconfirmed; CarryableObject.SetPlatform
+                       logs nothing of its own. Traced the connection path
+                       (SetPlatform → platform.TryRegisterCarryable → AddSimulationObject →
+                       CopyCollider/CopyRigidbody) and it looks structurally fine for a plain
+                       Rigidbody+BoxCollider object — found no obvious blocker there. Applied one
+                       cheap, well-justified fix regardless: GraftBuildBoxComponents now sets
+                       collisionDetectionMode = ContinuousDynamic on the Rigidbody (was defaulting
+                       to Discrete) — a freshly-spawned object above the floor, not yet resting on
+                       anything, is exactly the tunneling-through-thin-geometry case Discrete is
+                       known for. NOT CONFIRMED to be the (whole) fix — still needs a retest.
+
+                       RETESTED AGAIN — ContinuousDynamic made no difference. User confirmed via
+                       Runtime Unity Editor (already loaded as a BepInEx plugin) live-inspecting the
+                       spawned box: it doesn't land on a lower deck, doesn't get destroyed — it just
+                       falls forever. AND its Rigidbody.useGravity reads FALSE in the Inspector, even
+                       though it's visibly moving downward continuously. That rules out both
+                       "tunnels through the floor" (would stop somewhere, or the CCD fix would have
+                       helped) and "falls under real Physics.gravity" (gravity is off) — something
+                       else is driving continuous downward motion with nothing arresting it. Most
+                       likely: residual velocity (e.g. inherited player/ship momentum at spawn) with
+                       nothing providing collision or drag to stop it, consistent with the box never
+                       actually being connected into MovingSpacePlatform's simulated PhysicsScene at
+                       all (separate PhysicsScenes never collide with each other regardless of
+                       collision detection mode — a structural reason no physics-tuning fix could
+                       have worked).
+                       Found one concrete gap: ForgeSpawnCommand was calling PhotonNetwork.Instantiate
+                       directly instead of the real vanilla SpawnUtils.SpawnCarryable helper (which
+                       itself still ends in ObjectFactory.InstantiateSpaceObjectByGUID — avoided
+                       earlier only because that used to NRE on our guid, now fixed by the
+                       CloneStarObjectContainer registration above). SpawnCarryable does one extra
+                       step ours never replicated: GameSessionManager.ActiveSector.AddOrbitObject
+                       immediately after spawn, rather than leaving sector/room registration to
+                       CarryableObject's own polling to eventually catch up. Switched
+                       ForgeSpawnCommand to call SpawnUtils.SpawnCarryable directly (simpler too —
+                       drops the hand-rolled PhotonNetwork.Instantiate/assetGuid/ObjectRegistry
+                       replication entirely, now redundant). NOT YET RETESTED.
+
+                       RETESTED AGAIN — still no change, and (confirmed via Runtime Unity Editor)
+                       still no "..._simulated" shadow object ever appears. So the connection to
+                       MovingSpacePlatform's simulated PhysicsScene genuinely never happens for our
+                       custom-grafted prefab, for reasons never pinned down despite tracing the
+                       whole SetPlatform → TryRegisterCarryable → AddSimulationObject →
+                       CopyCollider/CopyRigidbody path and finding nothing obviously wrong with it.
+
+                       ARCHITECTURE CHANGE (user's suggestion, and the right call) — stop trying to
+                       reconstruct a working BuildBox component-by-component. Instead: spawn a REAL
+                       vanilla BuildBox (found once via a live CellModule.BuildBoxRef, cached — new
+                       AssetLoader.TryFindDonorBuildBoxGuid) and relabel its moduleRef to point at
+                       the Forge module, instead of instantiating our own custom-grafted prefab. A
+                       real vanilla BuildBox already has 100% correct physics/simulation/rendering —
+                       cloning one sidesteps the whole mystery instead of solving it.
+                       This IS the original donor-borrowing approach from before the dedicated
+                       BuildBox existed (see git history) — reintroduced because the dedicated
+                       prefab turned out to never actually work, but this time the donor guid is
+                       found ONCE and cached, not re-scanned per spawn (a per-spawn scan of the whole
+                       module registry was the cause of the ORIGINAL !forgespawn lag spike that
+                       motivated moving away from donors — that risk doesn't apply to a cached
+                       one-time lookup).
+                       FIRST ATTEMPT (superseded, see below): ForgeSpawnCommand spawned the donor's
+                       OWN guid directly via SpawnUtils.SpawnCarryable, then overrode box.moduleRef
+                       on the resulting live instance afterward. Fixed the falling — confirmed no
+                       longer falls through the floor — BUT the box then had no hover label, couldn't
+                       be placed or dropped, and was held wrong. Cause: BuildBoxActor.Awake() (which
+                       sizes/colors the crate from moduleRef.Asset) — and evidently other systems too
+                       (hover label, placement validation, carry-hold positioning) — already ran
+                       against the DONOR's ORIGINAL moduleRef by the time our post-spawn override
+                       happened, leaving the box in an inconsistent half-donor-half-Forge state. Not
+                       a cosmetic-only gap after all — genuinely broke core interaction.
+
+                       FIX — preset moduleRef on the TEMPLATE, before any real instance's Awake ever
+                       runs, instead of relabeling a live instance after spawn. Required restructuring
+                       how the BuildBox's stable GUID gets registered, since RuntimeAssetsRegister /
+                       CloneStarObjectContainer only support register-once (no update API):
+                        - LoadBundle no longer grafts/registers the BuildBox bundle prefab at all —
+                          only captures its stamped VoidCrewAsset guid (AssetLoader._buildBoxGuid).
+                          That prefab's SHAPE is now unused entirely.
+                        - New AssetLoader.EnsureBuildBoxTemplateReady() (replaces
+                          EnsureBuildBoxVisualsWired): finds the donor (TryFindDonorBuildBoxGuid,
+                          still cached/one-time), clones it WHILE THE DONOR IS MOMENTARILY INACTIVE
+                          (donorPrefab.SetActive(false) → Instantiate → SetActive(true) — mirrors
+                          exactly what CustomObjectPool.Instantiate itself does around every real
+                          spawn, so the clone starts inactive too and Awake never fires on the
+                          template itself — it's a pure inert data-template, same as our original
+                          bundle-loaded prefab was), sets the clone's moduleRef.AssetGuid to the Forge
+                          module's guid (survives future clone-of-the-template just fine — it's a
+                          normal serializable field, not [NonSerialized]), and registers THIS CLONE
+                          (fresh — first-ever registration for our BuildBox guid, no TryAdd conflict)
+                          into both RuntimeAssetsRegister and CloneStarObjectContainer.
+                        - LinkForgeBuildBox split into LinkForgeBuildBoxRef (module → box direction
+                          only, unchanged timing at LoadBundle) — the box → module direction moved
+                          into EnsureBuildBoxTemplateReady above, since it now acts on the template,
+                          which doesn't exist until the donor is found.
+                        - ForgeSpawnCommand simplified back to the ordinary shape: call
+                          EnsureBuildBoxTemplateReady(), look up OUR guid (not the donor's), spawn via
+                          SpawnUtils.SpawnCarryable(ourGuid, ...). No post-spawn moduleRef override —
+                          it's already correct from Awake() onward on every instance.
+                        - BossDefeatHook switched from EnsureBuildBoxVisualsWired to
+                          EnsureBuildBoxTemplateReady too — and since it already spawns via OUR
+                          registered guid (through the care-package payload), it gets the same fix
+                          automatically, no separate relabeling logic needed there at all.
+                        - Deconstruct (CellModule.BuildBoxRef, read by vanilla
+                          Deconstruct.CreateBuildBox) also already points at OUR guid via
+                          LinkForgeBuildBoxRef — once EnsureBuildBoxTemplateReady has run (guaranteed
+                          by the time deconstruction is even possible, since installing the module in
+                          the first place requires a box to have already been spawned), that guid
+                          resolves to the correct template too. Likely fixed as a side effect of this
+                          same change — NOT CONFIRMED, no dedicated test done.
+                       Patches/BuildBoxRuntimeRefPatch.cs (the Awake-time IsRuntime re-stamp) is still
+                       required and unchanged — moduleRef.IsRuntime is [NonSerialized] regardless of
+                       which prefab/template it's set on, so every spawned INSTANCE still needs it
+                       re-stamped right before Awake reads it.
+                       This also removes ALL of EnsureBuildBoxVisualsWired's reflection into the
+                       shared vanilla BuildBoxVisualSettings asset (the prime suspect for the
+                       "all BuildBoxes turned purple" regression) — replaced by a genuine unmodified
+                       clone of a real donor, which references that shared asset completely normally
+                       the same way any other vanilla BuildBox does. Never confirmed as the actual
+                       cause, but the suspect code path no longer exists either way.
+
+                       RETESTED — physics fix confirmed (no more falling), but new failure: after
+                       re-adding the bare BuildBox marker prefab and retesting, !forgespawn threw
+                       outright (Command Exception in SpawnUtils.SpawnCarryable) and the log flooded
+                       with thousands of repeated NullReferenceExceptions from
+                       CompositeWeaponBuildBox.GetBuildSize()/get_ContextInfo(). Root cause:
+                       TryFindDonorBuildBoxGuid took the FIRST live CellModule.BuildBoxRef it found
+                       with no filtering — this time it happened to land on a composite/modular
+                       weapon module, whose BuildBoxRef points at a CompositeWeaponBuildBox (a BuildBox
+                       subclass that overrides GetBuildSize/ContextInfo to read WeaponDataRef instead
+                       of moduleRef). Cloning one and setting moduleRef (this whole approach) leaves
+                       WeaponDataRef null/empty, and every downstream system that reads those
+                       overridden members — sector marker creation (breaks the spawn itself), hover
+                       context info, per-frame socket-highlight outlines — NREs. This is almost
+                       certainly what was ACTUALLY behind the earlier "no hover label / can't
+                       place-or-drop / held wrong" report too (FindObjectsOfType iteration order isn't
+                       guaranteed stable, so which CellModule got picked as donor could vary run to
+                       run) — not a leftover Awake-timing issue as originally guessed.
+                       FIXED: TryFindDonorBuildBoxGuid now loads each candidate's prefab and skips it
+                       if its BuildBox component is (or is a) CompositeWeaponBuildBox, continuing the
+                       scan for a plain-BuildBox donor instead.
+
+                       REFINED (user's suggestion) — instead of just excluding weapon donors and
+                       accepting whichever plain BuildBox came first in scene-iteration order,
+                       TryFindDonorBuildBoxGuid now actively PREFERS a donor whose own module is
+                       tagged Utility (Module_Category_Utility — the same CsTag ForgeAttachHelper
+                       already stamps onto the Forge module itself, see that method), so the borrowed
+                       crate's own context-info label reads as "Utility Build Box" — the right kind
+                       for what the Forge thematically is — rather than an arbitrary category. Falls
+                       back to any plain non-weapon BuildBox if no Utility-tagged module happens to be
+                       installed on this particular ship.
+                    CONFIRMED (user): !forgespawn now spawns correctly — box stays put and has a
+                    hover label. Only remaining issue reported: hover showed "missing description."
+                       ROOT CAUSE: EnsureBuildBoxTemplateReady registers the crate's own guid via a
+                       freshly-constructed CloneStarObjectDef, which leaves its private `contextInfo`
+                       field null. CloneStarObjectDef.ContextInfo (get) falls back to
+                       DataTable<DefaultAssetTable>.Instance.MissingContextInfo whenever that field is
+                       null — that fallback IS the "missing description" text, not a bug in the hover
+                       system itself.
+                       FIXED: after registering the def, look up the donor's own CloneStarObjectDef
+                       (container.GetAssetDefById(donorGuid, verbose: false)) and copy its ContextInfo
+                       onto ours, so the crate shows the donor's real flavor text/icon instead of the
+                       missing-context placeholder.
+                    CONFIRMED (user): pickup, placing, and dropping all work correctly, and the
+                    "all BuildBoxes purple" issue is gone.
+                    CONFIRMED (user): display info is now working.
+
+                 FOLLOW-UP (user, same session): the crate's ContextInfo still borrowed the donor's
+                 flavor text wholesale, ignoring the Name/Description/Icon the user had already
+                 authored on the prefab's own VoidCrewAsset component (both UpgradeForgeModuleCell
+                 and the UpgradeForgeBuildBox marker have real values: "Custom ship module for
+                 upgrading module beyond mark III" / "Upgrade forge build box").
+                    FIXED: AssetLoader captures the BuildBox marker's Name/Description/Icon at
+                    LoadBundle time (_buildBoxOwnName/_buildBoxOwnDescription/_buildBoxOwnIcon —
+                    the marker GameObject itself is discarded right after, see LoadBundle's
+                    BuildBoxPrefabName branch) since EnsureBuildBoxTemplateReady needs them later
+                    but the marker itself is gone by then. EnsureBuildBoxTemplateReady now builds
+                    the crate's ContextInfo from those fields, falling back to the donor's own
+                    header/body/icon per-field only when the corresponding own field is empty
+                    (Icon still falls back — no sprite authored yet).
+                    EnsureRuntimeAssetsRegisteredInVanillaContainers (the Forge MODULE's own
+                    CloneStarObjectDef, separate from the box's) got the equivalent fix — it used
+                    to register with a null ContextInfo (silent "missing description" fallback),
+                    now builds one from the module prefab's own VoidCrewAsset fields.
+                    [] VERIFY: hover both the spawned Forge BuildBox and an installed Forge module —
+                       both should show real authored text instead of donor-borrowed or missing text.
+
+                 FOLLOW-UP (user, same session): Forge hover (both box and installed module) isn't
+                 tagged "Utility System Module" the way other utility modules'/build boxes' hovers
+                 are.
+                    ROOT CAUSE: that subtitle is a THIRD, separate lookup from ContextInfo —
+                    ContextInfoViewModel resolves it via
+                    ResourceAssetContainer<ModuleContainer, CellModule, ModuleDef>.TryGetByGuid(target),
+                    then DataTable<ModuleCategoryLocalizationTable>.Instance[asset.Category].String
+                    (ContextInfoViewModel.cs:63-66). This mod only ever registered the Forge's guid
+                    into CloneStarObjectContainer (ContextInfo) and RuntimeAssetsRegister (spawn/
+                    lookup) — never into ModuleContainer — so TryGetByGuid always missed and Subtitle
+                    stayed blank. Confirmed this is the same guid for both surfaces: the box's own
+                    hover resolves target via its moduleRef.AssetGuid, which IS the Forge module's
+                    guid, so one registration covers both. ECategory has exactly 4 values (Hidden,
+                    Weapons, Defense, Support) and BuildBoxActor.cs:46 already falls back to
+                    ECategory.Support as the implicit default for any non-weapon BuildBox — strong
+                    signal Support is what localizes to "Utility System Module".
+                    FIXED: EnsureRuntimeAssetsRegisteredInVanillaContainers now also registers a
+                    ModuleDef(guid, name) { Category = ECategory.Support } into ModuleContainer for
+                    any module prefab (gated on GetComponent<CellModule>() != null, so the BuildBox
+                    template clone is skipped).
+                    CONFIRMED (user): ContextInfo (custom Name/Description) now shows correctly on
+                    the installed module. Subtitle tag STILL missing — the registration isn't taking
+                    effect, or the guid it's keyed under doesn't match what the hover actually reads.
+                    REVISED: .voidcrew/decompiled shows CellModule : AbstractEnvironmentalObject and
+                    BuildBox : CarryableObject : AbstractEnvironmentalObject — NEITHER extends
+                    AbstractCloneStarObject, which would mean AbstractCloneStarObject.ContextInfo
+                    (the assetGuid-keyed, Subtitle-computing constructor) never even runs for either
+                    hover surface. But ForgeHoverUiPatch's own doc comment (already-shipped, already
+                    confirmed working in production) asserts modules/boxes/relics ALL resolve through
+                    exactly that path — so either the decompiled hierarchy is stale (see CLAUDE.md's
+                    stale-dump caveat) or there's a live subclass not caught in this dump. Sided with
+                    the working code's own claim: registered under the SAME guid ContextInfoViewModel
+                    reads as `target` for a self-referencing object (assetGuid) — moduleGuid for the
+                    installed module (already correct), and ADDED boxGuid for the crate too (unclear
+                    which of {boxGuid, moduleGuid} the crate's own hover target actually resolves to,
+                    so both are now registered — see EnsureBuildBoxTemplateReady).
+                    HARDENED: both registrations now wrapped in try/catch with BepinPlugin.Log.LogError
+                    on failure (previously an uncaught exception here — plausible, since this container/
+                    ModuleDef path is untested against the live game, unlike CloneStarObjectContainer
+                    which is proven working — would fail silently as far as the player can tell: no
+                    crash, just "the tag never showed up").
+                    CONFIRMED (user, with log): both log lines fire clean, no errors — "Registered
+                    UpgradeForgeModuleCell ... into vanilla ModuleContainer as Support." and
+                    "Registered BuildBox ... into vanilla ModuleContainer as Support." BuildBox hover
+                    now shows "Utility System Module". (Installed-module hover not explicitly
+                    reconfirmed this round, but same code path, same guid — assumed fixed too.)
+
+                 FOLLOW-UP (user, same session): the hover tooltip is still missing its left-edge
+                 rarity color band (other utility modules show gray).
+                    ROOT CAUSE: a THIRD separate lookup, same shape as the Category one —
+                    ContextInfoViewModel.Rarity = ResourceAssetContainer<UnlockContainer, Object,
+                    UnlockItemDef>.GetRarity(target), which returns RarityType.None (no band) for an
+                    unregistered guid. Never registered anywhere for the Forge.
+                    FIXED: new AssetLoader.RegisterCommonRarity(guid, name) helper — registers
+                    RarityType.Common (what a plain vanilla module/box shows) into UnlockContainer,
+                    same try/catch-and-log pattern as the Category fix. Called for both the module
+                    guid (in EnsureRuntimeAssetsRegisteredInVanillaContainers's loop) and the box guid
+                    (in EnsureBuildBoxTemplateReady) — same both-guids hedge as the Category fix, same
+                    reasoning (unclear which guid the crate's own hover target actually resolves to).
+                    [] VERIFY (next test): hover both surfaces — left edge should now show the gray
+                       Common-rarity band. Watch the log for "[AssetLoader] Registered ... into vanilla
+                       UnlockContainer as Common." (×2) or a "Failed to register" error if it doesn't.
+
+                 NEW BUG (user): deconstructing an unrelated module (a "scoop module") instead
+                 deconstructed the Forge module.
+                    INVESTIGATED: no code path in this mod redirects Deconstruct/BuildProcessController
+                    to the wrong CellModule — ForgeStateStore is keyed by CellModule reference
+                    (ConditionalWeakTable, correct identity), LinkForgeBuildBoxRef only ever touches
+                    the Forge's own module prefab (confirmed by the log: "[AssetLoader] Linked Forge
+                    module -> BuildBox ref ..." fires exactly once, scoped to UpgradeForgeModuleCell),
+                    and ForgeAttachHelper.TryAttach's IsForgeModule check is tag/name gated so it
+                    can't misfire onto a vanilla module. The first log the user provided didn't cover
+                    the incident at all (ends at leaving the room, no deconstruct activity — and none
+                    of our deconstruct-adjacent patches log anything anyway, so it wouldn't have shown
+                    up even if it had happened during that session).
+                    LEADING THEORY: the Forge's own deconstruct handle (ForgeDeconstructInteractable)
+                    uses a raycast-driven click region (BuildAnchorClickRegion), same mechanism vanilla
+                    modules' own ExtruderLever deconstruct levers use (both ultimately resolve through
+                    RaycastHandler.Current). If the Handle anchor lacks its own authored Collider in
+                    the Unity source, BuildAnchorClickRegion falls back to a generated BoxCollider sized
+                    by dividing the requested world-space size (0.2,0.2,0.2) by the anchor's lossyScale
+                    — if that scale is small (FBX import quirk), the resulting collider could balloon
+                    far past the Handle's visual mesh and physically steal raycasts aimed at a
+                    neighboring module's own deconstruct lever if the Forge is placed nearby.
+                    INSTRUMENTED: BuildAnchorClickRegion LogDebug's, for every Forge click region
+                    built, which branch fired (authored vs generated) and the resulting
+                    Collider.bounds (center + size) in world space.
+                    ROOT CAUSE FOUND (user, same session): the prefab's deconstruct anchor was never
+                    actually named "Handle" — user split it into two objects, "Handle" (a purely
+                    cosmetic part of the modeled mesh, buried in the FBX hierarchy so it never shows
+                    up as its own YAML block when grepping the .prefab) and "DeconstructTrigger" (a
+                    dedicated, hand-authored-and-sized SphereCollider added specifically as the click
+                    target). UpgradeForgeBehavior.DeconstructHandleName == "Handle" still matched
+                    only the cosmetic part, which has no Collider of its own and no "ClickTarget"
+                    child either — so BuildAnchorClickRegion always fell into its generated-box
+                    fallback for it. This is exactly the oversized-collider mechanism the leading
+                    theory predicted, just discovered via the naming mismatch rather than the log.
+                    FIXED: split the concepts in code, matching the split the user already made in
+                    Unity. UpgradeForgeBehavior now looks up both "Handle" and "DeconstructTrigger"
+                    separately; CreateDeconstructInteractable builds the click region from
+                    DeconstructTrigger (which has its own authored Collider, so
+                    BuildAnchorClickRegion's authored branch fires reliably — the generated fallback
+                    is no longer reachable here at all) and passes Handle through as
+                    ForgeDeconstructInteractable.VisualHandle, which the lever-pull animation now
+                    rotates instead of rotating the click region's own transform. Handle is optional
+                    (deconstruct still functions with no lever animation if absent); DeconstructTrigger
+                    is required (no trigger anchor → deconstruct unavailable, logged).
+                    STILL REPRODUCES (user, same session): with DeconstructTrigger wired as the click
+                    region (no generated fallback in play at all), holding deconstruct on ANY OTHER
+                    module still deconstructs the Forge too — and no interaction prompt shows for the
+                    other module while this happens, until the Forge is gone, then things return to
+                    normal. This rules out the oversized-collider theory outright (there's no
+                    generated collider left in the picture) — the bug is not spatial/raycast-target
+                    related at all.
+                    ROOT CAUSE (found by reading the actual vanilla interaction source,
+                    HoldClickerInteractable.cs / EnvironmentInteract.cs): HoldClickerInteractable.
+                    StartClick() subscribes OnHoldCompleted onto a SINGLE GLOBAL InputAction
+                    (ServiceBase<InputService>.Instance.InputActionReferences.HoldAction) — the same
+                    action object shared by EVERY Hold-driven interactable in the game, vanilla
+                    included — and only unsubscribes in EndClick() or once OnHoldCompleted itself
+                    fires (self-removing). EnvironmentInteract.TryEndInteract() has a latent bug on
+                    top of this: `if (!(currentInteractable == null)) { ... EndClick(); currentInteractable
+                    = null; }` — if currentInteractable is a Unity "fake-null" (destroyed) reference,
+                    `== null` is true via Unity's overload, so the whole block — INCLUDING the
+                    EndClick() call — is skipped. If the Forge's DeconstructTrigger GameObject is ever
+                    destroyed while it's still the tracked currentInteractable (plausible during this
+                    kind of iterative in-session testing), its Hold subscription leaks permanently:
+                    every SUBSEQUENT Hold completion anywhere in the game — including holding another
+                    module's own deconstruct lever — invokes it too, deconstructing the Forge
+                    regardless of what the player was actually targeting. ForgeCommitInteractable has
+                    the identical structural risk (same base class, same subscribe pattern) even
+                    though it hasn't been reported misfiring yet.
+                    FIXED, two-part defense (neither requires pinning the exact leak trigger, both are
+                    safe regardless of cause):
+                      1. ForgeDeconstructInteractable/ForgeCommitInteractable now override OnDestroy()
+                         to force-call EndClick() (which unconditionally unsubscribes from the shared
+                         Hold action regardless of isClickable state) — plugs the leak at its most
+                         likely source (component destroyed mid-hold).
+                      2. OnDeconstruct()/OnCommit() now gate on this component's OWN locally-tracked
+                         _holding bool (already existed for Deconstruct's rotation animation, added
+                         fresh for Commit) before acting — so even a stray leaked callback that slips
+                         past fix #1 becomes a no-op instead of touching the Forge, since _holding is
+                         only ever true between THIS component's own StartClick/EndClick pair.
+                    STILL REPRODUCES (user, same session, log captured but doesn't cover the incident —
+                    log ends at room-leave/hot-reload teardown, same gap as every previous attempt: our
+                    own deconstruct code logged NOTHING when it actually fired, so the log is silent on
+                    the one thing that matters). User's refined description: merely LOOKING AT the
+                    Forge's DeconstructTrigger, then looking away to a DIFFERENT module and trying to
+                    deconstruct THAT one, still deconstructs the Forge — "like the prompt is still
+                    there." This is a stronger, more specific repro than "any hold anywhere" and doesn't
+                    obviously require an actual completed Hold on the Forge first — raises a live
+                    alternative theory alongside the leaked-global-Hold-subscription one: EnvironmentInteract.
+                    currentInteractable itself could be getting stuck pointed at the Forge's interactable
+                    (RaycastHandler.Current not updating away from it), in which case _holding on the
+                    Forge's own component would be legitimately (not spuriously) true when a later hold
+                    completes elsewhere — meaning the fix #2 guard wouldn't catch it either, since from
+                    the guard's perspective it looks like a real, correctly-scoped hold.
+                    INSTRUMENTED (not yet confirmed either way): StartClick/EndClick on both
+                    ForgeDeconstructInteractable and ForgeCommitInteractable now LogDebug their firing
+                    (with GetInstanceID, to distinguish component instances across rebuilds) —
+                    OnDeconstruct/OnCommit now LogInfo every invocation including _holding's value BEFORE
+                    the guard check, so a leaked-but-guarded callback is now visible in the log instead
+                    of invisible (previously: guard silently returns, nothing logged, no way to tell the
+                    difference between "never fired" and "fired but correctly no-opped").
+                    ROOT CAUSE CONFIRMED (user, with log — instrumentation paid off): log showed
+                    "Deconstruct StartClick ... GetInstanceID=-125338", then a BURST of 50+
+                    "NullReferenceException ... void ClickerInteractable.Highlighted(bool) <-
+                    AbstractInteractable.SetHighlighted <- RaycastHandler.SetHighlightedInteractable <-
+                    RaycastHandler.RaycastInteractables <- PlayerRaycastUpdater.LateUpdate", then
+                    "OnDeconstruct fired ... GetInstanceID=-125338, _holding=True" — SAME instance ID
+                    as the StartClick. This DISPROVES the leaked-global-Hold-subscription theory: it was
+                    a real, correctly-scoped hold the whole time, not a stray cross-fire.
+                    ACTUAL BUG: ClickerInteractable.Highlighted (vanilla, what ForgeDeconstructInteractable
+                    was inheriting unmodified — unlike ForgeCommitInteractable and ForgeInteractable,
+                    which both already override it) iterates a private outlineObjects[] array that only
+                    the Unity Inspector ever populates — null on every Forge interactable, since all are
+                    AddComponent'd at runtime with no Inspector data behind them. Calling it NREs. This
+                    fires from RaycastHandler.RaycastInteractables() every time the player's raycast
+                    target changes to OR away from the trigger — and uncaught, that exception aborts the
+                    REST of RaycastInteractables() for that frame, including whatever line reassigns
+                    RaycastHandler.Current to the player's NEW target. So looking away from
+                    DeconstructTrigger left RaycastHandler.Current permanently stuck pointing at it —
+                    explaining BOTH halves of the report at once: no prompt on the other module (Current
+                    never actually became the other module's interactable) AND the Forge deconstructing
+                    instead (EnvironmentInteract.TryStartInteract reads the stuck Current regardless of
+                    where the player is aiming, so StartClick/hold-completion legitimately run on the
+                    Forge every time).
+                    FIXED: ForgeDeconstructInteractable now overrides Highlighted the same way
+                    ForgeCommitInteractable already does — a disabled "Highlight" child toggled on hover,
+                    never touching ClickerInteractable.Highlighted (or its broken array) at all. The
+                    earlier _holding-gate/OnDestroy defenses (added chasing the wrong theory) are kept —
+                    harmless, and OnDestroy's force-unsubscribe is still cheap insurance against the
+                    separate, real (if apparently not the actual trigger here) global-Hold-subscription
+                    leak risk.
+                    ✔ CONFIRMED (user): the core repro no longer reproduces — the
+                    ClickerInteractable.Highlighted NRE / stuck-RaycastHandler.Current fix resolved it.
+                    Deconstructing an unrelated module no longer touches the Forge. This closes out the
+                    whole "scoop-deconstructs-Forge" saga (donor-collider theory → leaked-Hold-
+                    subscription theory → the actual root cause found via log instrumentation).
+                    [] VERIFY: the deconstruct lever mesh (Handle) still visually rotates while
+                       holding the trigger (now on the X axis — see further below).
+                    [] VERIFY: holding Commit still works normally (never reported broken).
+
+                 FOLLOW-UP (user, same session): the Commit prompt icon shows a mouse-click glyph
+                 instead of a keyboard-key glyph (e.g. "F"), even though InteractionType was already
+                 set to Hold.
+                    ROOT CAUSE: KeyBindVE.Init resolves the icon by taking
+                    InteractionDescription.Key.FallBackString, stripping "<keybind>...</keybind>" tags,
+                    and looking THAT UP BY NAME as a live InputAction (InputService.FindActionKey — a
+                    real search through InputActionAsset.actionMaps) — it's an action-name lookup, not
+                    just a display label. ForgeInteractable.ActionInfo was borrowing source.Key from
+                    _insertInfo (vanilla's regular click/interact InteractionInfo, borrowed from
+                    CarryablesSocketActor) for EVERY prompt including Commit/Deconstruct — but Commit
+                    and Deconstruct are actually driven by HoldClickerInteractable's own, SEPARATE
+                    InputActionReferences.HoldAction (see that class) — a different bound input than the
+                    click action. So the icon KeyBindVE resolved and showed was the CLICK action's glyph
+                    (a mouse button in this control scheme), regardless of InteractionType already saying
+                    Hold — InteractionType and the icon glyph are two independent things fed by two
+                    different fields (InteractionType vs Key).
+                    FIXED: ActionInfo now builds Key fresh for Hold-type prompts specifically, reading
+                    the Hold action's own live name off
+                    ServiceBase<InputService>.Instance.InputActionReferences.HoldAction.action.name
+                    (not hardcoded, so a future rebind/rename in the Input Actions asset can't silently
+                    desync this from what HoldClickerInteractable itself listens on) and wrapping it in
+                    the same "<keybind>ActionName</keybind>" format vanilla's own Hold prompts use
+                    (confirmed pattern: ContextInfoDisplay.cs:90 does
+                    CreateInteraction(Hold, "<keybind>Fire1</keybind>", ...) for the vanilla Use prompt).
+                    Non-Hold prompts (RelicTube/ModuleSocket/AlloyTerminal) are untouched — still borrow
+                    _insertInfo's Key as before, which is correct for them (Press-type, same click action).
+                    Also added a LogDebug reporting the resolved action name for every Hold prompt built,
+                    in case the name it resolves to isn't what's expected.
+                    [] VERIFY (next test): Commit and Deconstruct prompts should now show a keyboard-key
+                       icon (matching whatever HoldAction is actually bound to) instead of a mouse glyph.
+                       If not, check the log for "[Forge] Hold prompt ... bound to action name ..." — if
+                       that name doesn't resolve via FindActionKey either, the guess needs revisiting.
+
+                 FOLLOW-UP (user, same session): requested the Forge's hover highlight use the same
+                 outline-shader effect vanilla modules/BuildBoxes use, instead of whatever the mod was
+                 doing (a hand-authored "Highlight" child GameObject toggle — which, per the
+                 ClickerInteractable.Highlighted NRE fix above, wasn't even the thing actually visible;
+                 Deconstruct's highlight had literally never worked at all until this session).
+                    NEW: Features/Forge/ForgeOutline.cs — walks a module root's renderers
+                    (GetComponentsInChildren<Renderer>), adds a Knife.HDRPOutline.Core.OutlineObject on
+                    each the first time (cached per module root via ConditionalWeakTable so repeat
+                    toggles don't re-scan), toggles all of them together via .enabled. Whichever
+                    interactable is hovered outlines the WHOLE module, matching vanilla's own
+                    whole-module hover convention rather than a per-button sub-mesh outline. No Unity-
+                    side authoring needed — works on any renderer already under the module.
+                    ForgeInteractable / ForgeCommitInteractable / ForgeDeconstructInteractable's
+                    Highlighted() all now call ForgeOutline.SetHighlighted(moduleRoot, isHighlighted)
+                    instead of toggling a "Highlight" child — the _highlight/_highlightResolved fields
+                    and ForgeAnchors.HighlightName lookups in those three are gone. ForgeAnchors.HighlightName
+                    itself and its StripHelperColliders call in BuildAnchorClickRegion are left in place
+                    (harmless dead-ish code — still strips stray colliders off any leftover "Highlight"
+                    child from older prefab authoring, just no longer drives the actual visual).
+                    Untested against live rendering — OutlineObject.AddComponent'd at runtime gets
+                    UnityEngine defaults (Color.white, no mask) since there's no Inspector data to pull
+                    from; should still render SOME outline via the shared "Selection"-layer custom pass
+                    vanilla already uses, just not necessarily vanilla's exact accent color.
+                    [] VERIFY (next test): hovering any Forge interactable (tubes, socket, commit,
+                       deconstruct) should now outline the whole module the way other modules/BuildBoxes
+                       do, not the old (or previously entirely-absent, for Deconstruct) highlight.
+                       If the outline color looks wrong/default-white rather than matching vanilla's
+                       accent, that's ForgeOutline.BuildOutlines leaving OutlineObject.color at its
+                       compiled default — say so and it can be set explicitly.
+
+                 REFINED (user, same session): whole-module outline was wrong for Commit specifically —
+                 it should highlight just the lever, not the whole Forge. User identified the actual
+                 mesh: "LeverBox", buried in the FBX-imported hierarchy same as Handle (so it doesn't
+                 show up grepping the .prefab's YAML, but GetComponentsInChildren finds it fine at
+                 runtime, same as Handle/DeconstructTrigger).
+                    CHANGED: UpgradeForgeBehavior.CommitLeverBoxName = "LeverBox" — found in
+                    BuildInteractables the same way Handle/DeconstructTrigger are, passed into
+                    CreateCommitInteractable, stored as ForgeCommitInteractable.OutlineTarget.
+                    ForgeCommitInteractable.Highlighted now outlines OutlineTarget specifically
+                    (ForgeOutline.SetHighlighted only walks renderers under whatever Transform it's
+                    given, so scoping to LeverBox instead of the module root was a one-line change once
+                    the right Transform was known) — falls back to the whole module only if LeverBox
+                    isn't found on the prefab (logged: "Prefab has no LeverBox — Commit will outline the
+                    whole module instead of just the lever"), so a missing mesh degrades gracefully
+                    rather than showing nothing. ForgeInteractable is UNCHANGED — still whole-module (no
+                    equivalent per-part mesh identified for it yet; revisit the same way if asked).
+                    [] VERIFY (next test): hovering the Commit lever should now outline just the lever
+                       mesh, not the whole module. Check the log for the "Prefab has no LeverBox"
+                       message — if it's there, the FBX doesn't actually expose a LeverBox node at
+                       runtime despite being named that in the source, and this needs a different name
+                       or a different lookup.
+
+                 REFINED further (user, same session): ForgeDeconstructInteractable got the same
+                 per-part scoping treatment as Commit — no new mesh lookup needed, since it already
+                 tracks VisualHandle (the "Handle" mesh, already found in BuildInteractables for the
+                 rotation animation). Highlighted now outlines VisualHandle specifically instead of the
+                 whole module, same graceful whole-module fallback pattern as Commit if VisualHandle is
+                 null. ForgeInteractable remains the only one still whole-module.
+                    ALSO FIXED (user, same session): the lever-pull rotation animation was rotating
+                    VisualHandle on the Y axis (Quaternion.Euler(0f, _angle, 0f)) — should be the X axis.
+                    Changed to Quaternion.Euler(_angle, 0f, 0f) in ForgeDeconstructInteractable.Update().
+                    [] VERIFY (next test): Deconstruct highlight now outlines just the Handle mesh, not
+                       the whole module. Lever visually rotates on the X axis while holding (previously
+                       Y) — confirm this now matches the intended pull direction.
+
+                 PULLED (user, same session): ForgeInteractable (RelicTube/ModuleSocket/AlloyTerminal —
+                 everything except Commit/Deconstruct) had no per-part mesh identified yet, so
+                 whole-module outlining there was just an assumption-of-convenience filling the gap, not
+                 an actual requested design. Rather than keep outlining the whole Forge on every tube/
+                 socket/terminal hover until that's settled, Highlighted() is now a no-op (base call
+                 kept for the override chain, but no ForgeOutline call) — no highlight at all for these
+                 three kinds until their own scoping is decided, same pattern as Commit/Deconstruct once
+                 it's known what mesh each should target.
+                    [] VERIFY: RelicTube/ModuleSocket/AlloyTerminal hover should show no outline at all
+                       now (previously whole-module). Commit/Deconstruct unaffected.
+                    [] TODO (design, not yet started): figure out per-part meshes for RelicTube (×6),
+                       ModuleSocket, and AlloyTerminal, then give ForgeInteractable the same OutlineTarget
+                       pattern Commit/Deconstruct already have — likely per-Kind or per-anchor lookup
+                       rather than one shared field, since ForgeInteractable is reused across all three
+                       kinds and all 6 tube instances.
+                    [] VERIFY: defeating the 2nd boss still delivers a working Forge BuildBox via
+                       care package (BossDefeatHook path, now on the same fixed template).
+                    [] VERIFY: deconstructing an installed Forge module produces a working BuildBox
+                       (not yet tested at all this session — genuinely unknown whether the whole
+                       install → deconstruct loop functions).
                     [] VERIFY: hold the Handle to completion on an installed Forge → module
                        deconstructs back to a BuildBox, no ArgumentNullException, no leftover
                        ForgeDeconstructInteractable warning in the log.

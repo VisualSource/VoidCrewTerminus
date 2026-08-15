@@ -52,12 +52,32 @@ public class UpgradeForgeBehavior : MonoBehaviour
     // Anchor names baked into the shipped prefab. CommitTarget is required for
     // in-world commits; AlloyTarget is the Phase 5 meter terminal (optional — the
     // !setmeter dev command covers testing until the prefab gains the anchor).
-    // Handle is the deconstruct lever's rotating part (see ForgeDeconstructInteractable).
+    // Handle and DeconstructTrigger are two different objects on the prefab:
+    // Handle is a visual-only part of the modeled mesh (purely cosmetic — the
+    // rotating lever ForgeDeconstructInteractable animates while held) and
+    // DeconstructTrigger is a dedicated, hand-authored-and-sized Collider (the
+    // actual click/raycast target). They used to be conflated under one anchor
+    // name, which meant the click region either had to reuse Handle's own
+    // (nonexistent) collider or fall back to BuildAnchorClickRegion's generated
+    // box — sized by dividing a world-space size by the anchor's lossyScale,
+    // which can balloon past the intended bounds on odd FBX import scales and
+    // steal raycasts aimed at a neighboring module's own deconstruct lever (see
+    // TODO's "scoop-deconstructs-Forge" investigation). Using DeconstructTrigger's
+    // own authored Collider directly sidesteps the generated-fallback path
+    // entirely.
     public const string RelicTubeAnchorName = "RelicTubeTarget";
     public const string InputAnchorName = "InputTarget";
     public const string CommitAnchorName = "CommitTarget";
     public const string AlloyAnchorName = "AlloyTarget";
     public const string DeconstructHandleName = "Handle";
+    public const string DeconstructTriggerName = "DeconstructTrigger";
+
+    // The Commit lever's own visual mesh, buried in the FBX-imported hierarchy
+    // like Handle (so it never shows up as its own YAML block when grepping the
+    // .prefab — found fine at runtime via GetComponentsInChildren, same as
+    // Handle). Scopes ForgeCommitInteractable's outline highlight to just this
+    // part instead of the whole module (see ForgeOutline).
+    public const string CommitLeverBoxName = "LeverBox";
 
     private BuildBox _moduleBox;
     private readonly List<GameObject> _relics = new();
@@ -399,8 +419,10 @@ public class UpgradeForgeBehavior : MonoBehaviour
             .ToArray();
         _inputAnchor = transforms.FirstOrDefault(t => t.name == InputAnchorName);
         var commitAnchor = transforms.FirstOrDefault(t => t.name == CommitAnchorName);
+        var commitLeverBox = transforms.FirstOrDefault(t => t.name == CommitLeverBoxName);
         var alloyAnchor = transforms.FirstOrDefault(t => t.name == AlloyAnchorName);
         var deconstructHandle = transforms.FirstOrDefault(t => t.name == DeconstructHandleName);
+        var deconstructTrigger = transforms.FirstOrDefault(t => t.name == DeconstructTriggerName);
 
         int layer = LayerMask.NameToLayer("InteractiveObjects");
         if (layer < 0)
@@ -418,17 +440,25 @@ public class UpgradeForgeBehavior : MonoBehaviour
             // box itself can be grabbed back out.
             CreateInteractable(_inputAnchor, ForgeInteractableKind.ModuleSocket, new Vector3(1.2f, 1.2f, 1.2f), layer);
         if (commitAnchor != null)
-            CreateCommitInteractable(commitAnchor, new Vector3(0.3f, 0.3f, 0.3f), layer);
+        {
+            CreateCommitInteractable(commitAnchor, commitLeverBox, new Vector3(0.3f, 0.3f, 0.3f), layer);
+            if (commitLeverBox == null)
+                BepinPlugin.Log.LogInfo("[Forge] Prefab has no LeverBox — Commit will outline the whole module instead of just the lever.");
+        }
         else
             BepinPlugin.Log.LogWarning("[Forge] Prefab has no CommitTarget anchor — in-world commits unavailable (use !forgecommit).");
         if (alloyAnchor != null)
             CreateInteractable(alloyAnchor, ForgeInteractableKind.AlloyTerminal, new Vector3(0.3f, 0.3f, 0.3f), layer);
         else
             BepinPlugin.Log.LogInfo("[Forge] Prefab has no AlloyTarget anchor — alloy feeding unavailable in-world (use !setmeter for testing).");
-        if (deconstructHandle != null)
-            CreateDeconstructInteractable(deconstructHandle, layer);
+        if (deconstructTrigger != null)
+        {
+            CreateDeconstructInteractable(deconstructTrigger, deconstructHandle, layer);
+            if (deconstructHandle == null)
+                BepinPlugin.Log.LogInfo("[Forge] Prefab has no Handle — deconstruct works but the lever won't animate.");
+        }
         else
-            BepinPlugin.Log.LogInfo("[Forge] Prefab has no Handle — in-world deconstruct unavailable.");
+            BepinPlugin.Log.LogInfo("[Forge] Prefab has no DeconstructTrigger — in-world deconstruct unavailable.");
 
         if (_tubeAnchors.Length == 0 || _inputAnchor == null)
             BepinPlugin.Log.LogWarning(
@@ -480,7 +510,7 @@ public class UpgradeForgeBehavior : MonoBehaviour
     // (EnvironmentInteract's Hold action, not CarryableInteract's fire1Action), so
     // it can't share ForgeInteractable's AbstractInteractable base. Everything about
     // *finding or building the click region itself* is identical, though.
-    private void CreateCommitInteractable(Transform anchor, Vector3 size, int layer)
+    private void CreateCommitInteractable(Transform anchor, Transform leverBox, Vector3 size, int layer)
     {
         var go = BuildAnchorClickRegion(anchor, "ForgeInteractable_CommitButton", size, layer);
 
@@ -488,6 +518,7 @@ public class UpgradeForgeBehavior : MonoBehaviour
         if (hc == null) hc = go.AddComponent<ForgeCommitInteractable>();
         hc.Forge = this;
         hc.Anchor = anchor;
+        hc.OutlineTarget = leverBox;
         hc.ShowContextInfo = false;
         // Must be set before Unity calls Start() (ClickerInteractable.SetClickable
         // there would otherwise stomp the InteractionInfo assignment below back to
@@ -498,20 +529,26 @@ public class UpgradeForgeBehavior : MonoBehaviour
     }
 
     // The deconstruct handle (ForgeDeconstructInteractable) — same hold-to-confirm
-    // mechanism as Commit, but it's the "Handle" mesh itself that's the click
-    // region: unlike the abstract CommitTarget/tube anchors, Handle is real
-    // authored geometry and should already carry its own Collider, so
-    // BuildAnchorClickRegion's "authored collider" branch is expected to fire
-    // here rather than its generated-box fallback.
-    private void CreateDeconstructInteractable(Transform handle, int layer)
+    // mechanism as Commit. Click detection and the visual lever are deliberately
+    // separate objects: trigger carries its own hand-authored, hand-sized
+    // Collider, so BuildAnchorClickRegion's "authored collider" branch always
+    // fires for it — never the generated-box fallback (which, sized off a
+    // possibly-tiny FBX anchor lossyScale, is what let the Forge's deconstruct
+    // region balloon past its intended bounds and steal clicks meant for a
+    // neighboring module). handle is purely cosmetic — the mesh part
+    // ForgeDeconstructInteractable rotates for the pull animation — and is
+    // optional; deconstruct still functions without it, just without the
+    // visual feedback.
+    private void CreateDeconstructInteractable(Transform trigger, Transform handle, int layer)
     {
-        var go = BuildAnchorClickRegion(handle, "ForgeInteractable_Deconstruct", new Vector3(0.2f, 0.2f, 0.2f), layer);
+        var go = BuildAnchorClickRegion(trigger, "ForgeInteractable_Deconstruct", new Vector3(0.2f, 0.2f, 0.2f), layer);
 
         var dc = go.GetComponent<ForgeDeconstructInteractable>();
         if (dc == null) dc = go.AddComponent<ForgeDeconstructInteractable>();
         dc.ShowContextInfo = false;
         dc.DontSelfSetInteractionInfo = true;
         dc.InteractionInfo = ForgeInteractable.DeconstructInfo();
+        dc.VisualHandle = handle;
     }
 
     // Prefab authoring contract (all optional, plain Unity components so they survive
@@ -554,6 +591,15 @@ public class UpgradeForgeBehavior : MonoBehaviour
 
         ForgeAnchors.StripHelperColliders(anchor, ForgeAnchors.HighlightName);
         ForgeAnchors.StripHelperColliders(anchor, ForgeAnchors.FilledName);
+
+        // Diagnostic: an oversized/mispositioned click region here would silently
+        // steal raycasts aimed at a neighboring module's own interactables (see
+        // the "deconstructing a different module hit the Forge instead" report).
+        var builtCollider = go.GetComponent<Collider>();
+        BepinPlugin.Log.LogDebug(
+            $"[Forge] Click region '{generatedName}' on anchor '{anchor.name}': " +
+            $"{(authored != null ? "authored" : "generated")} collider, " +
+            $"world bounds center={builtCollider.bounds.center} size={builtCollider.bounds.size}");
 
         return go;
     }

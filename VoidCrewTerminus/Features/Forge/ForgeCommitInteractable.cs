@@ -27,10 +27,16 @@ public class ForgeCommitInteractable : HoldClickerInteractable
     public UpgradeForgeBehavior Forge;
     public Transform Anchor;
 
-    private Transform _highlight;
-    private bool _highlightResolved;
+    // The lever's own visual mesh (UpgradeForgeBehavior.CommitLeverBoxName —
+    // "LeverBox" — buried in the FBX hierarchy like Handle). Scopes the outline
+    // highlight to just the lever instead of the whole module (see
+    // Highlighted/ForgeOutline). Null if the prefab has no LeverBox — falls back
+    // to outlining the whole module rather than showing nothing.
+    public Transform OutlineTarget;
 
-    protected override void Awake()
+    private bool _holding;
+
+    public override void Awake()
     {
         base.Awake();
         HoldCompleted += OnCommit;
@@ -41,23 +47,53 @@ public class ForgeCommitInteractable : HoldClickerInteractable
     // UpgradeForgeBehavior.BuildInteractables() is not a run-once initializer: it
     // re-runs (reusing this same component via GetComponent) on every hot-reload
     // attach, so subscribing there would stack a new handler on every reload.
+    public override void StartClick()
+    {
+        base.StartClick();
+        _holding = true;
+        BepinPlugin.Log.LogDebug($"[Forge] Commit StartClick (GetInstanceID={GetInstanceID()}).");
+    }
+
+    public override void EndClick()
+    {
+        base.EndClick();
+        _holding = false;
+        BepinPlugin.Log.LogDebug($"[Forge] Commit EndClick (GetInstanceID={GetInstanceID()}).");
+    }
+
+    // HoldClickerInteractable.StartClick subscribes onto a single GLOBAL
+    // InputAction shared by every Hold-driven interactable in the game — see
+    // ForgeDeconstructInteractable's OnDestroy/OnDeconstruct doc comments for
+    // the full leak mechanism (same base class, same risk here: a leaked
+    // subscription would fire an unwanted Commit whenever ANY unrelated Hold
+    // completes anywhere). Same two-part defense: force-unsubscribe on destroy,
+    // and gate the action on our own locally-tracked hold state so a stray
+    // callback is a no-op rather than an unwanted commit.
+    public override void OnDestroy()
+    {
+        base.OnDestroy();
+        EndClick();
+    }
+
     private void OnCommit()
     {
-        if (Forge == null) return;
+        BepinPlugin.Log.LogInfo($"[Forge] OnCommit fired (GetInstanceID={GetInstanceID()}), _holding={_holding}.");
+        if (!_holding || Forge == null) return;
         var player = LocalPlayer.Instance;
         if (player == null) return;
         Forge.HandleInteraction(ForgeInteractableKind.CommitButton, Anchor, player);
     }
 
-    // Mirrors ForgeInteractable.Highlighted's own convention — a disabled
-    // "Highlight" child toggled on hover — instead of calling base.Highlighted.
-    protected override void Highlighted(bool isHighlighted)
+    // Uses ForgeOutline instead of calling base.Highlighted — see ForgeOutline's
+    // doc comment for why base.Highlighted (ClickerInteractable's own, iterating
+    // an outlineObjects[] array only the Unity Inspector ever populates) can't
+    // be used on a runtime-built interactable like this one. Scoped to just
+    // OutlineTarget (the lever mesh) rather than the whole module, unlike the
+    // other Forge interactables — Commit is a distinct, separately-modeled part
+    // the player should see highlighted on its own.
+    public override void Highlighted(bool isHighlighted)
     {
-        if (!_highlightResolved && Anchor != null)
-        {
-            _highlight = ForgeAnchors.FindDeep(Anchor, ForgeAnchors.HighlightName);
-            _highlightResolved = true;
-        }
-        if (_highlight != null) _highlight.gameObject.SetActive(isHighlighted);
+        var target = OutlineTarget != null ? OutlineTarget : (Forge != null ? Forge.transform : null);
+        ForgeOutline.SetHighlighted(target, isHighlighted);
     }
 }

@@ -1,11 +1,11 @@
 using System.Collections.Generic;
 using System.Linq;
 using CG.Game.Player;
+using CG.Game.Scenarios;
 using CG.Network;
 using CG.Objects;
 using CG.Ship.Modules;
 using CG.Ship.Object;
-using Photon.Pun;
 using ResourceAssets;
 using UnityEngine;
 using VoidCrewTerminus.Forge;
@@ -252,16 +252,33 @@ internal class ForgeCommitCommand : PublicCommand
     }
 }
 
-// Spawns the Forge's own dedicated BuildBox (AssetLoader.GraftBuildBoxComponents /
-// LinkForgeBuildBox — moduleRef is pre-pointed at the Forge module's GUID once at
-// bundle load, not mutated per spawn) directly by its registered GUID.
+// Spawns the Forge's BuildBox by its registered GUID, same as any other
+// runtime-registered asset — AssetLoader.EnsureBuildBoxTemplateReady does the
+// real work, cloning a live vanilla donor and presetting its moduleRef to the
+// Forge module BEFORE any instance ever spawns (not relabeling one after the
+// fact — an earlier version of this command tried that and left the box in a
+// broken half-donor-half-Forge state: no hover label, couldn't be placed or
+// dropped, held wrong, because BuildBoxActor.Awake and apparently other
+// systems too key off moduleRef and had already run against the donor's
+// ORIGINAL one by the time the relabel happened).
 //
-// Previously this borrowed a vanilla module's live BuildBox as a "donor" and
-// mutated its moduleRef at runtime — see git history (ForgeCommitCommand.cs,
-// pre dedicated-BuildBox) for that approach. That path also searched the entire
-// vanilla module registry once per spawn for a donor (TryFindDonorBuildBoxGuid),
-// which was the likely cause of a reported !forgespawn lag spike — gone now,
-// since there's no donor to search for.
+// This whole approach — clone a real donor instead of grafting components onto
+// our own custom prefab — exists because the custom-grafted prefab never
+// worked: correct Rigidbody/Collider/PhotonView/BuildBoxActor and all, spawned
+// instances never got connected into MovingSpacePlatform's simulated
+// PhysicsScene (no "..._simulated" shadow object ever appeared — confirmed
+// live via Runtime Unity Editor) and just fell through the ship floor forever.
+// Root cause never pinned down; a real vanilla BuildBox already has 100%
+// correct physics/rendering/simulation, so cloning one sidesteps the mystery
+// entirely instead of reverse-engineering it component by component.
+//
+// This IS the donor-borrowing approach the codebase used before the dedicated
+// BuildBox existed (see git history) — reintroduced because the dedicated
+// prefab never actually worked, this time with the donor guid found ONCE and
+// cached (AssetLoader.TryFindDonorBuildBoxGuid), not re-scanned per spawn — a
+// per-spawn scan of the whole module registry was the likely cause of the
+// ORIGINAL !forgespawn lag spike that motivated moving away from donors in the
+// first place, and that risk doesn't apply to a cached one-time lookup.
 internal class ForgeSpawnCommand : PublicCommand
 {
     public override string[] CommandAliases() => new[] { "forgespawn" };
@@ -276,21 +293,25 @@ internal class ForgeSpawnCommand : PublicCommand
         var player = LocalPlayer.Instance;
         if (player == null) { Messaging.Notification("Not in an active session."); return; }
 
+        AssetLoader.EnsureBuildBoxTemplateReady();
+
         if (!TryFindForgeAssetGuid(UpgradeForgeBehavior.BuildBoxPrefabName, out var boxGuid))
-        { Messaging.Notification("Forge BuildBox not registered in RuntimeAssetsRegister — did the metem bundle load?"); return; }
+        { Messaging.Notification("Forge BuildBox not ready yet — no vanilla BuildBox donor found (is a module installed on the ship?)."); return; }
 
         var spawnPos = player.transform.position + player.transform.forward * 2f + Vector3.up * 0.5f;
-        var box = ObjectFactory.InstantiateSpaceObjectByGUID<BuildBox>(boxGuid, spawnPos, Quaternion.identity);
+        var spawned = SpawnUtils.SpawnCarryable(boxGuid, spawnPos, Quaternion.identity);
+        var box = spawned != null ? spawned.GetComponent<BuildBox>() : null;
         if (box == null) { Messaging.Notification("Failed to instantiate Forge BuildBox."); return; }
 
         BepinPlugin.Log.LogInfo($"[Forge] Spawned Forge BuildBox ({boxGuid.AsHex()}).");
         Messaging.Notification("Spawned Forge BuildBox. Carry to an empty socket to install.");
     }
 
-    // The mod's runtime-registered Forge assets (module cell, BuildBox) are
-    // registered by AssetLoader at startup; walk the register looking for the
-    // GameObject whose name matches the shipped prefab name. Internal so
-    // BossDefeatHook's award-on-2nd-boss reuses the same lookup for the box GUID.
+    // The mod's runtime-registered Forge assets (module cell at startup, BuildBox
+    // lazily — see AssetLoader.EnsureBuildBoxTemplateReady) are registered by
+    // AssetLoader; walk the register looking for the GameObject whose name
+    // matches the shipped prefab name. Internal so BossDefeatHook's
+    // award-on-2nd-boss reuses the same lookup for the box GUID.
     internal static bool TryFindForgeAssetGuid(string prefabName, out GUIDUnion guid)
     {
         guid = default;
