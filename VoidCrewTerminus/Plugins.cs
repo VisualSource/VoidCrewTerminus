@@ -2,6 +2,7 @@ using BepInEx;
 using BepInEx.Logging;
 using HarmonyLib;
 using System.Reflection;
+using UnityEngine;
 using VoidManager;
 using VoidManager.MPModChecks;
 
@@ -116,15 +117,33 @@ namespace VoidCrewTerminus
             foreach (var forge in FindObjectsOfType<Forge.UpgradeForgeBehavior>(true))
                 forge.TeardownForReload();
             foreach (var interactable in FindObjectsOfType<Forge.ForgeInteractable>(true))
-            {
-                if (interactable.gameObject.name.StartsWith("ForgeInteractable_"))
-                    Destroy(interactable.gameObject); // generated click target
-                else
-                    Destroy(interactable);            // authored collider — strip only our component
-            }
+                DestroyForgeInteractable(interactable.gameObject, interactable);
+            // Commit button and deconstruct handle — separate component types
+            // (ForgeCommitInteractable / ForgeDeconstructInteractable), same
+            // runtime-generated-vs-authored-collider teardown rule. Both
+            // self-subscribe a hold-completion handler in their own Awake, so an
+            // orphaned instance left behind would otherwise leak silently across
+            // reloads.
+            foreach (var commitButton in FindObjectsOfType<Forge.ForgeCommitInteractable>(true))
+                DestroyForgeInteractable(commitButton.gameObject, commitButton);
+            foreach (var deconstructHandle in FindObjectsOfType<Forge.ForgeDeconstructInteractable>(true))
+                DestroyForgeInteractable(deconstructHandle.gameObject, deconstructHandle);
 
             AssetLoader.UnloadBundles();
             Log?.LogDebug("Plugin resources unloaded (hot-reload teardown).");
+        }
+
+        // A runtime-generated click region (name-prefixed by its builder) is ours
+        // outright — destroy the whole GameObject. An authored collider is the
+        // prefab's own, borrowed only to carry our interactable component — strip
+        // just that component and leave the collider for the reloaded assembly's
+        // BuildInteractables to find and reuse.
+        private static void DestroyForgeInteractable(GameObject go, Component interactable)
+        {
+            if (go.name.StartsWith("ForgeInteractable_"))
+                Destroy(go);
+            else
+                Destroy(interactable);
         }
     }
 

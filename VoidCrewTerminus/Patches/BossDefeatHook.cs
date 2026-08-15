@@ -1,7 +1,11 @@
 using System.Collections.Generic;
 using CG.Game;
 using CG.Game.Scenarios;
+using CG.Ship.Modules.Weapons;
 using Gameplay.Quests;
+using ResourceAssets;
+using UnityEngine;
+using VoidCrewTerminus.Commands;
 using VoidCrewTerminus.Escalation;
 using VoidCrewTerminus.Forge;
 using VoidManager.Utilities;
@@ -78,6 +82,14 @@ internal static class BossDefeatHook
             // which tier just became available.
             string unlockMessage = DescribeUnlock(SectorEscalation.BossesDefeated);
 
+            // The Forge BuildBox reward: awarded on the 2nd boss defeat — same
+            // threshold DescribeUnlock already special-cases as the Legendary-tier
+            // unlock (bossesBeforeThisOne == 1). Read before the increment below so
+            // this fires exactly once, on exactly the completion that crosses from
+            // 1 to 2 bosses defeated.
+            if (SectorEscalation.BossesDefeated == 1)
+                AwardForgeBuildBox();
+
             // Capture activation state BEFORE the boss-count bump. Boss defeats
             // during warm-up (including the one that CROSSES the threshold) do
             // not contribute to DifficultyScalar — only boss defeats where
@@ -106,6 +118,52 @@ internal static class BossDefeatHook
         {
             BepinPlugin.Log.LogError($"[Forge] BossDefeatHook failed: {e}");
         }
+    }
+
+    // Delivered via vanilla's own objective-reward pipeline (SpawnUtils.SpawnCarePackage
+    // — the same call Objective.ObjectiveCompleted's CompletionDrop uses) rather than
+    // hooking monster loot drops: there is no boss-exclusive loot list to hook into
+    // (loot content is one shared per-sector pool, not per-monster — see
+    // docs/forge-buildbox-research.md), so this reuses vanilla's existing "reward
+    // package flies in near the ship" delivery instead of inventing a new one.
+    // Caller already holds the IsAuthority gate.
+    private static void AwardForgeBuildBox()
+    {
+        if (!ForgeSpawnCommand.TryFindForgeAssetGuid(UpgradeForgeBehavior.BuildBoxPrefabName, out var boxGuid))
+        {
+            BepinPlugin.Log.LogWarning("[Forge] 2nd boss defeated but the Forge BuildBox isn't registered — reward not spawned.");
+            return;
+        }
+
+        AssetLoader.EnsureBuildBoxTemplateReady();
+
+        var playerShip = ClientGame.Current?.PlayerShip;
+        if (playerShip == null) return;
+
+        var position = ValidPositionNearPlayerShip(playerShip.transform.position);
+        SpawnUtils.SpawnCarePackage(boxGuid, 1, position);
+        BepinPlugin.Log.LogInfo("[Forge] 2nd boss defeated — Forge BuildBox care package incoming.");
+    }
+
+    // A simplified reimplementation of Objective.GetValidDonutPositionAroundPlayerShip
+    // (private, so not directly callable) — a random point in a ring around the ship,
+    // retried up to `iterations` times until one has line of sight. Not a byte-for-byte
+    // port (vanilla feeds degrees straight into Mathf.Cos/Sin without a Deg2Rad
+    // conversion, which reads like an existing vanilla quirk rather than something
+    // worth replicating); the practical result — "a plausible point near the ship" —
+    // is the same either way.
+    private static Vector3 ValidPositionNearPlayerShip(Vector3 shipPosition, float minRange = 250f, float maxRange = 500f, int iterations = 10)
+    {
+        for (int i = 0; i < iterations; i++)
+        {
+            float angle = Random.Range(0f, 360f) * Mathf.Deg2Rad;
+            float range = Random.Range(minRange, maxRange);
+            float height = Random.Range(-100f, 100f);
+            var candidate = shipPosition + new Vector3(Mathf.Cos(angle) * range, height, Mathf.Sin(angle) * range);
+            if (ProjectileUtils.HasLineOfSight(candidate, ClientGame.Current.PlayerShip))
+                return candidate;
+        }
+        return shipPosition;
     }
 
     private static string DescribeUnlock(int bossesBeforeThisOne)

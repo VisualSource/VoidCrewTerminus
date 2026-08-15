@@ -1,11 +1,11 @@
 using System.Collections.Generic;
 using System.Linq;
 using CG.Game.Player;
+using CG.Game.Scenarios;
 using CG.Network;
 using CG.Objects;
 using CG.Ship.Modules;
 using CG.Ship.Object;
-using Photon.Pun;
 using ResourceAssets;
 using UnityEngine;
 using VoidCrewTerminus.Forge;
@@ -252,23 +252,37 @@ internal class ForgeCommitCommand : PublicCommand
     }
 }
 
-// Phase-3 test-only path for installing the Forge before shipping a bespoke BuildBox
-// prefab. Spawns a vanilla module BuildBox as a "donor" (so we get a live networked
-// BuildBox with all its carryable/construction plumbing intact), then re-points its
-// moduleRef at the modded Forge GUID. When the player completes construction on a
-// socket, BuildBox.BuildModule reads moduleRef.AssetGuid and instantiates the Forge.
+// Spawns the Forge's BuildBox by its registered GUID, same as any other
+// runtime-registered asset — AssetLoader.EnsureBuildBoxTemplateReady does the
+// real work, cloning a live vanilla donor and presetting its moduleRef to the
+// Forge module BEFORE any instance ever spawns (not relabeling one after the
+// fact — an earlier version of this command tried that and left the box in a
+// broken half-donor-half-Forge state: no hover label, couldn't be placed or
+// dropped, held wrong, because BuildBoxActor.Awake and apparently other
+// systems too key off moduleRef and had already run against the donor's
+// ORIGINAL one by the time the relabel happened).
 //
-// Caveats:
-//   - The donor's visual mesh is what the player sees while carrying — the "correct"
-//     Forge mesh only appears once construction completes.
-//   - The moduleRef mutation is client-local. BuildModule fires on whoever completes
-//     construction, so the tester needs to be that player (typically the host).
-//   - Deconstructing the Forge afterwards would throw ArgumentNullException — the
-//     Forge module prefab has no BuildBoxRef set. Not required for phase-3 tests.
+// This whole approach — clone a real donor instead of grafting components onto
+// our own custom prefab — exists because the custom-grafted prefab never
+// worked: correct Rigidbody/Collider/PhotonView/BuildBoxActor and all, spawned
+// instances never got connected into MovingSpacePlatform's simulated
+// PhysicsScene (no "..._simulated" shadow object ever appeared — confirmed
+// live via Runtime Unity Editor) and just fell through the ship floor forever.
+// Root cause never pinned down; a real vanilla BuildBox already has 100%
+// correct physics/rendering/simulation, so cloning one sidesteps the mystery
+// entirely instead of reverse-engineering it component by component.
+//
+// This IS the donor-borrowing approach the codebase used before the dedicated
+// BuildBox existed (see git history) — reintroduced because the dedicated
+// prefab never actually worked, this time with the donor guid found ONCE and
+// cached (AssetLoader.TryFindDonorBuildBoxGuid), not re-scanned per spawn — a
+// per-spawn scan of the whole module registry was the likely cause of the
+// ORIGINAL !forgespawn lag spike that motivated moving away from donors in the
+// first place, and that risk doesn't apply to a cached one-time lookup.
 internal class ForgeSpawnCommand : PublicCommand
 {
     public override string[] CommandAliases() => new[] { "forgespawn" };
-    public override string Description() => "[DevMode] Spawn a BuildBox re-pointed to build the Upgrade Forge";
+    public override string Description() => "[DevMode] Spawn the Upgrade Forge's BuildBox";
     public override List<Argument> Arguments() => [];
     public override string[] UsageExamples() => ["!forgespawn"];
 
@@ -278,75 +292,38 @@ internal class ForgeSpawnCommand : PublicCommand
 
         var player = LocalPlayer.Instance;
         if (player == null) { Messaging.Notification("Not in an active session."); return; }
-        if (!PhotonNetwork.IsMasterClient)
-        { Messaging.Notification("Only the host can spawn a Forge BuildBox (moduleRef mutation is client-local)."); return; }
 
-        if (!TryFindForgeModuleGuid(out var forgeGuid, out var forgeAssetName))
-        { Messaging.Notification("Forge module not registered in RuntimeAssetsRegister — did the metem bundle load?"); return; }
+        AssetLoader.EnsureBuildBoxTemplateReady();
 
-        if (!TryFindDonorBuildBoxGuid(out var donorGuid, out var donorModuleName))
-        { Messaging.Notification("No donor module BuildBox found in ModuleContainer."); return; }
+        if (!TryFindForgeAssetGuid(UpgradeForgeBehavior.BuildBoxPrefabName, out var boxGuid))
+        { Messaging.Notification("Forge BuildBox not ready yet — no vanilla BuildBox donor found (is a module installed on the ship?)."); return; }
 
         var spawnPos = player.transform.position + player.transform.forward * 2f + Vector3.up * 0.5f;
-        var box = ObjectFactory.InstantiateSpaceObjectByGUID<BuildBox>(donorGuid, spawnPos, Quaternion.identity);
-        if (box == null) { Messaging.Notification($"Failed to instantiate donor BuildBox ({donorModuleName})."); return; }
+        var spawned = SpawnUtils.SpawnCarryable(boxGuid, spawnPos, Quaternion.identity);
+        var box = spawned != null ? spawned.GetComponent<BuildBox>() : null;
+        if (box == null) { Messaging.Notification("Failed to instantiate Forge BuildBox."); return; }
 
-        if (box.moduleRef == null)
-            box.moduleRef = new CloneStarObjectRef(forgeGuid) { IsRuntime = true };
-        else
-        {
-            box.moduleRef.AssetGuid = forgeGuid;
-            box.moduleRef.IsRuntime = true;
-        }
-
-        BepinPlugin.Log.LogInfo(
-            $"[Forge] Spawned Forge BuildBox: donor='{donorModuleName}' → moduleRef re-pointed to '{forgeAssetName}' ({forgeGuid.AsHex()})");
-        Messaging.Notification(
-            $"Spawned Forge BuildBox (donor art: {donorModuleName}). Carry to an empty socket to install.");
+        BepinPlugin.Log.LogInfo($"[Forge] Spawned Forge BuildBox ({boxGuid.AsHex()}).");
+        Messaging.Notification("Spawned Forge BuildBox. Carry to an empty socket to install.");
     }
 
-    // The mod's UpgradeForgeModuleCell.prefab is registered by RuntimeAssetsAPI at
-    // startup (see AssetLoader); walk the register looking for the GameObject whose
-    // name matches the shipped prefab name.
-    private static bool TryFindForgeModuleGuid(out GUIDUnion guid, out string assetName)
+    // The mod's runtime-registered Forge assets (module cell at startup, BuildBox
+    // lazily — see AssetLoader.EnsureBuildBoxTemplateReady) are registered by
+    // AssetLoader; walk the register looking for the GameObject whose name
+    // matches the shipped prefab name. Internal so BossDefeatHook's
+    // award-on-2nd-boss reuses the same lookup for the box GUID.
+    internal static bool TryFindForgeAssetGuid(string prefabName, out GUIDUnion guid)
     {
         guid = default;
-        assetName = null;
         var reg = RuntimeAssetsRegister.Instance;
         foreach (var id in reg.GetAllIds())
         {
             var asset = reg.GetAsset(id);
-            if (asset == null) continue;
-            var goName = asset.name ?? "";
-            if (goName == UpgradeForgeBehavior.PrefabName)
+            if (asset != null && asset.name == prefabName)
             {
                 guid = id;
-                assetName = goName;
                 return true;
             }
-        }
-        return false;
-    }
-
-    // Any vanilla CellModule with a BuildBoxRef pointing to a plain (non-composite)
-    // BuildBox works as a donor. We just want a networked BuildBox instance we can
-    // mutate — the module it *would* build if left alone is irrelevant.
-    private static bool TryFindDonorBuildBoxGuid(out GUIDUnion guid, out string moduleName)
-    {
-        guid = default;
-        moduleName = null;
-        foreach (var def in ResourceAssetContainer<ModuleContainer, CellModule, ModuleDef>.Instance.AssetDescriptions)
-        {
-            if (def == null) continue;
-            var module = def.Asset;
-            if (module == null) continue;
-            var boxRef = module.BuildBoxRef;
-            if (boxRef == null || boxRef.IsNull) continue;
-            var boxAsset = boxRef.Asset;
-            if (boxAsset == null || boxAsset is CompositeWeaponBuildBox) continue;
-            guid = boxRef.AssetGuid;
-            moduleName = module.name;
-            return true;
         }
         return false;
     }
