@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Upgrade Forge — Texturing &amp; Material Guide</title>
+  <style>
+    :root {
+      --bg:      #0f1117;
+      --surface: #181c27;
+      --border:  #2a2f42;
+      --accent:  #5c8aff;
+      --accent2: #9b59f5;
+      --text:    #d4d8e8;
+      --muted:   #7a80a0;
+      --code-bg: #12151f;
+      --warn:    #e0a35c;
+      --ok:      #5ce08a;
+      --danger:  #e05c5c;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 15px; line-height: 1.7;
+    }
+    main { max-width: 900px; margin: 0 auto; padding: 40px 28px 80px; }
+    h1 { font-size: 26px; margin-bottom: 6px; color: #fff; }
+    h1 + p.sub { color: var(--muted); margin-bottom: 28px; }
+    h2 { font-size: 20px; margin: 38px 0 12px; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+    h3 { font-size: 16px; margin: 24px 0 8px; color: var(--accent2); }
+    p { margin: 10px 0; }
+    code {
+      background: var(--code-bg); border: 1px solid var(--border);
+      border-radius: 4px; padding: 1px 6px; font-size: 13px;
+      font-family: 'Cascadia Code', Consolas, monospace;
+    }
+    pre {
+      background: var(--code-bg); border: 1px solid var(--border);
+      border-radius: 8px; padding: 14px 16px; overflow-x: auto; margin: 12px 0;
+    }
+    pre code { background: none; border: none; padding: 0; }
+    table.data { border-collapse: collapse; width: 100%; margin: 14px 0; }
+    table.data th, table.data td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; }
+    table.data th { background: var(--surface); color: #fff; }
+    td.k { color: var(--accent); font-family: Consolas, monospace; font-size: 13px; white-space: nowrap; }
+    .muted { color: var(--muted); }
+    ul.bullets { margin: 10px 0 10px 24px; }
+    ul.bullets li { margin: 6px 0; }
+    ol.steps { margin: 10px 0 10px 24px; }
+    ol.steps li { margin: 8px 0; }
+    .callout {
+      border-left: 3px solid var(--accent); background: var(--surface);
+      border-radius: 0 8px 8px 0; padding: 12px 16px; margin: 14px 0;
+    }
+    .callout.warn { border-left-color: var(--warn); }
+    .callout.ok { border-left-color: var(--ok); }
+    .callout .label {
+      display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 1px;
+      text-transform: uppercase; margin-right: 8px; color: var(--warn);
+    }
+    .callout.ok .label { color: var(--ok); }
+    .callout:not(.warn):not(.ok) .label { color: var(--accent); }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Upgrade Forge — Texturing &amp; Material Guide</h1>
+  <p class="sub">
+    How to get from a Blender mesh (<code>UpgradeForge.blend</code>) to a working
+    <code>HDRP/Lit</code> material in <code>VoidCrewUnityEditor</code>. Written after tracking
+    down why <code>UpgradeForgeModuleCell</code> rendered near-black: the mesh, UVs, and
+    lighting were fine the whole time — the material was missing a Mask Map, so Metallic was
+    effectively undefined. Companion to
+    <a href="upgrade-forge-prefab-authoring.html" style="color: var(--accent)">upgrade-forge-prefab-authoring.html</a>.
+  </p>
+
+  <h2 id="slots">What HDRP/Lit actually needs</h2>
+  <p>
+    <code>HDRP/Lit</code> reads up to four textures per material. Only the first is required to
+    see the mesh at all; the rest control how it responds to light.
+  </p>
+  <table class="data">
+    <tr><th>Slot</th><th>Field</th><th>Color space</th><th>What it drives</th></tr>
+    <tr><td>Base Map</td><td class="k">_BaseColorMap</td><td>sRGB</td><td>Diffuse albedo. Alpha channel is unused on an opaque material.</td></tr>
+    <tr><td>Mask Map</td><td class="k">_MaskMap</td><td>Linear</td><td>Packed: <strong>R</strong>=Metallic, <strong>G</strong>=Ambient Occlusion, <strong>B</strong>=Detail Mask, <strong>A</strong>=Smoothness. One texture, four independent grayscale channels.</td></tr>
+    <tr><td>Normal Map</td><td class="k">_NormalMap</td><td>Linear (auto-flagged "Normal map")</td><td>Tangent-space surface detail. Unity expects OpenGL convention (+Y green channel) — Blender's default bake matches this.</td></tr>
+    <tr><td>Detail Map</td><td class="k">_DetailMap</td><td>Linear</td><td>Optional close-up micro-detail, tiled independently of the base UVs. Skip it unless the surface needs it.</td></tr>
+  </table>
+  <div class="callout warn">
+    <span class="label">The actual bug</span>
+    With no Mask Map assigned, Metallic falls back to the flat <code>_Metallic</code> slider
+    value with <strong>no matching Smoothness/AO data</strong> to go with it. If that slider
+    isn't at 0, HDRP treats the surface as reflective metal with nothing correct to reflect —
+    the result reads as near-black under normal lighting. This is exactly the gap in the
+    project's current <code>Assets/Mods/VoidCrewTerminus/Materials/TestMat.mat</code>: it has a
+    <code>_BaseColorMap</code> but empty <code>_MaskMap</code>/<code>_NormalMap</code> slots.
+    Either assign a real Mask Map or drop Metallic to 0 and rely on the Smoothness slider alone.
+  </div>
+
+  <h2 id="blender">1 · Preparing the model in Blender</h2>
+  <ol class="steps">
+    <li>
+      <strong>UV unwrap first.</strong> Every texture below is a 2D image sampled through the
+      mesh's UVs — baking or painting is pointless without a clean, non-overlapping unwrap
+      (<kbd>U</kbd> → <em>Smart UV Project</em> or manual seams in the UV Editing tab). Check
+      for overlaps with <em>UV Editing → UV → Stats</em>.
+    </li>
+    <li>
+      <strong>Build (or reuse) the shading material in Blender's Shading tab.</strong> A
+      Principled BSDF maps almost 1:1 onto <code>HDRP/Lit</code>: Base Color → Base Map,
+      Metallic → Mask Map red, Roughness → invert into Mask Map alpha (Smoothness = 1 −
+      Roughness), Normal → Normal Map.
+    </li>
+    <li>
+      For a hand-painted look (no procedural shader), paint directly in Texture Paint mode on a
+      new image per channel you need (Base Color, Roughness, Metallic, AO).
+    </li>
+  </ol>
+
+  <h3>Baking the textures</h3>
+  <p>
+    In the Shading tab, add an <em>Image Texture</em> node per output, select it (so it's the
+    active bake target), then <em>Render Properties → Render Engine: Cycles → Bake</em>:
+  </p>
+  <table class="data">
+    <tr><th>Bake type</th><th>Feeds</th><th>Notes</th></tr>
+    <tr><td><code>Diffuse</code> (Color pass only)</td><td>Base Map</td><td>Uncheck Direct/Indirect, keep only Color — otherwise you bake in scene lighting.</td></tr>
+    <tr><td><code>Roughness</code></td><td>Mask Map alpha</td><td>Bakes as grayscale; invert in GIMP/Photoshop before packing (Smoothness = 1 − Roughness).</td></tr>
+    <tr><td><code>Normal</code></td><td>Normal Map</td><td>Space: <em>Tangent</em>. Blender's default (+Y, OpenGL) needs no channel flip for Unity.</td></tr>
+    <tr><td><code>AO</code></td><td>Mask Map green</td><td>Bake with the built-in AO pass (tune the <em>Distance</em> value — see below), or leave this channel flat white (255 = no occlusion) if you don't need it yet.</td></tr>
+    <tr><td>Metallic value</td><td>Mask Map red</td><td>Not something you bake — it's a material-classification mask. Paint white only where the surface is genuinely bare/exposed metal; black everywhere else (paint, plastic, rubber, glass, decals). See below before flat-filling this one.</td></tr>
+  </table>
+  <div class="callout">
+    <span class="label">Note</span>
+    If the model is a simple hard-surface panel with one uniform material (no high-poly detail
+    to bake down), you often don't need Cycles baking at all — flat-color fills for Metallic/AO
+    and a hand-painted or tileable Base Color/Normal are enough. Save the full bake workflow for
+    parts that need actual surface variation.
+  </div>
+
+  <h3>Getting a soft AO gradient (not hard black/white)</h3>
+  <p>
+    A naive AO bake tends to clip to almost pure black-or-white with barely any gradient in
+    between — measured on <code>UpgradeForgeModuleCell</code>'s first AO pass, over half the
+    pixels sat at exactly 0 (median = 0), which reads as large flat panels going fully black
+    regardless of whether they're actually enclosed. The fix is an occlusion-distance cutoff:
+    without one, distant unrelated geometry across the whole mesh contributes to the occlusion
+    test, blowing out big flat surfaces that shouldn't be occluded at all.
+  </p>
+  <ol class="steps">
+    <li>
+      In recent Blender versions the old <em>Bake → Ambient Occlusion → Influence → Distance</em>
+      checkbox (and the legacy World Properties → Ambient Occlusion panel) may not be present.
+      The reliable, version-proof alternative: use the <strong>Ambient Occlusion shader node</strong>
+      directly (Shading tab → <em>Add → Input → Ambient Occlusion</em>). It carries its own
+      <strong>Distance</strong> input value regardless of where Blender moves the panel-based
+      settings.
+    </li>
+    <li>
+      Plug that node into an <em>Emission</em> shader's Color input, wire the Emission into
+      Material Output (temporarily, in place of your normal shader), select your bake target
+      image, and set <em>Render Properties → Bake → Bake Type</em> to
+      <strong>Emission</strong> (this may be labeled <code>Emit</code> in older versions).
+    </li>
+    <li>
+      Tune the AO node's Distance relative to the model's scale — start small (e.g. 0.1–0.5m)
+      and increase until real crevices/corners read as occluded without flattening large open
+      panels to solid black. Re-bake after each change.
+    </li>
+    <li>Undo the Emission wiring once you're happy with the result, and restore the normal shader graph.</li>
+  </ol>
+  <div class="callout ok">
+    <span class="label">Sanity check</span>
+    After tuning Distance on this mesh, mean brightness rose from ~29% to ~38% and the median
+    moved from 0 to 43 — i.e. it stopped being "more than half the image is pure black."
+    Standard deviation barely changed (~110 → ~107), which is expected and fine: a hard-surface
+    panel legitimately has true-white flats and near-black creases, just with a real transition
+    between them instead of a hard clip.
+  </div>
+
+  <h3>Authoring the Metallic mask</h3>
+  <p>
+    Don't derive this from the Base Color texture's brightness or grayscale value — albedo color
+    and metalness are unrelated properties. A dark-gray painted panel and a dark-gray raw metal
+    panel can share nearly identical albedo while needing opposite Metallic values, so desaturating
+    the base texture into a metallic mask just encodes color luminance, not material type.
+  </p>
+  <div class="callout warn">
+    <span class="label">Default matters</span>
+    If you don't have time to hand-paint a proper per-region mask yet, default this channel to
+    flat <strong>black (0)</strong>, not white. A flat-white Metallic map (as
+    <code>ModuleExterior_Mask.png</code> currently packs, sourced from a flat-white
+    <code>Metallic.png</code>) tells HDRP the <em>entire</em> hull — paint, trim, everything — is
+    bare conductive metal, which kills its diffuse response and makes it depend entirely on
+    environment reflection for lighting. Treating a coated hull as fully non-metallic by default
+    is the more plausible baseline; paint in white later only for the specific exposed-metal
+    details (edges, bolts, vents) once doing a real detail pass.
+  </div>
+
+  <h2 id="packing">2 · Packing the Mask Map</h2>
+  <p>
+    HDRP has no separate "Metallic map" or "Smoothness map" slot — everything lives in one
+    RGBA texture. Two ways to build it:
+  </p>
+  <ol class="steps">
+    <li>
+      <strong>Unity's built-in packer (easiest).</strong> Open the material, click the small
+      texture-slot dropdown next to <em>Mask Map</em> in the <code>HDRP/Lit</code> Inspector →
+      <em>Create Mask Map</em>. It opens a wizard with one texture picker per channel (Metallic,
+      Occlusion, Detail Mask, Smoothness) and bakes them into a single new texture asset for
+      you — no external image editor needed.
+    </li>
+    <li>
+      <strong>Manual packing (GIMP/Photoshop).</strong> Create a new RGBA image at the same
+      resolution as the source grayscale maps. Paste Metallic into the Red channel, AO into
+      Green, leave Blue black (no detail mask) unless authoring one, and Smoothness into Alpha.
+      Export as PNG.
+    </li>
+  </ol>
+  <p class="muted">
+    For reference: a known-good vanilla Void Crew metal material (<code>Metal_Grey_Mat</code>)
+    ships with Mask Map, Normal Map, and Detail Map all populated, plus a mid-gray Base Color
+    tint (<code>~0.57, 0.57, 0.57</code>) rather than pure white, tiled 4× over the mesh UVs.
+    That's a reasonable target to match for a plain metal panel.
+  </p>
+
+  <h2 id="import">3 · Unity import settings</h2>
+  <table class="data">
+    <tr><th>Texture</th><th>Texture Type</th><th>sRGB</th></tr>
+    <tr><td>Base Color</td><td>Default</td><td>✓ checked</td></tr>
+    <tr><td>Mask Map</td><td>Default</td><td>✗ unchecked (linear data)</td></tr>
+    <tr><td>Normal Map</td><td><strong>Normal map</strong></td><td>n/a (forced linear)</td></tr>
+    <tr><td>Detail Map</td><td>Default</td><td>✗ unchecked</td></tr>
+  </table>
+  <div class="callout warn">
+    <span class="label">Gotcha</span>
+    Getting sRGB wrong on the Mask Map is a quiet failure — no error, just wrong-looking
+    metal/roughness response, since the values get gamma-corrected when they shouldn't be. If a
+    baked/packed metal surface looks subtly off despite the right channels being present, check
+    this checkbox first.
+  </div>
+  <p>
+    Set the Normal Map's <em>Texture Type</em> to <strong>Normal map</strong> explicitly — don't
+    rely on the "Create from Grayscale" fallback for a texture that's already RGB normal data.
+  </p>
+
+  <h2 id="assign">4 · Assigning to the material</h2>
+  <ol class="steps">
+    <li>Drag each texture into its matching slot (<em>Base Map</em>, <em>Mask Map</em>, <em>Normal Map</em>, <em>Detail Map</em>) on the <code>HDRP/Lit</code> material.</li>
+    <li>
+      Assigning a texture should flip the matching shader keyword automatically (e.g.
+      <code>_MASKMAP</code> once Mask Map has a texture). If a slot has a texture but the surface
+      still behaves like it's missing, check the material's serialized <code>m_ValidKeywords</code>
+      in the <code>.mat</code> YAML — a stale keyword list (left over from copy-pasting a
+      different material) can desync from what's actually assigned.
+    </li>
+    <li>
+      With a Mask Map assigned, the <em>Metallic</em> and <em>Smoothness</em> sliders on the
+      material become <strong>remap ranges</strong> for the texture's R/A channels, not flat
+      overrides — leave them at their defaults (Metallic remap 0–1, Smoothness remap 0–1) unless
+      you're deliberately compressing the range.
+    </li>
+  </ol>
+
+  <h2 id="simplest">5 · The simplest material for testing</h2>
+  <p>
+    Before investing in a full PBR texture set, use this to isolate mesh/UV/lighting problems
+    from material problems — exactly the test that found this bug in the first place.
+  </p>
+  <ol class="steps">
+    <li>Create a new Material, shader <code>HDRP/Unlit</code> (not <code>HDRP/Lit</code>).</li>
+    <li>Set <em>Color</em> to something saturated and unmistakable (e.g. solid magenta or lime).</li>
+    <li>Optionally drag in just the Base Color texture — <code>HDRP/Unlit</code> ignores lighting entirely, so this shows raw UVs/texture placement with zero risk of a lighting or Mask Map issue muddying the result.</li>
+    <li>Apply it to the mesh. If it renders as flat, correctly-mapped color: mesh and UVs are confirmed good, and any remaining "black mesh" symptom is 100% a <code>HDRP/Lit</code> material configuration issue, not geometry.</li>
+  </ol>
+  <div class="callout ok">
+    <span class="label">Then graduate</span>
+    Once the Unlit test confirms the mesh is fine, switch the same material's shader back to
+    <code>HDRP/Lit</code> in the Inspector (Unity keeps the Base Color/texture assignment across
+    the switch), leave Mask Map/Normal Map empty, and set Metallic to 0. This should look flat
+    but lit — a plain matte gray/colored surface reacting normally to scene lights, no black
+    patches. That's the baseline to build the real PBR textures on top of, one slot at a time
+    (Normal Map first, then Mask Map), re-testing in-game after each addition.
+  </div>
+
+  <h2 id="verify">6 · Verify in game</h2>
+  <ul class="bullets">
+    <li>Test in the actual game scene, not Prefab Isolation Mode — isolation view uses its own fixed preview lighting rig and will not reflect real in-game results.</li>
+    <li>Full game restart between iterations if testing via the exported <code>.metem</code> bundle; <code>AssetLoader</code>'s <code>HasAsset</code> guard can mask a stale reload otherwise.</li>
+    <li>Compare against a known-good vanilla material (copy one onto a spare mesh) any time a result looks ambiguous — this is the fastest way to tell "my material is misconfigured" from "something else is wrong."</li>
+  </ul>
+</main>
+</body>
+</html>

@@ -3,7 +3,7 @@
 **Project:** VoidCrewTerminus
 **Covers:** 8-A meter/escalation state + alloy hop · 8-B cursed marker sync · 8-C authoritative commit + overlay.
 **Status:** Code complete for all three. **Partially verified — see the status table below.**
-**Date:** 2026-07-17 · results reconciled from `TODO` 2026-08-14 · net layer refactored 2026-08-14 — see [Re-verification required](#-re-verification-required--net-layer-refactored-2026-08-14).
+**Date:** 2026-07-17 · results reconciled from `TODO` 2026-08-14 · net layer refactored 2026-08-14 — see [Re-verification required](#-re-verification-required--net-layer-refactored-2026-08-14) · `UpgradeForgeBehavior` split 2026-08-14 (later same day) — see [Re-verification required, part 2](#-re-verification-required-part-2--upgradeforgebehavior-split-2026-08-14).
 
 ## Status at a glance (reconciled from `TODO` phase 8, 2026-08-14)
 
@@ -22,6 +22,8 @@ under `phase 8`. Reproduced here so this plan and the TODO agree.
 | T5 — cursed→burden half | ☐ open | The payload always carried burdens, but the log lines printed only level+consumed, so it was unverifiable. `DescribeOverlay` was added 26-07-18 — both sides now print `(perks=N, burdens=X+Y)`, so this is directly diffable on the next run. |
 | **T6** late joiner | ☐ open | The joiner arrived before any cursed relic or installed forged module existed, so `SendCursedSnapshotTo` / the overlay push never ran. Needs a join **after** a curse spawns and a module is installed. |
 | **T7** host migration | ☐ open | The state-fidelity prerequisite is cleared (see T1), but the migration scenario itself — host leaves, survivor becomes master, escalation keeps advancing — has not been run. `TODO` records this as "T1/T7 state sync verified"; that covers the *sync*, not the *migration*. |
+| **T8** client places forged module (8-D) | ☐ open | Never run 2-client. Promoted from prose to a numbered test below — see [part 2](#-re-verification-required-part-2--upgradeforgebehavior-split-2026-08-14). |
+| **T9** client docks relic/box (8-E) | ☐ open | Never run 2-client. **Highest priority this session** — the dock/broadcast mechanism was rewritten today (2026-08-14), in the exact code this test exercises. |
 
 Also open in `TODO` but with no test here: **8-D** verification (client sees forge
 hit targets; client sees Mk/perks/burdens on a host-placed module; client-placed
@@ -31,7 +33,7 @@ applied` for one module — a one-shot `shutoff schedule OWNED here` LogDebug wa
 added to name the desync), and the **known gap** that docks are not in the
 late-joiner push at all.
 
-7 tests. Supersedes the per-sub-phase `phase-8a/b/c` plans (kept in git history if you need the granular breakdown).
+9 tests (T8/T9 added 2026-08-14, promoted from the 8-D/8-E prose below). Supersedes the per-sub-phase `phase-8a/b/c` plans (kept in git history if you need the granular breakdown).
 
 ---
 
@@ -72,27 +74,49 @@ What changed underneath, in risk order:
    modules must come up **vanilla**, with no `← applied buffered module overlay`
    in the log.
 
-### 8-D / 8-E — tracked in `TODO`, no test case here (now higher risk)
+## ⚠ Re-verification required, part 2 — `UpgradeForgeBehavior` split (2026-08-14)
 
-This plan predates **8-D** (installed-module overlay) and **8-E** (forge docking
-sync). `TODO` already carries both as open verification items — 8-D as
-"VERIFY 2-CLIENT: client sees forge hit targets…", 8-E as CODE ONLY from the
-26-07-19 session — but neither has a numbered test here.
+Later the same day as the transport-port refactor above, `UpgradeForgeBehavior`
+(a single ~1400-line file across today's commits) was split into
+`ForgeInteractionPolicy.cs` (the click-decision matrix, 271 unit tests),
+`AnchorDock.cs` / `ForgeAnchors.cs` (anchor physics), and `ForgeCommit.cs` (the
+extracted `ComputeAndPersist`, now `ForgeCommit.Execute`) — commits
+`83f6407`/`35294a3`/`69dfd3b`/`e717932`, shipped as **0.0.15**, "refactor upgrade
+forge by splitting out non unity parts."
 
-They matter more after the refactor because both are driven by the *relay* gate,
-the one rule that fires off-authority (the player who placed a module or docked a
-relic may be a client). That gate is unit-tested now; its end-to-end path never
-has been. Concrete checks, to promote into T8/T9:
+Most of it is a pure move — `ForgeInteractionPolicy` and `ForgeCommit.Execute`
+are call-site renames with unit coverage, no logic change. **One real mechanism
+change**, in the code T9 below exercises directly:
+
+- **Old:** `Dock()`/`Undock()` broadcast internally, gated by an
+  `_applyingRemoteDock` re-entrancy flag so mirroring a remote dock didn't echo
+  it back out.
+- **New:** `AnchorDock` owns only the physics (`Dock`/`Undock`/`IsDocked`/
+  `Reconcile`). Broadcasting is now the caller's job at each *origination* site —
+  `LoadModule` and `InsertRelic` each call `_dock.Dock(...)` followed by an
+  explicit `BroadcastDock(...)`, and a player grabbing a docked item back out is
+  now caught by `Update()`'s `_dock.Reconcile(_grabbedScratch)` loop, which
+  broadcasts the undock per reconciled item. The *mirroring* paths
+  (`ApplyRemoteDock`/`ApplyRemoteUndock`) call the dock but deliberately never
+  broadcast — no flag needed, because the no-broadcast is now structural instead
+  of guarded.
+
+Read-through of all four `_dock.Dock`/`Undock` call sites confirms each
+origination path pairs with a `BroadcastDock` call and each mirror path doesn't
+— but that's static reading, not a live 2-client run. **If a future edit adds a
+new way to dock/undock and forgets the paired broadcast, this is exactly the
+"docking not synced" bug from 26-07-19 (`TODO` phase 8, 8-E round-2) coming
+back, silently.** T9 is the direct test for it — it is the single highest-value
+test this session because it is the only path whose *mechanism*, not just its
+plumbing, changed today.
 
 - **8-D:** a **client** places a forged build box into a socket → every other
   player (host included) sees the module at the forged level/perk, not vanilla.
   Client logs `→ sent module overlay module=N`; others log `← applied module
-  overlay module=N` (or `← buffered …` then `← applied buffered …`).
+  overlay module=N` (or `← buffered …` then `← applied buffered …`). Now T8.
 - **8-E:** a **client** docks a relic and a build box into a forge → the other
   players see them appear in the tubes/socket, and see them leave when grabbed
-  back out. `→ sent dock item=N anchor=K` / `← applied dock item=N`.
-
-Worth adding as T8/T9 next time this plan is opened.
+  back out. `→ sent dock item=N anchor=K` / `← applied dock item=N`. Now T9.
 
 ## Definition of done (read first)
 
@@ -104,6 +128,7 @@ A host `→ sent` with no matching client `← applied` = discovery/routing brok
 
 ## Setup
 
+- **Before either instance launches:** `dotnet test` (or `make dev`, which runs the full pipeline) — confirm the 277-ish unit tests still pass after today's split. Cheap, catches a structural mistake before it burns a 2-client slot; it does **not** substitute for T9, since the broadcast-pairing risk above is a call-site omission unit tests can't see (no test asserts "every origination site calls both").
 - **Two instances**, latest `VoidCrewTerminus.dll`, `EnableDevMode = true`. One hosts a **"Pilgrimage"** run (internally EndlessQuest — the only mode escalation/cursed run in); the other joins.
 - Capture `BepInEx/LogOutput.log` from **both**.
 - Handy knobs: `PerkRollChanceRare = 1.0` (force a perk for T4/T5), `RelicBaseCurseChance` toward 1.0 (force cursed spawns for T3).
@@ -179,6 +204,49 @@ A host `→ sent` with no matching client `← applied` = discovery/routing brok
 3. That client completes a sector / defeats a boss → its log shows the host-side award (`[Forge] Meter +…`, `[Escalation] Boss defeated …`).
 
 **Pass:** escalation keeps advancing under the new master — it does **not** silently freeze.
+
+---
+
+### T8 — Client places a forged module; overlay shows for everyone (8-D)
+
+1. **Client**: `!forgespawn` a Mk-upgraded build box (or upgrade one via T4/T5
+   first), place it into an empty socket.
+2. Client log: `[Net] → sent module overlay module=N`.
+3. **Host and any other client**: `[Net] ← applied module overlay module=N`
+   (or `← buffered module overlay … object not spawned yet` then `← applied
+   buffered …` if the placement message beats the Photon instantiate).
+4. Hover/inspect the module on host — Mk level, perks, and burdens match what
+   the client forged, not vanilla.
+
+**Pass:** every player sees the forged module correctly regardless of who
+placed it.
+
+---
+
+### T9 — Client docks/undocks; every player mirrors it (8-E)
+
+This is the test for today's `AnchorDock` broadcast rewrite — see
+[part 2](#-re-verification-required-part-2--upgradeforgebehavior-split-2026-08-14).
+
+1. **Client** docks a relic into a tube. Client log:
+   `[Net] → sent dock item=N anchor=K on forge=M`.
+2. **Host and any other client**: `[Net] ← applied dock item=N anchor=K on
+   forge=M` — and the tube visually shows filled on their screen too.
+3. **Client** docks a build box into the module socket (anchor index -1). Same
+   pair of log lines; socket shows occupied everywhere.
+4. **Client grabs the docked relic back out** (vanilla Grabbable pickup, not a
+   dev command — this exercises the new `Update()`/`Reconcile` path, not the
+   `LoadModule`/`InsertRelic` paths). Client log:
+   `[Net] → sent dock item=N anchor=K … docked=false`. Host/others log the
+   matching `← applied` and the tube shows empty again.
+5. Repeat step 4 for the module box.
+6. **Reverse roles**: host docks/undocks, client(s) mirror. (Confirms the
+   origination/mirror split isn't accidentally one-directional.)
+
+**Pass:** every dock and every undock — including grab-back-out, not just the
+insert paths — is visible to every other player. A host `→ sent dock` with no
+matching client `← applied` (or vice versa) is the specific regression this
+test exists to catch.
 
 ---
 
