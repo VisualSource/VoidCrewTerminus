@@ -5,6 +5,7 @@ using System.Reflection;
 using CG.Game.Configuration;
 using CG.Graphics;
 using CG.Ship.Modules;
+using CG.Ship.Object;
 using HarmonyLib;
 using Gameplay.Power;
 using Gameplay.Utilities;
@@ -15,6 +16,7 @@ using UnityEngine;
 using VC.Common;
 using VC.Common.Carryables;
 using VC.Common.PlayerShip;
+using VoidCrewTerminus.Forge;
 
 namespace VoidCrewTerminus;
 
@@ -126,13 +128,18 @@ public class AssetLoader
                 go.GetComponent<PlayerShipVisuals>() == null)
             {
                 RelinkBundleShaders(go);
-                GraftModuleComponents(go);
+                if (go.name == UpgradeForgeBehavior.BuildBoxPrefabName)
+                    GraftBuildBoxComponents(go);
+                else
+                    GraftModuleComponents(go);
                 _modulePrefabs[go.name] = go;
                 RegisterModulePrefab(go, vca);
                 continue;
             }
             RuntimeAssetsAPI.LoadAsset(asset);
         }
+
+        LinkForgeBuildBox();
     }
 
     // AssetBundle-loaded materials reference a shader *copy* that wasn't compiled
@@ -248,6 +255,84 @@ public class AssetLoader
         {
             view.ObservedComponents = new List<Component> { cell };
         }
+    }
+
+    // Vanilla BuildBox prefabs carry a Rigidbody/Collider/PhotonView and a real
+    // BuildBox script from the game project; a bundle-authored prefab can't carry
+    // BuildBox at all — it isn't part of the modding SDK's exposed type surface
+    // (com.hutlihut.void_crew_common has no gameplay component types, only
+    // markers/data — confirmed by listing its Runtime/Code — same reason
+    // GraftModuleComponents exists for CellModule). Graft minimal stand-ins here,
+    // same pattern. moduleRef is wired separately in LinkForgeBuildBox, once both
+    // this prefab and the module prefab have registered GUIDs.
+    private static void GraftBuildBoxComponents(GameObject prefab)
+    {
+        var box = prefab.GetComponent<BuildBox>();
+        if (box == null)
+        {
+            box = prefab.AddComponent<BuildBox>();
+            BepinPlugin.Log.LogDebug($"[AssetLoader] Grafted BuildBox onto {prefab.name}");
+        }
+
+        // CarryableObject.Awake reads GetComponent<Rigidbody>() unconditionally
+        // (no RequireComponent, but later carry/physics code assumes it exists).
+        if (prefab.GetComponent<Rigidbody>() == null)
+        {
+            var rb = prefab.AddComponent<Rigidbody>();
+            rb.useGravity = false;
+            BepinPlugin.Log.LogDebug($"[AssetLoader] Grafted Rigidbody onto {prefab.name}");
+        }
+
+        var view = prefab.GetComponent<PhotonView>();
+        if (view == null)
+        {
+            view = prefab.AddComponent<PhotonView>();
+            view.OwnershipTransfer = OwnershipOption.Takeover;
+            view.Synchronization = ViewSynchronization.UnreliableOnChange;
+            BepinPlugin.Log.LogDebug($"[AssetLoader] Grafted PhotonView onto {prefab.name}");
+        }
+        if (view.observableSearch == PhotonView.ObservableSearch.Manual &&
+            (view.ObservedComponents == null || view.ObservedComponents.Count == 0))
+        {
+            view.ObservedComponents = new List<Component> { box };
+        }
+    }
+
+    // Cross-links the Forge module and its dedicated BuildBox once both have
+    // loaded and registered — each needs the other's GUID (moduleRef on the box,
+    // BuildBoxRef on the module, both CloneStarObjectRef). Safe to call after
+    // every bundle: idempotent (re-setting the same GUIDs is harmless), and
+    // _modulePrefabs is static, so whichever LoadBundle call sees both prefabs
+    // present is the one that actually links them — order-independent even if a
+    // future bundle split puts the two prefabs in different files.
+    private static void LinkForgeBuildBox()
+    {
+        if (!_modulePrefabs.TryGetValue(UpgradeForgeBehavior.PrefabName, out var modulePrefab)) return;
+        if (!_modulePrefabs.TryGetValue(UpgradeForgeBehavior.BuildBoxPrefabName, out var boxPrefab)) return;
+
+        var moduleVca = modulePrefab.GetComponent<VoidCrewAsset>();
+        var boxVca = boxPrefab.GetComponent<VoidCrewAsset>();
+        if (moduleVca == null || boxVca == null ||
+            string.IsNullOrEmpty(moduleVca.AssetGuid) || string.IsNullOrEmpty(boxVca.AssetGuid))
+        {
+            BepinPlugin.Log.LogWarning("[AssetLoader] Forge module/BuildBox present but missing a stamped AssetGuid — cannot link.");
+            return;
+        }
+
+        var moduleGuid = new GUIDUnion(moduleVca.AssetGuid);
+        var boxGuid = new GUIDUnion(boxVca.AssetGuid);
+
+        var box = boxPrefab.GetComponent<BuildBox>();
+        box.moduleRef ??= new CloneStarObjectRef();
+        box.moduleRef.AssetGuid = moduleGuid;
+        box.moduleRef.IsRuntime = true;
+
+        var cell = modulePrefab.GetComponent<CellModule>();
+        cell.BuildBoxRef ??= new CloneStarObjectRef();
+        cell.BuildBoxRef.AssetGuid = boxGuid;
+        cell.BuildBoxRef.IsRuntime = true;
+
+        BepinPlugin.Log.LogInfo($"[AssetLoader] Linked Forge BuildBox {boxGuid.AsHex()} <-> module {moduleGuid.AsHex()}");
     }
 
     // Registers the prefab in the game's RuntimeAssetsRegister under the GUID the

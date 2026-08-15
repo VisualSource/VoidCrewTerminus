@@ -87,6 +87,7 @@ public class ForgeInteractable : AbstractInteractable
     private static InteractionInfo _defaultInfo;
     private static InteractionInfo _commitInfo;
     private static InteractionInfo _alloyInfo;
+    private static InteractionInfo _deconstructInfo;
     private static bool _infosResolved;
 
     public static InteractionInfo InfoFor(ForgeInteractableKind kind)
@@ -99,6 +100,16 @@ public class ForgeInteractable : AbstractInteractable
             ForgeInteractableKind.AlloyTerminal => _alloyInfo,
             _ => _defaultInfo,
         };
+    }
+
+    // Not a ForgeInteractableKind — ForgeDeconstructInteractable isn't part of the
+    // click-decision matrix ForgeInteractionPolicy routes (it's its own hold gesture,
+    // not something a player's carried payload can target), so it doesn't need a
+    // policy-routed kind, just a HUD prompt built the same way.
+    public static InteractionInfo DeconstructInfo()
+    {
+        EnsureInfos();
+        return _deconstructInfo;
     }
 
     private static void EnsureInfos()
@@ -121,6 +132,7 @@ public class ForgeInteractable : AbstractInteractable
         // (see its doc comment), so the HUD prompt should say so.
         _commitInfo = ActionInfo("Commit", InteractionDescription.EInteractionType.Hold);
         _alloyInfo = ActionInfo("Feed Alloy");
+        _deconstructInfo = ActionInfo("Deconstruct", InteractionDescription.EInteractionType.Hold);
     }
 
     private static InteractionInfo EmptyInfo()

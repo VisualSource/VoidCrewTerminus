@@ -117,10 +117,16 @@ namespace VoidCrewTerminus
                 forge.TeardownForReload();
             foreach (var interactable in FindObjectsOfType<Forge.ForgeInteractable>(true))
                 DestroyForgeInteractable(interactable.gameObject, interactable);
-            // Commit button — separate component type (ForgeCommitInteractable),
-            // same runtime-generated-vs-authored-collider teardown rule.
+            // Commit button and deconstruct handle — separate component types
+            // (ForgeCommitInteractable / ForgeDeconstructInteractable), same
+            // runtime-generated-vs-authored-collider teardown rule. Both
+            // self-subscribe a hold-completion handler in their own Awake, so an
+            // orphaned instance left behind would otherwise leak silently across
+            // reloads.
             foreach (var commitButton in FindObjectsOfType<Forge.ForgeCommitInteractable>(true))
                 DestroyForgeInteractable(commitButton.gameObject, commitButton);
+            foreach (var deconstructHandle in FindObjectsOfType<Forge.ForgeDeconstructInteractable>(true))
+                DestroyForgeInteractable(deconstructHandle.gameObject, deconstructHandle);
 
             AssetLoader.UnloadBundles();
             Log?.LogDebug("Plugin resources unloaded (hot-reload teardown).");

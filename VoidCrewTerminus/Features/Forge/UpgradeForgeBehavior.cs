@@ -43,13 +43,21 @@ public class UpgradeForgeBehavior : MonoBehaviour
     // ForgeInteractionPatch to identify Forge modules as they build.
     public const string PrefabName = "UpgradeForgeModuleCell";
 
+    // Name of the Forge's own dedicated BuildBox prefab, shipped in the same
+    // bundle. AssetLoader dispatches on this name (vs. PrefabName) to tell the
+    // two apart — both are bare VoidCrewAsset-marked GameObjects with no other
+    // surviving components, so name is the only signal available at load time.
+    public const string BuildBoxPrefabName = "UpgradeForgeBuildBox";
+
     // Anchor names baked into the shipped prefab. CommitTarget is required for
     // in-world commits; AlloyTarget is the Phase 5 meter terminal (optional — the
     // !setmeter dev command covers testing until the prefab gains the anchor).
+    // Handle is the deconstruct lever's rotating part (see ForgeDeconstructInteractable).
     public const string RelicTubeAnchorName = "RelicTubeTarget";
     public const string InputAnchorName = "InputTarget";
     public const string CommitAnchorName = "CommitTarget";
     public const string AlloyAnchorName = "AlloyTarget";
+    public const string DeconstructHandleName = "Handle";
 
     private BuildBox _moduleBox;
     private readonly List<GameObject> _relics = new();
@@ -392,6 +400,7 @@ public class UpgradeForgeBehavior : MonoBehaviour
         _inputAnchor = transforms.FirstOrDefault(t => t.name == InputAnchorName);
         var commitAnchor = transforms.FirstOrDefault(t => t.name == CommitAnchorName);
         var alloyAnchor = transforms.FirstOrDefault(t => t.name == AlloyAnchorName);
+        var deconstructHandle = transforms.FirstOrDefault(t => t.name == DeconstructHandleName);
 
         int layer = LayerMask.NameToLayer("InteractiveObjects");
         if (layer < 0)
@@ -416,6 +425,10 @@ public class UpgradeForgeBehavior : MonoBehaviour
             CreateInteractable(alloyAnchor, ForgeInteractableKind.AlloyTerminal, new Vector3(0.3f, 0.3f, 0.3f), layer);
         else
             BepinPlugin.Log.LogInfo("[Forge] Prefab has no AlloyTarget anchor — alloy feeding unavailable in-world (use !setmeter for testing).");
+        if (deconstructHandle != null)
+            CreateDeconstructInteractable(deconstructHandle, layer);
+        else
+            BepinPlugin.Log.LogInfo("[Forge] Prefab has no Handle — in-world deconstruct unavailable.");
 
         if (_tubeAnchors.Length == 0 || _inputAnchor == null)
             BepinPlugin.Log.LogWarning(
@@ -482,6 +495,23 @@ public class UpgradeForgeBehavior : MonoBehaviour
         // doc comment for the full lifecycle reasoning.
         hc.DontSelfSetInteractionInfo = true;
         hc.InteractionInfo = ForgeInteractable.InfoFor(ForgeInteractableKind.CommitButton);
+    }
+
+    // The deconstruct handle (ForgeDeconstructInteractable) — same hold-to-confirm
+    // mechanism as Commit, but it's the "Handle" mesh itself that's the click
+    // region: unlike the abstract CommitTarget/tube anchors, Handle is real
+    // authored geometry and should already carry its own Collider, so
+    // BuildAnchorClickRegion's "authored collider" branch is expected to fire
+    // here rather than its generated-box fallback.
+    private void CreateDeconstructInteractable(Transform handle, int layer)
+    {
+        var go = BuildAnchorClickRegion(handle, "ForgeInteractable_Deconstruct", new Vector3(0.2f, 0.2f, 0.2f), layer);
+
+        var dc = go.GetComponent<ForgeDeconstructInteractable>();
+        if (dc == null) dc = go.AddComponent<ForgeDeconstructInteractable>();
+        dc.ShowContextInfo = false;
+        dc.DontSelfSetInteractionInfo = true;
+        dc.InteractionInfo = ForgeInteractable.DeconstructInfo();
     }
 
     // Prefab authoring contract (all optional, plain Unity components so they survive

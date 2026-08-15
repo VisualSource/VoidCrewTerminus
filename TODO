@@ -219,6 +219,155 @@ In Progress:
                  [] RE-RUN T1-T7 after 8-REFACTOR — unit tests prove the gate algebra, nothing
                     proves a message crosses a real Photon room. Priority order: T6 (the
                     GetPlayer change), then T4/T5 (snapshot payload path), then T1.
+                ✔ FIX: RandomShutoff burden permanently neutered on AutoPowerOn modules
+                   @done(26-08-14) (found in a solo smoke-test log after the UpgradeForgeBehavior
+                   split: Module_Buildable_PowerGenerator_03 logged "shutoff DECLINED by a
+                   ChangeValidator" every retry interval, forever. ROOT CAUSE: vanilla
+                   PowerDrain.ValidatePowerTurnOff (Gameplay.Power/PowerDrain.cs:175) vetoes any
+                   turn-off request when AutoPowerOn && CanTurnOn() — true for Power Generators
+                   and presumably other self-powering modules. RandomShutoffBehavior reschedules
+                   unconditionally on both success and fail, so a burden landing on one of these
+                   modules would retry and get declined every interval for the rest of the run,
+                   never once actually affecting it, while the commit causal log still said
+                   "APPLIED RandomShutoff" and the cursed relic was still consumed for nothing.
+                   FIX #1 (don't apply it there): new ForgeModuleState.CanCarry(BurdenType), gating
+                   both ApplySnapshot's snapshot→_burdens restore and the (currently unused)
+                   AddBurden — the one place both the fresh-commit-result path and the
+                   reconstruct/late-joiner path meet a live CellModule/PowerDrain reference. Dropped
+                   burdens log once via LogDebug so the exclusion is visible, not silent.
+                   FIX #2 (stop the spam regardless): RequestPowerOff's onFail now logs only the
+                   first decline per power-cycle (_loggedDecline, reset in OnPowerStateChanged) —
+                   defense in depth for any OTHER ChangeValidator veto FIX #1 doesn't anticipate.
+                   NOT YET RE-VERIFIED IN GAME — next solo/MP session should re-roll a cursed
+                   relic onto a Power Generator (or another AutoPowerOn module) and confirm no
+                   RandomShutoff burden lands and no decline spam appears.)
+                ✔ CHANGE: Commit button now hold-to-confirm, not click @done(26-08-14) (found
+                   during the same solo smoke-test: committing consumed the docked relics on a
+                   single right-click, same as every other Forge interactable — but Commit is the
+                   one action that's IRREVERSIBLE, so an accidental click there is a real loss, not
+                   a redo. Now uses the same hold-to-confirm mechanism vanilla uses for module
+                   deconstruction (ExtruderLever/HoldClickerInteractable, driven by the F/Hold
+                   action) instead of the Forge's usual click path (CarryableInteract's fire1Action,
+                   right-click in this game's bindings).
+                   New ForgeCommitInteractable : HoldClickerInteractable — NOT a ForgeInteractable,
+                   because ClickerInteractable is a sibling branch off AbstractInteractable, not a
+                   base ForgeInteractable shares, so the two can't be unified. Dispatched through
+                   EnvironmentInteract (vanilla's always-on Ability for the Hold/interact key), a
+                   completely separate pathway from the Harmony prefix on CarryableInteract the rest
+                   of the Forge uses — ZERO new patches needed, vanilla routes it for free once the
+                   right component type sits on the collider. A stray fire1Action/right-click on it
+                   now falls through to vanilla CarryableInteract.StartInteraction as a harmless
+                   no-op (confirmed by reading the decompiled method: non-Grabbable/non-Socket
+                   targets are ignored when empty-handed).
+                   Two landmines from building a ClickerInteractable-derived type at runtime with no
+                   prefab-authored Inspector data (same constraint every Forge interactable already
+                   lives under): DontSelfSetInteractionInfo must be set before Start() runs
+                   SetClickable(), or ClickerInteractable.Start() stomps the InteractionInfo
+                   assignment back to the null it captured in Awake(); and Highlighted() is
+                   overridden to skip ClickerInteractable's own version entirely, which iterates an
+                   `outlineObjects` array nothing ever populates outside the Inspector (would NRE).
+                   HandleInteraction/DescribeClick/Apply on UpgradeForgeBehavior were re-typed from
+                   `ForgeInteractable target` to `(ForgeInteractableKind kind, Transform anchor)` so
+                   both dispatch paths can share the one ForgeInteractionPolicy decision pipeline —
+                   commit still only fires empty-handed, same as before, no policy changes. Hot-reload
+                   teardown in Plugins.cs extended to sweep ForgeCommitInteractable too (separate
+                   component type from ForgeInteractable, same generated-vs-authored-collider rule),
+                   since a self-subscribed HoldCompleted handler on an orphaned instance would
+                   otherwise leak silently across reloads.
+                   NOT YET VERIFIED IN GAME — next solo session: confirm the Commit prompt shows a
+                   hold (not press) HUD indicator, right-click no longer commits, and holding F to
+                   completion still commits and still refuses correctly while carrying something.)
+                ✔ CODE: dedicated Forge BuildBox + deconstruct + boss-reward @done(26-08-14)
+                   (Replaces the Phase-3 donor-box workaround (ForgeSpawnCommand borrowing a
+                   vanilla module's live BuildBox and mutating its moduleRef at runtime — see git
+                   history) with a real, mod-owned BuildBox prefab, closes the deconstruct-NRE gap,
+                   and adds a real acquisition path (2nd-boss reward) instead of the dev-only spawn
+                   command. Extensively grilled before implementation — see conversation; key
+                   findings written to docs/forge-buildbox-research.md.
+                   BLOCKED PREMISE CORRECTED: "adding a custom carryable auto-adds it to the loot
+                   pool" does NOT apply here — RuntimeAssetConverter's loot-table wiring only
+                   fires for prefabs pushed through the standard *.metem/CarryableBaseAsset
+                   pipeline, and that pipeline can only ever produce a plain CarryableObject/
+                   CarryableModObject, never a BuildBox subclass. A dedicated BuildBox structurally
+                   cannot go through it — confirmed by reading RuntimeAssetConverter.ConvertAsset
+                   AND by listing com.hutlihut.void_crew_common's entire Runtime/Code surface (no
+                   BuildBox, no CellModule, no ExtruderLever/ModuleDeconstructButton/
+                   AbstractModuleMediator — none of the gameplay component types the SDK exposes
+                   can be authored in the Unity editor project at all, only markers/data). This
+                   forced the SAME "graft at runtime" pattern GraftModuleComponents already uses
+                   for CellModule/PowerDrain to extend to BuildBox too — not a new kind of risk,
+                   just more of the same proven one.
+                   New AssetLoader.GraftBuildBoxComponents (BuildBox/Rigidbody/PhotonView stand-ins,
+                   mirrors GraftModuleComponents) + LinkForgeBuildBox (cross-links module<->box GUIDs
+                   once both are registered — moduleRef pre-set on the BOX PREFAB itself at load, not
+                   mutated per-spawn like the old donor trick, so every future instance inherits it
+                   for free) + CellModule.BuildBoxRef wiring (closes the ArgumentNullException
+                   Deconstruct.CreateBuildBox throws without it). LoadBundle dispatches on prefab
+                   NAME (UpgradeForgeBehavior.BuildBoxPrefabName = "UpgradeForgeBuildBox") since both
+                   prefabs are otherwise indistinguishable bare VoidCrewAsset markers.
+                   Deconstruct does NOT use vanilla's Mediator/ExtruderLever chain at all — confirmed
+                   AbstractModuleMediator.OnClickedDeconstructButton is three plain static/singleton
+                   calls (Deconstruct.CanRemoveModule / Deconstruct.CanStartDeconstruct /
+                   BuildProcessController.Instance.TryDeconstructModule, the last already fully
+                   networked — RPCs to master itself) with zero dependency on the Mediator instance,
+                   so new ForgeDeconstructInteractable replicates them directly. Same hold-to-confirm
+                   mechanism as Commit (HoldClickerInteractable via EnvironmentInteract), sitting on
+                   the user's own already-modeled "Handle" child (DeconstructHandleName constant),
+                   rotating it on Y while held with spring-back on early release — approximates a
+                   lever pull without needing ExtruderLever's AnimationCurve. Wired into
+                   BuildInteractables the same way CommitTarget is; ForgeInteractable.DeconstructInfo()
+                   gives it a Hold-type HUD prompt.
+                   Boss reward: NOT hooked via LootOnDeathDropper (no boss-exclusive loot list exists
+                   — loot content is one shared per-sector pool, only roll-COUNT varies per monster
+                   type via LootOnDeathDropperContainer, and that has no link back to "is this a
+                   boss" — confirmed by reading BossObjectiveConfig, which only holds an
+                   ObjectiveDataRef + Sector, no entity/prefab GUID). Instead added directly inside
+                   BossDefeatHook.OnObjectiveStateChanged (no new Harmony patch needed) at the exact
+                   point already checked for SectorEscalation.BossesDefeated == 1 (the SAME
+                   pre-increment snapshot DescribeUnlock already uses for the "unlocks Legendary-tier
+                   relics" message) — delivered via SpawnUtils.SpawnCarePackage (vanilla's own
+                   Objective.CompletionDrop delivery mechanism), with a reimplemented (not
+                   byte-for-byte, see comment) donut-ring position around the player ship.
+                   ForgeSpawnCommand (!forgespawn) simplified to spawn the dedicated box directly by
+                   its own registered GUID — TryFindDonorBuildBoxGuid deleted entirely. That method
+                   was the likely cause of a reported lag spike (linear scan of the ENTIRE vanilla
+                   module registry, up to 2 synchronous Resources.Load calls per iteration, first-hit
+                   wins so scan depth was nondeterministic) — gone now, since there's no donor to
+                   search for. Host-only gate on !forgespawn also removed — no longer needed since
+                   moduleRef isn't mutated per-spawn.
+                   Plugins.cs hot-reload teardown extended to sweep ForgeDeconstructInteractable too
+                   (same reasoning as the Commit button's own entry above).
+                   CODE ONLY — NOT YET BUILT OR VERIFIED. Final setup to finish, Unity side then
+                   in-game:
+                    [] Create a new prefab named EXACTLY "UpgradeForgeBuildBox" (matches
+                       UpgradeForgeBehavior.BuildBoxPrefabName — AssetLoader dispatches on this
+                       name, a mismatch means it silently loads as nothing / logs a warning, not an
+                       error you'd notice at a glance).
+                    [] Give it the reused utility box mesh + a Collider (carry/grab physics reads
+                       this — GraftBuildBoxComponents adds Rigidbody/PhotonView but does NOT add a
+                       Collider, since the mesh should already carry one).
+                    [] Add a VoidCrewAsset marker component so the export tool stamps a GUID —
+                       DO NOT add a BuildBox component; it isn't in the SDK's exposed types and
+                       will just fail to add / not survive the bundle regardless (see the CODE
+                       entry above for why). moduleRef is wired in code, not the Inspector.
+                    [] Move the already-modeled "Handle" lever part to live under the MODULE
+                       prefab (UpgradeForgeModuleCell), named EXACTLY "Handle" (matches
+                       UpgradeForgeBehavior.DeconstructHandleName), with its own Collider (this is
+                       the raycast target ForgeDeconstructInteractable attaches to directly).
+                    [] Export both prefabs (stamps/refreshes their VoidCrewAsset GUIDs) and rebuild
+                       the .terminus bundle.
+                    [] VERIFY: !forgespawn produces the new dedicated box (not the old donor
+                       mesh), carries/installs normally, and the lag spike is gone.
+                    [] VERIFY: hold the Handle to completion on an installed Forge → module
+                       deconstructs back to a BuildBox, no ArgumentNullException, no leftover
+                       ForgeDeconstructInteractable warning in the log.
+                    [] VERIFY: releasing the Handle early cancels cleanly (no deconstruct, handle
+                       visually springs back to 0).
+                    [] VERIFY: defeating the 2nd boss in a run spawns an incoming care package
+                       that contains the Forge BuildBox (not just the vanilla notification text —
+                       confirm the package actually opens into a real, carryable box).
+                    [] VERIFY (carried over from the Commit-button entry above, same session):
+                       Commit prompt shows Hold not Press, right-click no longer commits.
         [] 8-* full-run 2-client soak once A/B/C individually verified
         Cleanup:
                 UI pass (grilled 26-07-18; one patch point for all 3 hover surfaces):
@@ -531,3 +680,11 @@ Maybe:
       [] SEQUENCING: shares the Phase 8 net layer, which is only partially verified
          and was refactored 26-08-14. Finish T1-T7 first or failures have two
          candidate causes.
+
+
+
+[] floating bug is back
+[] all required multiple attaments to placement on forge
+[] non host build box lost mark info, placed version still worked correctly
+[] notification seem to be mostly host only
+[] 
