@@ -24,7 +24,19 @@ public class ForgeNetSyncGateTests : IDisposable
 {
     private readonly IForgeTransport _original = ForgeNetSync.Transport;
 
-    public void Dispose() => ForgeNetSync.Transport = _original;
+    // ApplyIncomingState can trigger a level-up (ForgeMeterController.Notify),
+    // which defaults to VoidManager.Utilities.Messaging.Notification — a real
+    // game/chat call that doesn't resolve under the test host. Swapped for a
+    // no-op for the duration of these tests; nothing here asserts on the text.
+    private readonly Action<string> _originalNotify = ForgeMeterController.Notify;
+
+    public ForgeNetSyncGateTests() => ForgeMeterController.Notify = _ => { };
+
+    public void Dispose()
+    {
+        ForgeNetSync.Transport = _original;
+        ForgeMeterController.Notify = _originalNotify;
+    }
 
     private static RecordingTransport Install(RecordingTransport t)
     {

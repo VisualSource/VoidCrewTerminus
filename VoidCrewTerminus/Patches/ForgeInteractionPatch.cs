@@ -1,10 +1,13 @@
+using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
 using CG.Client.Player.Interactions;
 using CG.Game.Player;
 using CG.Network;
 using CG.Ship.Hull;
 using CG.Ship.Modules;
 using CG.Ship.Object;
+using Gameplay.SpacePlatforms;
 using HarmonyLib;
 using ResourceAssets;
 using VoidCrewTerminus.Forge;
@@ -89,6 +92,12 @@ internal static class ForgeCarryableInteractPatch
 
 internal static class ForgeAttachHelper
 {
+    // MovingSpacePlatform.colliderObjects — private, reflected only to tell (in
+    // the log) whether AddColliderObject below actually did anything, or found
+    // the module already registered. See RegisterShipPlatformCollision.
+    private static readonly FieldInfo _colliderObjectsField =
+        AccessTools.Field(typeof(MovingSpacePlatform), "colliderObjects");
+
     internal static void TryAttach(CellModule module)
     {
         if (module == null) return;
@@ -111,6 +120,41 @@ internal static class ForgeAttachHelper
             BepinPlugin.Log.LogInfo($"[Forge] Attached UpgradeForgeBehavior to {module.name}");
         }
         behavior.BuildInteractables();
+
+        RegisterShipPlatformCollision(module);
+    }
+
+    // Solid geometry only blocks the player "for free"; a relic or the BuildBox
+    // riding the ship is an ISimulatedBody whose physics runs entirely inside the
+    // ship's OWN PhysicsScene (MovingSpacePlatform), which mirrors in only the
+    // colliders explicitly handed to AddColliderObject — normally done for a
+    // freshly built module by CellModule.OnPhotonInstantiate -> BuildSocket.
+    // SetModule, which should fire for us too since we graft the real CellModule
+    // class and thread the same instantiation data as vanilla BuildModule. But
+    // this mod's whole existence is a list of things a bundle-loaded module turns
+    // out not to get for free (CellModule, PowerDrain, OcclusionNodes, PhotonView
+    // — see GraftModuleComponents), so rather than trust that chain blind, this
+    // registers defensively and logs which case it hit. AddColliderObject is
+    // idempotent (TryAdd, logs rather than throws on a duplicate), so calling it
+    // whether or not vanilla's own path already did is safe either way.
+    private static void RegisterShipPlatformCollision(CellModule module)
+    {
+        var platform = module.GetComponentInParent<MovingSpacePlatform>();
+        if (platform == null)
+        {
+            BepinPlugin.Log.LogDebug($"[Forge] {module.name}: no MovingSpacePlatform in parents yet — skipping collider registration.");
+            return;
+        }
+
+        bool alreadyRegistered = _colliderObjectsField?.GetValue(platform) is IDictionary dict
+            && dict.Contains(module.gameObject);
+
+        platform.AddColliderObject(module.gameObject);
+        BepinPlugin.Log.LogDebug(
+            $"[Forge] Ship-platform collider registration for {module.name}: " +
+            (alreadyRegistered
+                ? "was already present (vanilla's own path ran)."
+                : "was MISSING — registered it now."));
     }
 
     private static bool EnsureTag(CellModule module, Gameplay.Tags.CsTag tag)

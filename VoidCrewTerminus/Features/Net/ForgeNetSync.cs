@@ -8,6 +8,7 @@ using VoidCrewTerminus.Escalation;
 using VoidCrewTerminus.Forge;
 using VoidCrewTerminus.Loot;
 using VoidManager.ModMessages;
+using VoidManager.Utilities;
 
 namespace VoidCrewTerminus.Net;
 
@@ -219,6 +220,35 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         BepinPlugin.Log?.LogDebug(
             $"[Net] ← alloy-spend request from #{senderActor}: {(ok ? "spent" : message)}");
         if (ok) BroadcastState(); // push the new meter/level to everyone incl. the requester
+
+        // The requester's own local TrySpendAlloys call already returned before
+        // the host ever saw this request (it just fired RequestAlloySpend and gave
+        // up), so BroadcastState alone leaves them with no explanation on success
+        // and nothing at all on failure. Tell them directly what happened.
+        SendAlloySpendResultTo(senderActor, ok,
+            ok ? $"Alloys spent — {ForgeMeterController.Describe()}" : message);
+    }
+
+    // Host → requester only (not a broadcast — SendToOthers would tell every
+    // OTHER client about a request that wasn't theirs).
+    private static void SendAlloySpendResultTo(int actorNumber, bool ok, string message)
+    {
+        if (!IsAuthority) return;
+        _transport.SendToPeer(actorNumber, typeof(AlloySpendResultMessage), new object[] { ok, message });
+        BepinPlugin.Log?.LogDebug(
+            $"[Net] → sent alloy-spend result to #{actorNumber}: {(ok ? "ok" : "failed")} ({message}).");
+    }
+
+    // Client: surface the host's outcome. The host resolved this locally too
+    // (TrySpendAlloys already ran there), so it never sends itself a result.
+    internal static void ApplyIncomingAlloySpendResult(object[] a)
+    {
+        if (IsAuthority) return;
+        if (a == null || a.Length < 2) return;
+        bool ok = a[0] is bool flag && flag;
+        string message = a[1] as string;
+        if (!string.IsNullOrEmpty(message)) Messaging.Notification(message);
+        BepinPlugin.Log?.LogDebug($"[Net] ← applied alloy-spend result: {(ok ? "ok" : "failed")} ({message}).");
     }
 
     // ---- cursed relic sync (Phase 8-B) ------------------------------------
@@ -372,6 +402,25 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
             $"({DescribeOverlay(snap.PerkSlots, snap.Burdens)}, consumed {relicsConsumed}).");
 
         UpgradeForgeBehavior.FindByBoxViewId(boxViewId)?.OnNetworkCommitResult(relicsConsumed);
+    }
+
+    // Deconstructing player → everyone else: "this freshly-created BuildBox
+    // carries this forge overlay." Mirrors BroadcastModuleOverlay's reasoning but
+    // for the opposite direction — see DeconstructCreateBuildBoxPatch for why the
+    // relay is needed at all. Reuses CommitResultMessage/ApplyCommitResult: the
+    // wire shape is identical to a zero-relics commit result, which is exactly
+    // what SendOverlaySnapshotTo already sends for the late-joiner case below.
+    //
+    // ShouldRelay, not ShouldBroadcast: the deconstructing player may be a client,
+    // not the host, same reasoning as BroadcastModuleOverlay.
+    internal static void BroadcastBoxOverlay(int boxViewId, ForgeSnapshot snap)
+    {
+        if (!ShouldRelay) return;
+        if (boxViewId <= 0 || snap == null) return;
+
+        _transport.SendToOthers(typeof(CommitResultMessage), snap.ToPayload(boxViewId, 0));
+        BepinPlugin.Log?.LogDebug($"[Net] → sent box overlay box={boxViewId} L{snap.Level} " +
+            $"({DescribeOverlay(snap.PerkSlots, snap.Burdens)}) to all.");
     }
 
     // Compact perk/burden summary for the paired →sent / ←applied log lines.

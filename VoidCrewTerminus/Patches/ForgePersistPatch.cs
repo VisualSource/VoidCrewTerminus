@@ -27,8 +27,21 @@ internal static class DeconstructCreateBuildBoxPatch
     static void Postfix(CellModule module, BuildBox __result)
     {
         if (__result == null) return;
-        if (ForgeStateStore.TryGet(module, out var state))
-            ForgeStateStore.SaveSnapshot(__result.photonView.ViewID, state.Snapshot());
+        if (!ForgeStateStore.TryGet(module, out var state)) return;
+
+        var snap = state.Snapshot();
+        ForgeStateStore.SaveSnapshot(__result.photonView.ViewID, snap);
+
+        // Deconstruct.CreateBuildBox ends in PhotonNetwork.Instantiate (via
+        // ObjectFactory.InstantiateSpaceObjectByGUID), same as BuildBox.BuildModule
+        // on the reverse path — so this postfix, like that one, only ever runs on
+        // the machine that actually did the deconstructing. Every other client's
+        // copy of the box arrives through Photon's own remote-instantiation path
+        // and never computes this snapshot locally, so without announcing it here
+        // anyone but the deconstructing player sees a vanilla-labeled box (and
+        // would build a vanilla module from it) until someone else re-forges it.
+        if (__result.photonView != null)
+            Net.ForgeNetSync.BroadcastBoxOverlay(__result.photonView.ViewID, snap);
     }
 }
 

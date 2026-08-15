@@ -47,6 +47,18 @@ public class AlloySpendRequestMessage : ModMessage
         => ForgeNetSync.HandleAlloySpendRequest(sender?.ActorNumber ?? 0);
 }
 
+// Host → requester: the outcome of an AlloySpendRequestMessage. The state
+// broadcast on success already updates the requester's meter/level, but says
+// nothing about WHY, and on failure (not enough alloys, already maxed, …) the
+// requester previously heard nothing back at all — the last thing they ever saw
+// was their own "Requested the host feed the Forge…" line. This closes that gap.
+// arguments: [bool ok, string message]
+public class AlloySpendResultMessage : ModMessage
+{
+    public override void Handle(object[] arguments, Player sender)
+        => ForgeNetSync.ApplyIncomingAlloySpendResult(arguments);
+}
+
 // Phase 8-B — Host → clients: which relics are cursed, keyed by PhotonView.ViewID.
 // Sent length-1 live at each cursed spawn, and as a full batch to a joiner.
 // arguments: [int[] viewIDs, int[] burdenTypes]

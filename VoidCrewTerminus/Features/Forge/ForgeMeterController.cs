@@ -19,6 +19,13 @@ public static class ForgeMeterController
     // installed Forges can update their tube visibility.
     public static event Action<int> LevelChanged;
 
+    // Swappable so ApplyNetworkState and AddMeter stay callable from the unit
+    // test host: Messaging.Notification reaches into real Gameplay.Chat types
+    // that don't exist there, so a level-up notification would otherwise crash
+    // any test that exercises either path (see ForgeNetSyncGateTests, which
+    // installs a no-op for the duration). Production never reassigns this.
+    internal static Action<string> Notify = message => Messaging.Notification(message);
+
     public const int MinLevel = 1;
     // One level per relic tube on the prefab. Levels beyond 4 don't unlock bigger
     // single steps (the priciest cost-curve step is 4 relics) but allow multi-step
@@ -72,9 +79,16 @@ public static class ForgeMeterController
     }
 
     // Phase 8-A — client-side apply of a host-authoritative state broadcast. Sets
-    // the backing fields directly (no notifications, no re-broadcast) and fires
-    // LevelChanged so installed Forges refresh their tube visibility. Never call
-    // on the authority; that path goes through AddMeter/IncrementDifficultyScalar.
+    // the backing fields directly (no re-broadcast) and fires LevelChanged so
+    // installed Forges refresh their tube visibility. Never call on the
+    // authority; that path goes through AddMeter/IncrementDifficultyScalar.
+    //
+    // A level-up DOES get a Notification here, unlike every other field this
+    // applies silently: Messaging.Notification only ever inserts into the
+    // caller's own chat window (VoidManager doesn't broadcast it), so without
+    // this the "Forge reached level N" line AddMeter prints only ever showed up
+    // for whichever machine actually spent the alloys — solo and the host, never
+    // a client, even though the level-up applies to the whole crew's Forge.
     internal static void ApplyNetworkState(int scalar, float meter, int level)
     {
         DifficultyScalar = Math.Max(0, scalar);
@@ -82,7 +96,11 @@ public static class ForgeMeterController
         int clamped = Math.Max(MinLevel, Math.Min(MaxLevel, level));
         bool levelChanged = clamped != Level;
         Level = clamped;
-        if (levelChanged) LevelChanged?.Invoke(Level);
+        if (levelChanged)
+        {
+            LevelChanged?.Invoke(Level);
+            Notify(LevelUpMessage(Level));
+        }
     }
 
     public static void AddMeter(float amount, string source)
@@ -95,7 +113,7 @@ public static class ForgeMeterController
         }
 
         Meter += amount;
-        Messaging.Notification($"Forge Meter +{amount:0.#} ({source}) — {Describe()}");
+        Notify($"Forge Meter +{amount:0.#} ({source}) — {Describe()}");
 
         bool leveled = false;
         while (!IsMaxed && Meter >= ThresholdFor(Level))
@@ -103,15 +121,19 @@ public static class ForgeMeterController
             Meter -= ThresholdFor(Level);
             Level++;
             leveled = true;
-            Messaging.Notification(Level >= MaxLevel
-                ? $"The Forge reached level {Level} — maximum capacity ({Capacity} relics)."
-                : $"The Forge reached level {Level} — capacity {Capacity} relics.");
+            Notify(LevelUpMessage(Level));
         }
         if (IsMaxed) Meter = 0f;
         if (leveled) LevelChanged?.Invoke(Level);
 
         BepinPlugin.Log.LogInfo($"[Forge] Meter +{amount:0.#} from {source} → L{Level}, {Meter:0.#}");
     }
+
+    // Shared with ApplyNetworkState so the host's own level-up line and the one a
+    // client sees from the network broadcast can't drift apart.
+    private static string LevelUpMessage(int level) => level >= MaxLevel
+        ? $"The Forge reached level {level} — maximum capacity ({level} relics)."
+        : $"The Forge reached level {level} — capacity {level} relics.";
 
     // Alloy Terminal spend. Mirrors the Fabricator's payment flow
     // (GameSessionSuppliesManager.ModifyAlloyCount), which silently no-ops for
