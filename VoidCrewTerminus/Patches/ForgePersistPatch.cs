@@ -13,14 +13,13 @@ using VoidCrewTerminus.Forge;
 namespace VoidCrewTerminus.Patches;
 
 // Per level above 3, the alloy recycle payout scales by this fraction.
-// e.g. 0.15 → L7 box (4 levels above 3) gives 1.60× base alloys.
+// e.g. 0.15 → L7 box (4 levels above 3) gives 1.60x base alloys.
 internal static class ForgeConstants
 {
     public const float RecycleAlloysPerLevel = 0.15f;
 }
 
-// --- Deconstruction: save forge level keyed by the new BuildBox's ViewID ---
-
+// Deconstruction: save forge level keyed by the new BuildBox's ViewID.
 [HarmonyPatch(typeof(Deconstruct), nameof(Deconstruct.CreateBuildBox))]
 internal static class DeconstructCreateBuildBoxPatch
 {
@@ -32,21 +31,17 @@ internal static class DeconstructCreateBuildBoxPatch
         var snap = state.Snapshot();
         ForgeStateStore.SaveSnapshot(__result.photonView.ViewID, snap);
 
-        // Deconstruct.CreateBuildBox ends in PhotonNetwork.Instantiate (via
-        // ObjectFactory.InstantiateSpaceObjectByGUID), same as BuildBox.BuildModule
-        // on the reverse path — so this postfix, like that one, only ever runs on
-        // the machine that actually did the deconstructing. Every other client's
-        // copy of the box arrives through Photon's own remote-instantiation path
-        // and never computes this snapshot locally, so without announcing it here
-        // anyone but the deconstructing player sees a vanilla-labeled box (and
-        // would build a vanilla module from it) until someone else re-forges it.
+        // Deconstruct.CreateBuildBox ends in PhotonNetwork.Instantiate, so this
+        // postfix only runs on the machine that did the deconstructing — every
+        // other client's copy of the box arrives through Photon's remote-instantiation
+        // path and never computes this snapshot locally, so without broadcasting
+        // it here they'd see a vanilla-labeled box until someone re-forges it.
         if (__result.photonView != null)
             Net.ForgeNetSync.BroadcastBoxOverlay(__result.photonView.ViewID, snap);
     }
 }
 
-// --- Reconstruction: restore forge level onto the newly spawned CellModule ---
-
+// Reconstruction: restore forge level onto the newly spawned CellModule.
 [HarmonyPatch(typeof(BuildBox), nameof(BuildBox.BuildModule))]
 internal static class BuildBoxBuildModulePatch
 {
@@ -61,8 +56,7 @@ internal static class CompositeWeaponBuildBoxBuildModulePatch
         ForgePersistPatchHelper.RestoreSnapshot(__instance, __result);
 }
 
-// --- Recycle: scale alloy payout by forge level ---
-
+// Recycle: scale alloy payout by forge level.
 [HarmonyPatch(typeof(CarryableFactoryLogic), nameof(CarryableFactoryLogic.Recycle))]
 internal static class FabricatorRecyclePatch
 {
@@ -76,16 +70,14 @@ internal static class FabricatorRecyclePatch
     }
 }
 
-// --- Recycle: show the SCALED payout in the fabricator panel ---
-//
-// FabricatorRecyclePatch above scales what a forged box actually pays out, but
-// the panel keeps rendering the unscaled CraftableItemDef value — so a Mk X box
-// displayed base alloys and then paid +105%. This closes that gap.
+// Recycle: show the scaled payout in the fabricator panel. FabricatorRecyclePatch
+// above scales what a forged box actually pays out, but the panel keeps
+// rendering the unscaled CraftableItemDef value, so this closes that display gap.
 //
 // RecycleTab has no direct handle on the box instance (PurchasableItem is
-// GUID-keyed, not per-instance), so we resolve it the same way the payout patch
-// does: through the fabricator logic's recycle socket. Both hops are non-public,
-// hence the reflection.
+// GUID-keyed, not per-instance), so it's resolved the same way as the payout
+// patch: through the fabricator logic's recycle socket. Both hops are
+// non-public, hence the reflection.
 
 [HarmonyPatch(typeof(RecycleTab), "SocketChanged")]
 internal static class RecycleTabDisplayPatch
@@ -127,8 +119,6 @@ internal static class RecycleTabDisplayPatch
     }
 }
 
-// --- Shared helper ---
-
 internal static class ForgePersistPatchHelper
 {
     internal static void RestoreSnapshot(BuildBox box, CellModule module)
@@ -137,9 +127,8 @@ internal static class ForgePersistPatchHelper
         if (!ForgeStateStore.TryTakeSnapshot(box.photonView.ViewID, out var snap)) return;
         ForgeStateStore.GetOrCreate(module).ApplySnapshot(snap);
 
-        // Only THIS machine ran BuildModule (it ends in PhotonNetwork.Instantiate),
-        // so nobody else can make the box→module connection. Announce it, keyed by
-        // the module's ViewID, or every remote client shows a vanilla module.
+        // Only this machine ran BuildModule, so nobody else can make the
+        // box->module connection; announce it or remote clients show a vanilla module.
         if (module.photonView != null)
             Net.ForgeNetSync.BroadcastModuleOverlay(module.photonView.ViewID, snap);
     }

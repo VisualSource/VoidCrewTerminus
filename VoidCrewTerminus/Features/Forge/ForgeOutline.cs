@@ -4,21 +4,15 @@ using UnityEngine;
 
 namespace VoidCrewTerminus.Forge;
 
-// Highlighting a Forge interactable used to toggle a hand-authored "Highlight"
-// child object (ForgeAnchors.HighlightName) — a manual stand-in, because
-// ClickerInteractable's OWN highlight mechanism (an outlineObjects[] array,
-// toggling Knife.HDRPOutline.Core.OutlineObject components) is [SerializeField],
-// populated only by the Unity Inspector, and every Forge interactable is built
-// at runtime via AddComponent with no Inspector data behind it — calling the
-// base implementation NREs on the null array (see ForgeDeconstructInteractable's
-// Highlighted doc comment for the full story of what that NRE actually broke).
-//
-// This gets the mod onto the SAME outline-shader mechanism every vanilla module/
-// BuildBox hover uses, instead of a bespoke highlight visual, with no additional
-// Unity-side authoring required: it walks the module's own renderers, adds an
-// OutlineObject on each on first use, and toggles them together. Whichever Forge
-// interactable is hovered outlines the whole module — matching how vanilla
-// modules/BuildBoxes highlight as a single unit, not a specific sub-mesh.
+// ClickerInteractable's own highlight mechanism (an outlineObjects[] array toggling
+// Knife.HDRPOutline.Core.OutlineObject components) is [SerializeField], populated
+// only by the Unity Inspector — and every Forge interactable is built at runtime via
+// AddComponent with no Inspector data behind it, so calling the base implementation
+// NREs on the null array. This walks the module's own renderers instead, adding an
+// OutlineObject on each on first use and toggling them together — same outline-shader
+// mechanism vanilla modules/BuildBoxes use, with no Unity-side authoring required.
+// Whichever Forge interactable is hovered outlines the whole module, matching how
+// vanilla hover highlights as a single unit rather than a specific sub-mesh.
 internal static class ForgeOutline
 {
     private static readonly ConditionalWeakTable<Transform, OutlineObject[]> _cache = new();

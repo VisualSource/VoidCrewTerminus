@@ -1321,8 +1321,4 @@ Maybe:
 
 
 
-[] floating bug is back
-[] all required multiple attaments to placement on forge
-[] non host build box lost mark info, placed version still worked correctly
-[] notification seem to be mostly host only
-[] 
+[] forge upgrade module leaves behind coliders

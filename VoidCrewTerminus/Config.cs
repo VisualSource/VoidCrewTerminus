@@ -9,24 +9,14 @@ namespace VoidCrewTerminus;
 internal static class TerminusConfig
 {
     // Every entry below is a triplet: a `const` default, the ConfigEntry bound to
-    // it, and a typed accessor that reads it.
-    //
-    // The accessors exist because a ConfigEntry is null until Init() runs — far
-    // later than some static initialisers, and never at all under the test host —
-    // so every read site used to spell `X?.Value ?? <literal>`. That put the
-    // default in two places (the attribute and the read), and read sites were
-    // duplicated 2-6× each, so the same number appeared up to six times with
-    // nothing keeping the copies in step.
-    //
-    // Passing the const into the attribute keeps the literal in exactly ONE
-    // place: attribute arguments must be constant expressions, and BindConfig
-    // takes `object`, so a const boxes cleanly and Init's runtime type check
-    // still sees the right type.
-    //
-    // Read config through the accessor, never through `Entry?.Value ?? default`.
+    // it, and a typed accessor that reads it. The accessors exist because a
+    // ConfigEntry is null until Init() runs (never, under the test host) — read
+    // config through the accessor, never `Entry?.Value ?? default` at the call
+    // site. The const is passed into the attribute (attribute args must be
+    // constant, and BindConfig takes `object`, so it boxes cleanly) to keep the
+    // default in exactly one place.
 
-    // Defined entries as static ConfigEntry<TYPE> NAME
-    // Assigned via reflection in Init(); suppress "never assigned" warning.
+    // Fields below are assigned via reflection in Init(); suppress "never assigned".
 #pragma warning disable CS0649
 
     [BindConfig("ui", false, "Control if relics are allowed to be created from the fabricator")]
@@ -35,8 +25,7 @@ internal static class TerminusConfig
     [BindConfig("dev", false, "Enable dev mode")]
     internal static ConfigEntry<bool> EnableDevMode;
 
-    // Dev commands read this ~31 times. Unbound reads as false so a command can
-    // never fire before Init() has run.
+    // Unbound reads as false so a dev command can never fire before Init() has run.
     internal static bool DevMode => EnableDevMode?.Value ?? false;
 
     private const float DefaultLobbyShipFadeDuration = 0.6f;
@@ -49,13 +38,11 @@ internal static class TerminusConfig
     internal static ConfigEntry<float> LobbyShipBuildBudgetMs;
     internal static float ShipBuildBudgetMs => LobbyShipBuildBudgetMs?.Value ?? DefaultLobbyShipBuildBudgetMs;
 
-    // Upgrade Forge — cost curve
     private const string DefaultForgeCostCurve = "1,1,2,2,3,3,4";
     [BindConfig("forge", DefaultForgeCostCurve, "Comma-separated relic cost per module level step L4..L10 (default: 1,1,2,2,3,3,4 = 16 total to hit L10)")]
     internal static ConfigEntry<string> ForgeCostCurve;
     internal static string CostCurveRaw => ForgeCostCurve?.Value ?? DefaultForgeCostCurve;
 
-    // Upgrade Forge — meter & progression
     private const float DefaultForgeMeterPerSectorJump = 20f;
     [BindConfig("forge", DefaultForgeMeterPerSectorJump, "Forge Meter fill per successful sector jump")]
     internal static ConfigEntry<float> ForgeMeterPerSectorJump;
@@ -81,7 +68,6 @@ internal static class TerminusConfig
     internal static ConfigEntry<float> ForgeMeterLevelMultiplier;
     internal static float MeterLevelMultiplier => ForgeMeterLevelMultiplier?.Value ?? DefaultForgeMeterLevelMultiplier;
 
-    // Upgrade Forge — perk roll chances (0–1)
     private const float DefaultPerkRollChanceCommon = 0.25f;
     [BindConfig("forge", DefaultPerkRollChanceCommon, "Perk roll chance when upgrading with a Common relic")]
     internal static ConfigEntry<float> PerkRollChanceCommon;
@@ -97,11 +83,8 @@ internal static class TerminusConfig
     internal static ConfigEntry<float> PerkRollChanceLegendary;
     internal static float PerkChanceLegendary => PerkRollChanceLegendary?.Value ?? DefaultPerkRollChanceLegendary;
 
-    // Upgrade Forge — sector escalation
-    //
     // The three enemy-pressure knobs below are read together on every scaling
-    // path; go through Escalation.EscalationIntensity.Current rather than
-    // reading them individually.
+    // path — read via Escalation.EscalationIntensity.Current, not individually.
     private const float DefaultEscalationStatScalarPerJump = 0.05f;
     [BindConfig("forge", DefaultEscalationStatScalarPerJump, "Fractional multiplier added to enemy HP and damage per DifficultyScalar tick (minor boost — density is the primary axis)")]
     internal static ConfigEntry<float> EscalationStatScalarPerJump;
@@ -137,9 +120,8 @@ internal static class TerminusConfig
     internal static ConfigEntry<float> RelicMaxCurseChance;
     internal static float MaxCurseChance => RelicMaxCurseChance?.Value ?? DefaultRelicMaxCurseChance;
 
-    // Maintenance Burden (Phase 7-C) — when a cursed relic is consumed in a
-    // successful commit, an independent roll decides whether the module also
-    // takes on a burden. Perk roll is unaffected.
+    // When a cursed relic is consumed in a successful commit, an independent roll
+    // decides whether the module also takes on a burden. Perk roll is unaffected.
     private const float DefaultBurdenApplicationChance = 0.75f;
     [BindConfig("forge", DefaultBurdenApplicationChance, "Chance a successful commit consuming ≥1 cursed relic attaches the relic's baked Maintenance Burden to the target module — 'high chance' per design intent")]
     internal static ConfigEntry<float> BurdenApplicationChance;
@@ -160,9 +142,8 @@ internal static class TerminusConfig
     internal static ConfigEntry<float> BurdenRestoreGraceSeconds;
     internal static float BurdenRestoreGrace => BurdenRestoreGraceSeconds?.Value ?? DefaultBurdenRestoreGraceSeconds;
 
-    // Opt-OUT, so an unbound read must be true: the fix works around a vanilla
-    // bug that eats keyboard input, and defaulting it off before Init() would
-    // reintroduce that.
+    // Opt-out: unbound must read true, or defaulting off before Init() would
+    // reintroduce the vanilla bug this works around (chat eats keyboard input).
     private const bool DefaultEnableChatInputFix = true;
     [BindConfig("fixes", DefaultEnableChatInputFix, "Work around two vanilla chat bugs: the chat text field is never blurred/deselected when cleared (which makes Unity throw on every later keypress and 'eat' input), and the 'TextChatting' state can latch on so chat never reopens. Turn off if it interferes with anything. See docs/chat-bug-research.md")]
     internal static ConfigEntry<bool> EnableChatInputFix;

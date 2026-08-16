@@ -5,8 +5,6 @@ using VoidManager.Utilities;
 
 namespace VoidCrewTerminus.Commands;
 
-// Phase 5 dev commands for the Forge Meter. All gated on EnableDevMode.
-
 internal class ForgeMeterCommand : PublicCommand
 {
     public override string[] CommandAliases() => new[] { "forgemeter" };

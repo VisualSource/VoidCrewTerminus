@@ -1,30 +1,24 @@
 namespace VoidCrewTerminus.Escalation;
 
-// The single answer to "how much extra pressure applies right now?"
-//
-// Five sites used to open with the same four-line preamble — read
-// IsScalingActive, read DifficultyScalar, cap it against EscalationScalarCap,
-// read a per-jump rate, bail if the scalar is zero — each spelling the config
-// defaults inline. The cap default alone appeared in six places with nothing
-// keeping them in step, so retuning enemy pressure meant finding every copy.
+// The single answer to "how much extra pressure applies right now?" — replaces
+// five call sites that each re-read IsScalingActive/DifficultyScalar/cap/rate
+// inline, with the cap default alone duplicated in six places.
 //
 // Snapshot semantics: Current reads ambient state ONCE, so a patch that checks
 // the gate and then computes a multiplier can't observe a scalar that changed
-// in between. The constructor takes every input explicitly — that's the seam the
+// in between. The constructor takes every input explicitly — that's the seam
 // tests use, since Current reaches into two static singletons and the config.
 public readonly struct EscalationIntensity
 {
-    // Whether escalation has been switched on for this run at all (enough bosses
-    // defeated). Loot tier biasing deliberately ignores this — see
-    // LootTableEscalationPatch — so it is NOT folded into the other members.
+    // Loot tier biasing deliberately ignores this — see LootTableEscalationPatch
+    // — so it is NOT folded into the other members.
     public bool Active { get; }
 
     // Uncapped scalar, as it drives loot tiers and dev display.
     public int RawScalar { get; }
 
-    // Scalar after the enemy-scaling cap. This is the one every enemy-pressure
-    // calculation should use: the raw value keeps climbing all run, but enemy
-    // pressure has to plateau or a deep run spawns unbounded networked ships.
+    // Scalar after the enemy-scaling cap. Every enemy-pressure calculation should
+    // use this one, not RawScalar — otherwise a deep run spawns unbounded ships.
     public int Scalar { get; }
 
     public float StatRate { get; }
@@ -46,21 +40,17 @@ public readonly struct EscalationIntensity
         TerminusConfig.StatScalarPerJump,
         TerminusConfig.DensityScalarPerJump);
 
-    // The early-exit every enemy-scaling path shares: dormant runs and a
-    // zero scalar both mean "leave vanilla alone".
     public bool AffectsEnemies => Active && Scalar > 0;
 
-    // Fractional HP/damage bonus. Checked against zero separately from
-    // AffectsEnemies because a zero or negative RATE also means no-op, and
-    // applying a zero-value StatMod would register a modifier for nothing.
+    // Checked separately from AffectsEnemies: a zero/negative rate is also a
+    // no-op, and applying a zero-value StatMod would register a modifier for nothing.
     public float StatBonus => Scalar * StatRate;
 
     public float StatMultiplier => 1f + StatBonus;
 
     public float DensityMultiplier => 1f + Scalar * DensityRate;
 
-    // Spawner intensity scaled for the current pressure. Returns `requested`
-    // untouched while dormant, so callers can apply it unconditionally.
+    // Returns `requested` untouched while dormant, so callers can apply unconditionally.
     public int ScaleDensity(int requested) =>
         Active ? EnemyScalingHelpers.ScaleIntensity(requested, Scalar, DensityRate) : requested;
 }

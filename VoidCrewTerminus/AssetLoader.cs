@@ -22,43 +22,34 @@ using VoidCrewTerminus.Forge;
 
 namespace VoidCrewTerminus;
 
-// Loads this mod's asset bundles.
-//
-// The bundles use the ".terminus" extension rather than ".metem" on purpose: the
-// game's RuntimeAssetLoadingService detects BepInEx via the doorstop command line
-// and auto-loads every *.metem under the plugins directory. That auto-load would
-// race ours ("AssetBundle already loaded") and shove the module prefab through the
-// game's converter, which can't handle it ("Failed to convert runtime asset ...").
-// A private extension keeps this mod the bundle's sole owner. If we ever ship
-// assets the game CAN convert on its own (RuntimeCarryable-style carryables or
-// cosmetics), those belong in a real *.metem that this loader must NOT touch.
+// Bundles use ".metem_ext" rather than ".metem": the game auto-loads every
+// *.metem under the plugins directory via RuntimeAssetLoadingService, which
+// would race this loader and feed our custom prefab through its converter
+// (which can't handle it). Assets the game's converter CAN handle belong in a
+// real *.metem instead.
 public class AssetLoader
 {
-    // Module-cell prefabs extracted from our bundles, keyed by prefab name.
-    // The game's RuntimeAssetConverter only understands two prefab shapes —
-    // carryables (CarryableBaseAsset) and ship cosmetics (PlayerShipVisuals).
-    // Anything else (our UpgradeForgeModuleCell) would fail conversion, so those
-    // prefabs are kept mod-side and instantiated by our own code instead.
-    // Also holds the BuildBox template once EnsureBuildBoxTemplateReady builds
-    // one (see that method) — that entry is a clone of a live vanilla donor, not
-    // a bundle asset, so it carries no VoidCrewAsset marker.
+    // Module-cell prefabs kept mod-side, keyed by prefab name: the game's
+    // RuntimeAssetConverter only understands carryables and ship cosmetics, so
+    // anything else (our UpgradeForgeModuleCell) must be instantiated by our own
+    // code instead. Also holds the BuildBox template once EnsureBuildBoxTemplateReady
+    // builds one — a clone of a live vanilla donor, not a bundle asset, so it
+    // carries no VoidCrewAsset marker.
     private static readonly Dictionary<string, GameObject> _modulePrefabs = new();
 
     // Bundles this assembly loaded, for hot-reload teardown.
     private static readonly List<AssetBundle> _loadedBundles = new();
 
-    // The GUID the export tool stamped onto the BuildBox bundle prefab's
-    // VoidCrewAsset marker — captured at LoadBundle time, but no longer used to
-    // register that prefab's own SHAPE (see EnsureBuildBoxTemplateReady for why).
-    // It's still the stable identity everything else (CellModule.BuildBoxRef,
-    // BossDefeatHook's care package payload, RuntimeAssetsRegister) keys off.
+    // GUID the export tool stamped onto the BuildBox bundle prefab's VoidCrewAsset
+    // marker, captured at LoadBundle time. No longer used to register that prefab's
+    // own shape (see EnsureBuildBoxTemplateReady) but still the stable identity
+    // other code (CellModule.BuildBoxRef, BossDefeatHook, RuntimeAssetsRegister)
+    // keys off.
     private static GUIDUnion? _buildBoxGuid;
 
-    // The BuildBox marker prefab's own authored VoidCrewAsset text — captured at
-    // LoadBundle time (see LoadBundle's BuildBoxPrefabName branch), since the
-    // marker GameObject itself is discarded right after. EnsureBuildBoxTemplateReady
-    // prefers these over the donor's own ContextInfo when building the crate's
-    // hover text.
+    // The BuildBox marker prefab's authored Name/Description/Icon, captured at
+    // LoadBundle time before the marker GameObject itself is discarded.
+    // EnsureBuildBoxTemplateReady prefers these over the donor's own flavor text.
     private static string _buildBoxOwnName;
     private static string _buildBoxOwnDescription;
     private static Sprite _buildBoxOwnIcon;
@@ -66,11 +57,10 @@ public class AssetLoader
     public static GameObject GetModulePrefab(string name) =>
         _modulePrefabs.TryGetValue(name, out var prefab) ? prefab : null;
 
-    // Hot-reload teardown (ScriptEngine): release the bundle file handles so the
-    // reloaded assembly can LoadFromFile again. Unload(false) keeps already-created
-    // assets alive — live modules, registered prefabs and materials keep working;
-    // only the bundle handle is freed. RuntimeAssetsRegister entries are left in
-    // place: re-registration is skipped by the HasAsset guard on reload.
+    // Hot-reload teardown: release bundle handles so LoadFromFile can run again.
+    // Unload(false) keeps already-created assets alive (live modules/materials
+    // keep working); only the handle is freed. RuntimeAssetsRegister entries stay
+    // in place — re-registration is skipped by the HasAsset guard on reload.
     public static void UnloadBundles()
     {
         foreach (var bundle in _loadedBundles)
@@ -123,9 +113,8 @@ public class AssetLoader
     }
 
     // Splits bundle content between the game's RuntimeAssets pipeline (carryables,
-    // cosmetics, scriptable objects) and our own module-prefab registry. The bundle
-    // is intentionally never unloaded — both converted assets and extracted prefabs
-    // keep referencing its content.
+    // cosmetics, scriptable objects) and our own module-prefab registry. Never
+    // unloaded — converted assets and extracted prefabs keep referencing its content.
     private static void LoadBundle(string filepath)
     {
         var bundle = AssetBundle.LoadFromFile(filepath);
@@ -155,21 +144,19 @@ public class AssetLoader
             {
                 if (go.name == UpgradeForgeBehavior.BuildBoxPrefabName)
                 {
-                    // This bundle-authored placeholder is never grafted or
-                    // instantiated as-is anymore — see EnsureBuildBoxTemplateReady
-                    // for why (it never got connected to a ship's simulated
-                    // physics, no matter what was grafted onto it; a live vanilla
-                    // donor clone is used instead). Only its stamped GUID matters,
-                    // as the stable identity the donor-derived template gets
-                    // registered under.
+                    // This placeholder is never instantiated directly — see
+                    // EnsureBuildBoxTemplateReady (grafted components never
+                    // connected to the ship's simulated physics). Only its
+                    // stamped GUID is used, as the identity the donor-derived
+                    // template gets registered under.
                     if (!string.IsNullOrEmpty(vca.AssetGuid))
                         _buildBoxGuid = new GUIDUnion(vca.AssetGuid);
                     else
                         BepinPlugin.Log.LogError($"[AssetLoader] BuildBox prefab '{go.name}' has no AssetGuid — re-export the bundle (the export tool stamps it).");
                     // The marker GameObject itself is dropped (never added to
-                    // _modulePrefabs), but its Unity-authored Name/Description/Icon
-                    // are still worth keeping — EnsureBuildBoxTemplateReady prefers
-                    // them over the donor's own flavor text.
+                    // _modulePrefabs); its authored Name/Description/Icon are kept
+                    // since EnsureBuildBoxTemplateReady prefers them over the
+                    // donor's own flavor text.
                     _buildBoxOwnName = vca.Name;
                     _buildBoxOwnDescription = vca.Description;
                     _buildBoxOwnIcon = vca.Icon;
@@ -188,15 +175,13 @@ public class AssetLoader
         LinkForgeBuildBoxRef();
     }
 
-    // AssetBundle-loaded materials reference a shader *copy* that wasn't compiled
-    // with the same keyword/variant set as the one baked into the player build —
-    // a well-known Unity/HDRP AssetBundle pitfall. The material's properties are
-    // all correct, but it renders solid black under any light. RuntimeAssets'
-    // own PlayerShipVisualsLoader hits the same issue for bundle-loaded ship
-    // cosmetics and fixes it by re-resolving each material's shader by name
-    // against the live build; the game's RuntimeAssetConverter never applies
-    // that fix to module prefabs, and neither did we until now. Runs on
-    // sharedMaterials since this operates on the prefab asset, not an instance.
+    // AssetBundle-loaded materials reference a shader copy with a different
+    // keyword/variant set than the one baked into the player build — a known
+    // Unity AssetBundle pitfall that renders them solid black under any light.
+    // Re-resolve each shader by name against the live build (the same fix
+    // RuntimeAssets' PlayerShipVisualsLoader applies for bundle-loaded ship
+    // cosmetics, but the game's converter never applies to module prefabs).
+    // Uses sharedMaterials since this runs on the prefab asset, not an instance.
     private static void RelinkBundleShaders(GameObject prefab)
     {
         foreach (var rend in prefab.GetComponentsInChildren<Renderer>(true))
@@ -325,18 +310,13 @@ public class AssetLoader
 
     private static GUIDUnion? _donorBuildBoxGuid;
 
-    // Any live vanilla module's own BuildBox guid — a fully-real, correctly
-    // wired vanilla item (physics, simulated-platform connection, materials,
-    // everything). EnsureBuildBoxTemplateReady clones this instead of
-    // instantiating our own custom-grafted prefab (see git history — that
-    // prefab never got its Rigidbody connected into MovingSpacePlatform's
-    // simulated PhysicsScene, so it fell through the ship forever; root cause
-    // never pinned down, this sidesteps it entirely by using a real donor
-    // instead of reconstructing one component-by-component).
-    // Cached after the first successful lookup — this is a one-time scan, not a
-    // per-spawn one (a per-spawn scan of the whole module registry,
-    // TryFindDonorBuildBoxGuid, was the cause of a prior !forgespawn lag spike;
-    // see git history / ForgeSpawnCommand's doc comment for that story).
+    // A live vanilla module's own BuildBox guid — a fully-wired vanilla item
+    // (physics, simulated-platform connection, materials). EnsureBuildBoxTemplateReady
+    // clones this instead of instantiating a custom-grafted prefab, whose Rigidbody
+    // never connected into MovingSpacePlatform's simulated PhysicsScene (it fell
+    // through the ship floor; root cause never pinned down). Cached after the first
+    // lookup — a per-spawn scan of the whole module registry previously caused a
+    // !forgespawn lag spike.
     internal static bool TryFindDonorBuildBoxGuid(out GUIDUnion guid)
     {
         if (_donorBuildBoxGuid.HasValue)
@@ -396,24 +376,17 @@ public class AssetLoader
         return false;
     }
 
-    // Builds the Forge's BuildBox by CLONING a live vanilla donor wholesale and
-    // presetting its moduleRef, rather than grafting components onto our own
-    // bundle-authored placeholder (see git history — that approach never got its
-    // Rigidbody connected into MovingSpacePlatform's simulated PhysicsScene, fell
-    // through the ship floor forever, and — once "fixed" by relabeling moduleRef
-    // on the spawned INSTANCE after the fact instead of before — turned out to
-    // leave the box in a broken half-donor-half-Forge state: BuildBoxActor.Awake
-    // (which sizes/colors the crate AND, evidently, other systems that key off
-    // moduleRef too — no hover label, couldn't be placed or dropped, held wrong)
-    // had already run against the donor's ORIGINAL moduleRef by the time the
-    // relabel happened). Presetting moduleRef on the TEMPLATE, before any real
-    // instance's Awake ever runs, avoids all of that — every spawn starts correct.
+    // Clones a live vanilla donor and presets moduleRef on the TEMPLATE before any
+    // instance's Awake runs. Relabeling moduleRef on the spawned instance after
+    // the fact instead left the box half-donor-half-Forge: BuildBoxActor.Awake and
+    // other moduleRef-keyed systems had already run against the donor's original
+    // ref (no hover label, couldn't be placed/dropped, held wrong).
     //
-    // Deferred rather than run from LoadBundle: that fires at plugin Awake,
-    // before ResourcePaths or any vanilla module instance exists — the same
-    // class of "touched game state before the game set it up" trap as the
-    // PhotonNetwork-at-Awake bug (see CLAUDE.md). Call this before spawning or
-    // looking up the Forge BuildBox guid; idempotent, does the work once.
+    // Deferred rather than run from LoadBundle: that fires at plugin Awake, before
+    // ResourcePaths or any vanilla module instance exists — the same "touched game
+    // state before the game set it up" trap as the PhotonNetwork-at-Awake bug (see
+    // CLAUDE.md). Call this before spawning or looking up the Forge BuildBox guid;
+    // idempotent, does the work once.
     internal static void EnsureBuildBoxTemplateReady()
     {
         EnsureRuntimeAssetsRegisteredInVanillaContainers();
@@ -534,24 +507,14 @@ public class AssetLoader
 
     private static bool _runtimeAssetsRegisteredInVanillaContainers;
 
-    // RegisterModulePrefab only ever registered our prefabs into RuntimeAssetsRegister
-    // (the mod-content registry) — but plenty of vanilla code does naive
-    // Dictionary<GUIDUnion,...> lookups straight into CloneStarObjectContainer
-    // instead, with no fallback to RuntimeAssetsRegister and no null-check on a
-    // miss: ObjectFactory.InstantiateSpaceObjectByGUID (worked around directly in
-    // ForgeSpawnCommand) and, discovered via a live in-game crash, sector map
-    // marker creation (CsObjectReference.IsInstanceOf → GetItem) — which throws a
-    // KeyNotFoundException every RepeatEventScheduler.FixedUpdate tick for a
-    // spawned box, severe enough to abort whatever else that scheduler batch was
-    // doing that frame (the platform/sector connection the box needs to behave
-    // correctly inside the moving ship — observed as "no collider, falls through
-    // the floor" even though the collider is real).
-    //
-    // ResourceAssetContainer<U,T,V> has a first-class, public API for exactly
-    // this case — RegisterRuntimeAsset — so use that instead of chasing every
-    // individual vanilla call site with its own patch/bypass. Deferred like
-    // EnsureBuildBoxTemplateReady: ResourceAssetContainerRegister isn't populated
-    // at plugin Awake.
+    // RegisterModulePrefab only registers into RuntimeAssetsRegister, but plenty of
+    // vanilla code does raw CloneStarObjectContainer lookups with no fallback and no
+    // null-check on a miss — e.g. sector map marker creation (CsObjectReference.
+    // IsInstanceOf → GetItem), which throws KeyNotFoundException every FixedUpdate
+    // tick for a spawned box and aborts that scheduler batch (observed live as "no
+    // collider, falls through the floor" despite a real collider). Register via
+    // ResourceAssetContainer.RegisterRuntimeAsset instead of patching every call
+    // site. Deferred like EnsureBuildBoxTemplateReady: not populated at plugin Awake.
     private static void EnsureRuntimeAssetsRegisteredInVanillaContainers()
     {
         if (_runtimeAssetsRegisteredInVanillaContainers) return;

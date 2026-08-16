@@ -32,14 +32,10 @@ public static class ForgeLabels
 
     // Matches a mark already present at the END of a name: "Mk III", "MK3",
     // "Mk. VII". Anchored so it can only ever strip a trailing mark token.
-    //
     // English-centric by necessity — vanilla's display names live inside asset
-    // bundles and aren't inspectable from the decompiled source. On a localised
-    // name this simply fails to match and we fall through to a plain append,
-    // which may duplicate a mark but can never corrupt the name.
-    // Case-insensitive on purpose: the exact vanilla casing is unknown, and
-    // over-matching is the safe direction — a mark we strip is one we immediately
-    // re-append correctly, whereas a mark we miss gets duplicated.
+    // bundles and aren't inspectable, so a localised name just fails to match and
+    // falls through to a plain append (may duplicate, never corrupts). Case-insensitive
+    // since exact vanilla casing is unknown and over-matching is the safe direction.
     private static readonly Regex _trailingMark =
         new(@"\s*mk\.?\s*([ivxlc]+|\d+)\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
@@ -118,17 +114,13 @@ public static class ForgeLabels
         return sb.ToString();
     }
 
-    // The block appended to a relic tooltip.
-    //
     // "Forge Tier" is deliberately NOT called rarity: the relic already shows a
-    // vanilla RarityType, which is authored on different criteria and has a
-    // different shape (it includes Epic). What this value actually governs is how
-    // many perk slots a commit can unlock, so it's labelled for that.
+    // vanilla RarityType (different criteria, different shape — it includes Epic).
+    // This value instead governs how many perk slots a commit can unlock.
     //
-    // The curse line names the burden with no odds and no hedge. Stating a
-    // probability here would be wrong in the common case anyway: only the FIRST
-    // cursed relic in a commit contributes its burden, and a per-relic tooltip
-    // can't see what else is loaded in the tube.
+    // The curse line states no odds: only the FIRST cursed relic in a commit
+    // contributes its burden, and a per-relic tooltip can't see what else is
+    // loaded in the tube, so a probability here would often be wrong.
     public static string BuildRelicBody(RelicTier tier, BurdenType curse)
     {
         var sb = new System.Text.StringBuilder();
@@ -137,8 +129,6 @@ public static class ForgeLabels
             sb.Append($"\n<color={BurdenColor}><b>⚠ CURSED: {BurdenName(curse)}</b></color>");
         return sb.ToString();
     }
-
-    // ---- commit results --------------------------------------------------
 
     // Human-readable perk-roll summary. Reads Name / Description straight off the
     // outcome's own PerkDefinition rather than looking the id up in PerkPool —
@@ -157,17 +147,12 @@ public static class ForgeLabels
         return "no roll";
     }
 
-    // The notification lines for a commit attempt, in display order.
-    //
-    // Both commit entry points render through here — the in-world commit button
-    // (UpgradeForgeBehavior.DoCommit) and the !forgecommit dev command. They
-    // previously carried separate copies of this switch which had already drifted
-    // apart on every single arm ("This module is already at L10." against
-    // "Cannot commit: module already at L10."), which is exactly the vocabulary
-    // split this module exists to prevent.
+    // The notification lines for a commit attempt, in display order. Both commit
+    // entry points render through here — the in-world commit button and the
+    // !forgecommit dev command — so their wording can't drift apart.
     //
     // `relicsRemaining` is the Forge's relic count AFTER the attempt. Nothing is
-    // consumed on a failure, so on those arms it is equally the count that was
+    // consumed on a failure, so on those arms it's equally the count that was
     // there all along — which is what InsufficientRelics needs to report.
     public static IReadOnlyList<string> DescribeCommit(
         CommitOutcome outcome, int currentLevel, int relicsRemaining)

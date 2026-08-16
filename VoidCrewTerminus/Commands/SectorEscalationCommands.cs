@@ -13,9 +13,6 @@ using VoidManager.Utilities;
 
 namespace VoidCrewTerminus.Commands;
 
-// Phase 6 dev commands — inspect / manipulate DifficultyScalar and dump the
-// current sector's reshaped loot pool. Gated on EnableDevMode.
-
 internal class DifficultyCommand : PublicCommand
 {
     public override string[] CommandAliases() => new[] { "difficulty" };
@@ -111,10 +108,8 @@ internal class LootDumpCommand : PublicCommand
             return;
         }
 
-        // Show what the last reshape actually did (before→after tier counts + ceiling).
-        // This is the direct "is loot gating working" signal: at 0 bosses you'll see
-        // Legendaries/Rares collapse to Common; at 2 bosses the ceiling is Legendary
-        // so it reports no downgrades — which is correct, not a bug.
+        // At 0 bosses you'll see Legendaries/Rares collapse to Common; at 2 bosses the
+        // ceiling is Legendary so it reports no downgrades — that's correct, not a bug.
         Messaging.Notification($"Reshape: {Patches.LootTableEscalationPatch.LastReshapeSummary}");
 
         int recognizedTotal = 0;
@@ -152,10 +147,9 @@ internal class LootDumpCommand : PublicCommand
             Messaging.Notification($"[{kv.Key}] {string.Join(", ", parts)}");
         }
 
-        // Name-match diagnostic: if RelicTierData recognizes ZERO entries, the key
-        // format almost certainly doesn't match CraftableItemRef.Filename and loot
-        // gating is a silent no-op. Print the raw filenames so the mismatch (and the
-        // real names to fix the map with) is visible in one command.
+        // If RelicTierData recognizes zero entries, the key format almost certainly
+        // doesn't match CraftableItemRef.Filename and loot gating is a silent no-op —
+        // print the raw filenames so the mismatch is visible.
         if (recognizedTotal == 0)
             Messaging.Notification("WARNING: 0 relics recognized by RelicTierData — loot gating is likely a NO-OP (name mismatch). Raw sample names below:");
         if (unrecognizedSamples.Count > 0)

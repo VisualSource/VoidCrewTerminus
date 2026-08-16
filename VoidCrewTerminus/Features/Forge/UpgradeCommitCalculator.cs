@@ -21,7 +21,7 @@ public readonly struct CommitRequest
     public int CurrentLevel { get; }
     public IReadOnlyList<Loot.RelicTier> RelicTiers { get; }        // FIFO — position 0 is consumed first
     public IReadOnlyList<string> RelicNames { get; }                // FIFO, parallel to RelicTiers — used for signature lookup
-    public IReadOnlyList<BurdenType> RelicCursedBurden { get; }     // FIFO, parallel to RelicTiers — Phase 7-C. None = not cursed. Non-None = the burden baked at spawn.
+    public IReadOnlyList<BurdenType> RelicCursedBurden { get; }     // FIFO, parallel to RelicTiers. None = not cursed; otherwise the burden baked at spawn.
     public ForgeCategory Category { get; }
     public IReadOnlyList<string> PerkSlots { get; }                 // current slot contents; null/empty = free
 
@@ -59,10 +59,8 @@ public readonly struct CommitOutcome
     public float RollChance { get; }
     public bool RollAttempted { get; }
 
-    // Burden roll (Phase 7-C). Independent of the perk roll. When any consumed
-    // relic is cursed, an independent chance decides whether the module also
-    // gets a burden. AppliedBurden = None means no burden was rolled or the roll
-    // failed; anything else is the specific burden to add to the snapshot.
+    // Independent of the perk roll. AppliedBurden = None means no burden was
+    // rolled or the roll failed; anything else is the burden to add to the snapshot.
     public BurdenType AppliedBurden { get; }
 
     private CommitOutcome(
@@ -127,20 +125,18 @@ public static class UpgradeCommitCalculator
 
         var perkOutcome = RollPerk(newLevel, relicsConsumed, bestTier, request, nextRandom);
 
-        // Independent burden roll: if any consumed relic is cursed, decide
-        // whether the module gets a burden. Perk outcome and burden outcome
-        // are orthogonal — a commit can land a perk with no burden, fire a
-        // burden with no perk, both, or neither.
+        // Perk and burden outcomes are orthogonal — a commit can land a perk with
+        // no burden, fire a burden with no perk, both, or neither.
         var burden = RollBurden(relicsConsumed, request, nextRandom);
         return WithBurden(perkOutcome, burden);
     }
 
     private static BurdenType RollBurden(int relicsConsumed, CommitRequest request, Func<float> nextRandom)
     {
-        // Curse identity is fixed at spawn — each cursed relic already carries
-        // a specific burden type (baked from its BurdenAffinity when the spawn
-        // roll passed). Walk consumed relics in FIFO order and grab the first
-        // cursed one's baked burden. Consistent with signature FIFO tie-break.
+        // Curse identity is fixed at spawn — each cursed relic already carries a
+        // specific burden type. Walk consumed relics in FIFO order and grab the
+        // first cursed one's baked burden (consistent with the signature FIFO
+        // tie-break below).
         int scanUpTo = Math.Min(relicsConsumed, request.RelicCursedBurden.Count);
         BurdenType baked = BurdenType.None;
         for (int i = 0; i < scanUpTo; i++)
@@ -178,10 +174,8 @@ public static class UpgradeCommitCalculator
             return CommitOutcome.Success(newLevel, relicsConsumed, bestTier,
                 rolledPerk: null, targetSlot: -1, rollChance: chance, rollAttempted: true);
 
-        // Signature priority: walk consumed relics in FIFO order, return the first
-        // signature perk we find. Multi-relic commits use the earliest flagship
-        // relic's signature — matches the FIFO consumption order and keeps the
-        // rule simple to reason about.
+        // Multi-relic commits use the earliest flagship relic's signature —
+        // matches the FIFO consumption order and keeps the rule simple to reason about.
         var signaturePerk = PickSignature(relicsConsumed, request, nextRandom);
         if (signaturePerk != null)
             return CommitOutcome.Success(newLevel, relicsConsumed, bestTier,
@@ -200,10 +194,9 @@ public static class UpgradeCommitCalculator
             rolledPerk: perk, targetSlot: slot, rollChance: chance, rollAttempted: true);
     }
 
-    // Signature lookup: for each consumed relic in FIFO order, check if it has
-    // authored signature perks. First flagship wins. Returns null if no signatures
-    // exist for any consumed relic, in which case the caller falls back to the
-    // category pool.
+    // For each consumed relic in FIFO order, checks for authored signature perks;
+    // first flagship wins. Returns null if none exist, and the caller falls back
+    // to the category pool.
     private static PerkDefinition PickSignature(
         int relicsConsumed, CommitRequest request, Func<float> nextRandom)
     {

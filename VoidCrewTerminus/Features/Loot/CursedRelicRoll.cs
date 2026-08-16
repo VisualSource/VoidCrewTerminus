@@ -21,8 +21,6 @@ namespace VoidCrewTerminus.Loot;
 // certainty.
 public static class CursedRelicRoll
 {
-    // Compute the final curse chance for a relic. Adds the per-relic modifier
-    // and the scalar-driven bonus to the base, then clamps to [0, maxChance].
     public static float ChanceFor(
         RelicTierEntry entry,
         int difficultyScalar,
@@ -37,7 +35,6 @@ public static class CursedRelicRoll
         return total > ceiling ? ceiling : total;
     }
 
-    // Given a chance and a random draw (0..1), decide cursed / not.
     public static bool ShouldBeCursed(float chance, float nextRandom) =>
         chance > 0f && nextRandom < chance;
 }

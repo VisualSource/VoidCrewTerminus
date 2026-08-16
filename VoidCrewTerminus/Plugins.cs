@@ -29,10 +29,9 @@ namespace VoidCrewTerminus
             LoadResources();
         }
 
-        // Unity magic method — runs when ScriptEngine (BepInEx.Debug) destroys the
-        // plugin object on F6 reload. Everything global this plugin touched must be
-        // undone here, or the OLD assembly keeps patches/subscriptions alive next
-        // to the freshly loaded copy.
+        // Runs when ScriptEngine (BepInEx.Debug) destroys the plugin object on F6
+        // reload. Everything global this plugin touched must be undone here, or the
+        // OLD assembly keeps patches/subscriptions alive next to the freshly loaded copy.
         [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0051:Remove unused private members", Justification = "Unity magic method")]
         private void OnDestroy()
         {
@@ -88,9 +87,9 @@ namespace VoidCrewTerminus
                 var asm = Assembly.GetExecutingAssembly();
                 AccessTools.Method(handler, "DiscoverCommands")?.Invoke(null, new object[] { asm, MyPluginInfo.USERS_PLUGIN_NAME });
                 AccessTools.Method(handler, "DiscoverPublicCommands")?.Invoke(null, new object[] { asm, MyPluginInfo.USERS_PLUGIN_NAME });
-                // ModMessages are discovered on the same chainloader scan; under
-                // ScriptEngine self-register them too so MP net code is reachable.
-                // ModMessageHandler is internal, so reach it by reflection.
+                // ModMessages are discovered on the same chainloader scan; self-register
+                // them too under ScriptEngine so MP net code is reachable. Internal, so
+                // reached by reflection.
                 var mmHandler = AccessTools.TypeByName("VoidManager.ModMessages.ModMessageHandler");
                 AccessTools.Method(mmHandler, "DiscoverModMessages")?.Invoke(null, new object[] { asm, Info });
             }

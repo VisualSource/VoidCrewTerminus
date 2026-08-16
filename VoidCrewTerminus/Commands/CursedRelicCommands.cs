@@ -10,9 +10,6 @@ using VoidManager.Utilities;
 
 namespace VoidCrewTerminus.Commands;
 
-// Phase 7-B dev commands — inspect / manipulate per-relic cursed state.
-// Gated on EnableDevMode.
-
 internal class CursedStatusCommand : PublicCommand
 {
     public override string[] CommandAliases() => new[] { "cursedstatus" };
@@ -28,11 +25,8 @@ internal class CursedStatusCommand : PublicCommand
         if (player == null) { Messaging.Notification("No local player."); return; }
         var origin = player.transform.position;
 
-        // Phase 8-B: cursed state is now mirrored from the host to clients, so this
-        // reads correctly on a client too. (Outcomes are still host-authoritative —
-        // 8-C — but display is accurate everywhere.)
-
-        // The relic in your hands is almost always the one you're asking about.
+        // Cursed state is mirrored host→client, so this reads correctly on a client
+        // too (commit outcomes remain host-authoritative).
         var held = player.Carrier != null ? player.Payload : null;
         bool heldIsRelic = held != null
             && RelicTierData.TryGet(RelicTierData.NormalizeName(held.gameObject.name), out _);
@@ -64,8 +58,6 @@ internal class CursedStatusCommand : PublicCommand
         }
     }
 
-    // One relic's full cursed picture: tier, actual cursed flag + baked burden,
-    // and the chance breakdown that produced it.
     private static string Describe(CarryableObject co)
     {
         float baseChance = TerminusConfig.BaseCurseChance;
@@ -135,8 +127,6 @@ internal class ForceCursedCommand : PublicCommand
         if (player == null) { Messaging.Notification("No local player."); return; }
         var origin = player.transform.position;
 
-        // Prefer the relic in your hands — that's the one you mean. Fall back to
-        // the nearest on the floor only when you're not holding one.
         var held = player.Carrier != null ? player.Payload : null;
         bool heldIsRelic = held != null
             && RelicTierData.TryGet(RelicTierData.NormalizeName(held.gameObject.name), out _);
@@ -154,8 +144,7 @@ internal class ForceCursedCommand : PublicCommand
             return;
         }
 
-        // !forcecursed is a local dev override — it is NOT synced client→host
-        // (only the host's spawn roll is authoritative and broadcast). Forcing it
+        // !forcecursed is a local dev override, NOT synced client→host — forcing it
         // on a client changes only that client's local marker; the host, which
         // decides commit outcomes, won't see it.
         if (!Photon.Pun.PhotonNetwork.IsMasterClient)

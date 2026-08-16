@@ -75,10 +75,10 @@ public static class CsTagRegistry
         }
     }
 
-    // Mod-authored burden tag: stamped on modules that carry a RandomShutoff burden
-    // (Phase 7-C). Following the ForgeUpgraded pattern — a zero-value marker
-    // StatMod in BuildMods projects this tag onto the module for game-visible
-    // queries ("is this module burdened?" as a one-liner).
+    // Mod-authored burden tag: stamped on modules that carry a RandomShutoff burden,
+    // following the ForgeUpgraded pattern — a zero-value marker StatMod in BuildMods
+    // projects this tag onto the module for game-visible queries ("is this module
+    // burdened?" as a one-liner).
     public static CsTag BurdenRandomShutoff
     {
         get
@@ -90,7 +90,6 @@ public static class CsTagRegistry
         }
     }
 
-    // Map a BurdenType enum to its CsTag. Returns null for None.
     public static CsTag BurdenTagFor(BurdenType burden) => burden switch
     {
         BurdenType.RandomShutoff => BurdenRandomShutoff,

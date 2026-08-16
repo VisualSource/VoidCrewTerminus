@@ -18,11 +18,12 @@ namespace VoidCrewTerminus.Patches;
 // Binds the runtime UpgradeForgeBehavior to Forge module instances as they build,
 // and routes in-world clicks on the Forge's interactables into it.
 //
-// The prefab (Assets/voidcrewterminus.metem → UpgradeForgeModuleCell.prefab) is loaded
-// through the RuntimeAssets pipeline and carries only named anchor transforms
-// (RelicTubeTarget ×6, InputTarget, optional CommitTarget) — no game components.
-// When the crew constructs it via a BuildBox, the postfixes below attach a live
-// UpgradeForgeBehavior and spawn ForgeInteractable click targets on the anchors.
+// The prefab (Assets/voidcrewterminus.metem → UpgradeForgeModuleCell.prefab) is
+// loaded through the RuntimeAssets pipeline and carries only named anchor
+// transforms (RelicTubeTarget x6, InputTarget, optional CommitTarget) — no game
+// components. When the crew constructs it via a BuildBox, the postfixes below
+// attach a live UpgradeForgeBehavior and spawn ForgeInteractable click targets
+// on the anchors.
 [HarmonyPatch(typeof(BuildBox), nameof(BuildBox.BuildModule))]
 internal static class ForgeBuildBoxAttachBehavior
 {
@@ -30,11 +31,11 @@ internal static class ForgeBuildBoxAttachBehavior
 }
 
 // Vanilla BuildBox.BuildModule resolves moduleRef through the CloneStarObjectContainer
-// and dereferences the resulting def — which is null for runtime-registered assets
-// like the Forge, so it would NRE right after instantiating. Runtime assets have
-// their own factory path (RuntimeAssetsRegister-backed); take it when the box's
-// moduleRef is runtime. The vanilla flow is untouched for every normal module, and
-// the BuildModule postfixes (level restore, behavior attach) still run.
+// and dereferences the resulting def — null for runtime-registered assets like the
+// Forge, so it would NRE right after instantiating. Runtime assets get their own
+// factory path (RuntimeAssetsRegister-backed) instead when moduleRef.IsRuntime;
+// every normal module still takes the vanilla flow, and the BuildModule postfixes
+// (level restore, behavior attach) still run either way.
 [HarmonyPatch(typeof(BuildBox), nameof(BuildBox.BuildModule))]
 internal static class ForgeBuildBoxRuntimeModulePatch
 {
@@ -64,15 +65,12 @@ internal static class ForgeCompositeBuildBoxAttachBehavior
 }
 
 // CarryableInteract.StartInteraction is the game's single dispatch point for the
-// player's primary interact input: it receives whatever AbstractInteractable the
-// RaycastHandler currently targets, both empty-handed and while carrying. When the
+// player's primary interact input, both empty-handed and while carrying. When the
 // target is one of our ForgeInteractables we take over completely (insert relic /
 // load box) and skip the vanilla flow. Everything else — including grabbing docked
-// relics or the docked BuildBox straight back out of the Forge, AND the Commit
-// button (ForgeCommitInteractable, held via a different vanilla input pathway
-// entirely — EnvironmentInteract, not this Ability) — stays vanilla, which for a
-// non-Grabbable/non-SocketInteractable target is a harmless no-op; UpgradeForgeBehavior.
-// Update reconciles state afterwards.
+// items back out of the Forge, and the Commit button (held via a different input
+// pathway, EnvironmentInteract, not this Ability) — stays vanilla; UpgradeForgeBehavior.Update
+// reconciles state afterwards.
 [HarmonyPatch(typeof(CarryableInteract), nameof(CarryableInteract.StartInteraction))]
 internal static class ForgeCarryableInteractPatch
 {
@@ -95,9 +93,9 @@ internal static class ForgeCarryableInteractPatch
 
 internal static class ForgeAttachHelper
 {
-    // MovingSpacePlatform.colliderObjects — private, reflected only to tell (in
-    // the log) whether AddColliderObject below actually did anything, or found
-    // the module already registered. See RegisterShipPlatformCollision.
+    // MovingSpacePlatform.colliderObjects — private; reflected only so
+    // RegisterShipPlatformCollision can log whether AddColliderObject actually
+    // did something or found the module already registered.
     private static readonly FieldInfo _colliderObjectsField =
         AccessTools.Field(typeof(MovingSpacePlatform), "colliderObjects");
 
@@ -106,11 +104,8 @@ internal static class ForgeAttachHelper
         if (module == null) return;
         if (!IsForgeModule(module)) return;
 
-        // Stamp the mod's Forge identity tag (so Forges are tag-checkable instead
-        // of name-matched) and the vanilla Utility category tag (the Forge presents
-        // as a utility module to anything filtering by module category). The stat
-        // collection snapshots CsTags during Awake — before this postfix runs — so
-        // resync it through the game's own OverrideInitTags after stamping.
+        // The stat collection snapshots CsTags during Awake, before this postfix
+        // runs, so newly stamped tags must be resynced via OverrideInitTags.
         bool tagsChanged = EnsureTag(module, CsTagRegistry.ForgeModule);
         tagsChanged |= EnsureTag(module, CsTagRegistry.Utility);
         if (tagsChanged)
@@ -127,19 +122,13 @@ internal static class ForgeAttachHelper
         RegisterShipPlatformCollision(module);
     }
 
-    // Solid geometry only blocks the player "for free"; a relic or the BuildBox
-    // riding the ship is an ISimulatedBody whose physics runs entirely inside the
-    // ship's OWN PhysicsScene (MovingSpacePlatform), which mirrors in only the
-    // colliders explicitly handed to AddColliderObject — normally done for a
-    // freshly built module by CellModule.OnPhotonInstantiate -> BuildSocket.
-    // SetModule, which should fire for us too since we graft the real CellModule
-    // class and thread the same instantiation data as vanilla BuildModule. But
-    // this mod's whole existence is a list of things a bundle-loaded module turns
-    // out not to get for free (CellModule, PowerDrain, OcclusionNodes, PhotonView
-    // — see GraftModuleComponents), so rather than trust that chain blind, this
-    // registers defensively and logs which case it hit. AddColliderObject is
-    // idempotent (TryAdd, logs rather than throws on a duplicate), so calling it
-    // whether or not vanilla's own path already did is safe either way.
+    // A module riding the ship only gets solid-geometry collision through
+    // MovingSpacePlatform's own PhysicsScene, which mirrors in only the colliders
+    // explicitly handed to AddColliderObject (normally done by CellModule.OnPhotonInstantiate
+    // -> BuildSocket.SetModule). Since a bundle-loaded module has repeatedly turned
+    // out not to get things vanilla modules get for free (see GraftModuleComponents),
+    // this registers defensively rather than trusting that chain blind.
+    // AddColliderObject is idempotent, so calling it regardless is safe.
     private static void RegisterShipPlatformCollision(CellModule module)
     {
         var platform = module.GetComponentInParent<MovingSpacePlatform>();
@@ -172,12 +161,10 @@ internal static class ForgeAttachHelper
         module.CsTags != null &&
         System.Array.IndexOf(module.CsTags, CsTagRegistry.ForgeModule) >= 0;
 
-    // Identify the Forge module. Tag check first (any instance stamped above);
-    // otherwise fall back to matching the prefab name. The name bootstrap cannot be
-    // replaced by a tag: the metem prefab carries only the VoidCrewAsset marker and
-    // anchor transforms — game CsTag assets can't be serialized into it, so a fresh
-    // build's CellModule arrives untagged. The vanilla "(Clone)" suffix is stripped
-    // so we accept both "UpgradeForgeModuleCell" and "UpgradeForgeModuleCell(Clone)".
+    // Tag check first; otherwise fall back to the prefab name. The name fallback
+    // can't be replaced by a tag-only check: the metem prefab carries only the
+    // VoidCrewAsset marker and anchor transforms — game CsTag assets can't be
+    // serialized into it, so a fresh build's CellModule arrives untagged.
     private static bool IsForgeModule(CellModule module)
     {
         if (module == null) return false;

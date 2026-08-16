@@ -6,9 +6,6 @@ using VoidManager.Utilities;
 
 namespace VoidCrewTerminus.Commands;
 
-// Phase 4 dev commands — inspect perk state and statistically verify roll math.
-// All gated on TerminusConfig.EnableDevMode.
-
 internal class PerksCommand : PublicCommand
 {
     public override string[] CommandAliases() => new[] { "perks" };

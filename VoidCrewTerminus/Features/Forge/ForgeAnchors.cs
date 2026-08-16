@@ -4,10 +4,9 @@ namespace VoidCrewTerminus.Forge;
 
 // The prefab authoring contract, and the only place its names are spelled.
 //
-// The shipped prefab (Assets/voidcrewterminus.metem → UpgradeForgeModuleCell.prefab)
-// carries named anchor transforms and nothing else — game components cannot be
-// serialized into a metem bundle — so every optional embellishment an anchor can
-// carry is a plain Unity object found by name at runtime:
+// Game components cannot be serialized into a metem bundle, so the shipped
+// prefab carries only named anchor transforms — every optional embellishment
+// an anchor can carry is a plain Unity object found by name at runtime:
 //
 //   ClickTarget — a Collider anywhere below the anchor becomes the click region,
 //                 in place of the box UpgradeForgeBehavior would otherwise generate.
@@ -15,17 +14,15 @@ namespace VoidCrewTerminus.Forge;
 //                 anchor (ForgeInteractable.Highlighted).
 //   Filled      — a disabled child shown while an item is docked there (AnchorDock).
 //
-// All three are optional: a prefab with none of them still works, it just looks
-// plainer. Which is why nothing here warns when a name goes unfound.
+// All three are optional — nothing here warns when a name goes unfound.
 internal static class ForgeAnchors
 {
     internal const string ClickTargetName = "ClickTarget";
     internal const string HighlightName = "Highlight";
     internal const string FilledName = "Filled";
 
-    // Depth-first name search through an anchor's subtree, so authored helpers may
-    // sit anywhere below the anchor — e.g. a duplicated FBX node kept inside a
-    // wrapper to preserve its transform chain.
+    // Depth-first so authored helpers may sit anywhere below the anchor — e.g. a
+    // duplicated FBX node kept inside a wrapper to preserve its transform chain.
     internal static Transform FindDeep(Transform root, string name)
     {
         if (root == null) return null;
@@ -39,7 +36,6 @@ internal static class ForgeAnchors
         return null;
     }
 
-    // Toggle the fill indicator while something is docked on the anchor.
     internal static void SetFilled(Transform anchor, bool filled)
     {
         var indicator = FindDeep(anchor, FilledName);

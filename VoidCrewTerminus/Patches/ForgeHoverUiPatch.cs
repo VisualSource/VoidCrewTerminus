@@ -13,22 +13,19 @@ namespace VoidCrewTerminus.Patches;
 // Surfaces mod state (forge level, perks, burdens, relic curse) in the game's
 // hover tooltips.
 //
-// ONE patch point covers all three surfaces. Relics, build boxes and installed
-// modules all descend from AbstractCloneStarObject and all resolve their tooltip
-// through ContextInfoProvider.ContextInfo — which is also the getter
-// ContextInfoDisplay calls for BOTH the world-hover path and the held-carryable
-// path. Patching here means carried and hovered items agree for free.
+// One patch point covers relics, build boxes, and installed modules: all three
+// descend from AbstractCloneStarObject and resolve their tooltip through
+// ContextInfoProvider.ContextInfo, which is also what ContextInfoDisplay calls
+// for both the world-hover and held-carryable paths, so patching here keeps
+// carried and hovered items in sync for free. The getter allocates a fresh
+// ContextInfoViewModel per call, so mutating __result can't accumulate.
 //
-// The getter allocates a fresh ContextInfoViewModel per call (see
-// AbstractCloneStarObject.ContextInfo), so mutating __result cannot accumulate
-// across calls.
-//
-// We deliberately do NOT register a ContextInfoModifier (the game's own extension
-// point) even though vanilla ships two of them. A modifier would contribute a
-// ContinuousRefreshInterval and a DataChanged channel, but everything we display
-// is fixed at commit time, and injecting one needs reflection into a private
-// [SerializeReference] list plus a replay of the Awake-time Init() lifecycle —
-// which would miss objects that already awoke (late joiners, pre-spawned relics).
+// Deliberately not a ContextInfoModifier (the game's own extension point):
+// registering one needs reflection into a private [SerializeReference] list plus
+// a replay of the Awake-time Init() lifecycle, which would miss objects that
+// already awoke (late joiners, pre-spawned relics) — and everything displayed
+// here is fixed at commit time anyway, so the modifier's refresh machinery buys
+// nothing.
 [HarmonyPatch(typeof(ContextInfoProvider), nameof(ContextInfoProvider.ContextInfo), MethodType.Getter)]
 internal static class ForgeHoverUiPatch
 {
@@ -68,16 +65,14 @@ internal static class ForgeHoverUiPatch
         }
     }
 
-    // --- installed module: state lives in the per-CellModule table ---
-
+    // Installed module: state lives in the per-CellModule table.
     private static void ApplyModule(CellModule module, ContextInfoViewModel vm)
     {
         if (!ForgeStateStore.TryGet(module, out var state)) return;
         Decorate(vm, state.Level, state.PerkSlots, state.Burdens);
     }
 
-    // --- loose build box: state lives in the ViewID-keyed snapshot store ---
-
+    // Loose build box: state lives in the ViewID-keyed snapshot store.
     private static void ApplyBox(BuildBox box, ContextInfoViewModel vm)
     {
         if (box.photonView == null) return;
@@ -104,8 +99,7 @@ internal static class ForgeHoverUiPatch
         vm.Body += ForgeLabels.BuildOverlayBody(level, perks, burdens);
     }
 
-    // --- relic: cursed marker on the instance, tier keyed by prefab name ---
-
+    // Relic: cursed marker on the instance, tier keyed by prefab name.
     private static void ApplyRelic(GameObject go, ContextInfoViewModel vm)
     {
         if (!RelicTierData.TryGet(go.name, out var entry)) return;

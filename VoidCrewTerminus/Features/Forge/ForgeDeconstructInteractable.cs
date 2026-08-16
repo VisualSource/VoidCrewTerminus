@@ -13,25 +13,20 @@ namespace VoidCrewTerminus.Forge;
 //
 // Vanilla wires deconstruct through AbstractModuleMediator<T>.InitializeDeconstructButton,
 // which needs BaseModuleMediator + ModuleDeconstructButton + ExtruderLever all present
-// on the prefab. None of those can be authored in the modding SDK (see
-// ForgeCommitInteractable's doc comment — com.hutlihut.void_crew_common exposes no
-// gameplay component types) and none can be runtime-grafted the way flat-data
-// components are, because ExtruderLever needs real geometry and a configured
-// AnimationCurve. But AbstractModuleMediator.OnClickedDeconstructButton turns out to
-// be three plain calls with zero dependency on the Mediator instance itself —
-// Deconstruct.CanRemoveModule / Deconstruct.CanStartDeconstruct (both static) and
-// BuildProcessController.Instance.TryDeconstructModule (singleton, and already fully
-// networked — it RPCs to the master client itself) — so replicating them directly
-// here is simpler AND lower-risk than grafting three more vanilla component types
-// this mod has never exercised.
+// on the prefab — none of which can be authored in the modding SDK or runtime-grafted
+// (ExtruderLever needs real geometry and a configured AnimationCurve). But
+// AbstractModuleMediator.OnClickedDeconstructButton turns out to be three plain calls
+// with zero dependency on the Mediator instance itself — Deconstruct.CanRemoveModule /
+// Deconstruct.CanStartDeconstruct (both static) and
+// BuildProcessController.Instance.TryDeconstructModule (already fully networked, RPCs
+// to the master client itself) — so replicating them directly here is simpler and
+// lower-risk than grafting three more vanilla component types.
 //
-// Visual: rotates VisualHandle (a separate, purely cosmetic mesh part — this
-// component itself sits on DeconstructTrigger, the hand-authored click
-// collider, not on the visual lever) on the Z axis while held, spring-back to
-// 0 on early release. Approximates a lever pull without ExtruderLever's
-// AnimationCurve machinery — good enough for "shows progress, cleanly reverts
-// if you let go." VisualHandle may be null (prefab has no Handle mesh) — then
-// deconstruct still works, just with no visible animation.
+// Visual: rotates VisualHandle (a separate cosmetic mesh part — this component sits
+// on DeconstructTrigger, the click collider, not the visual lever) on the Z axis
+// while held, spring-back to 0 on early release, approximating a lever pull without
+// ExtruderLever's AnimationCurve machinery. VisualHandle may be null (no Handle mesh
+// on the prefab) — deconstruct still works, just with no visible animation.
 public class ForgeDeconstructInteractable : HoldClickerInteractable
 {
     private const float RotateSpeedDegPerSec = 90f;
@@ -67,43 +62,31 @@ public class ForgeDeconstructInteractable : HoldClickerInteractable
 
     // HoldClickerInteractable.StartClick subscribes OnHoldCompleted onto a single
     // GLOBAL InputAction (InputActionReferences.HoldAction) shared by every
-    // Hold-driven interactable in the game, vanilla included, and only
-    // unsubscribes in EndClick() or once the hold completes. This is a real leak
-    // risk on its own (component destroyed mid-hold before EndClick runs), even
-    // though it turned out NOT to be the cause of the "deconstructing any other
-    // module deconstructs the Forge too" report — see Highlighted's doc comment
-    // for the actual root cause. Kept as cheap, harmless belt-and-braces: EndClick()
-    // unconditionally unsubscribes regardless of isClickable state, so calling it
-    // here is always safe, even if already unsubscribed.
+    // Hold-driven interactable in the game, and only unsubscribes in EndClick()
+    // or once the hold completes — a real leak risk if this is destroyed mid-hold
+    // before EndClick runs (turned out NOT to be the cause of the "deconstructing
+    // any other module deconstructs the Forge too" bug — see Highlighted below
+    // for the actual root cause — but kept as cheap, harmless belt-and-braces).
+    // EndClick() unconditionally unsubscribes, so calling it here is always safe.
     public override void OnDestroy()
     {
         base.OnDestroy();
         EndClick();
     }
 
-    // ClickerInteractable.Highlighted (what this would otherwise inherit)
-    // iterates a private outlineObjects[] that only the Unity Inspector ever
-    // populates — null on every Forge interactable, since all of them are
-    // AddComponent'd at runtime with no Inspector data. Calling it threw a
-    // NullReferenceException from RaycastHandler.RaycastInteractables() every
-    // time the player's raycast target changed to or away from this trigger
-    // (confirmed via log: a burst of these NREs appeared immediately after
-    // every StartClick/EndClick). Uncaught, that exception aborts the REST of
-    // RaycastInteractables() for that frame — including whatever line reassigns
-    // RaycastHandler.Current to the player's new target — so looking away from
-    // this trigger left RaycastHandler.Current permanently stuck pointing at it.
-    // Every later Hold-to-deconstruct attempt anywhere then read that stuck
-    // Current back in EnvironmentInteract.TryStartInteract and fired on the
-    // Forge instead, regardless of what the player was actually aiming at —
-    // this IS the actual "deconstructing any other module deconstructs the
-    // Forge too" bug (confirmed by the log: OnDeconstruct fired with
-    // _holding=True and the SAME GetInstanceID as the StartClick moments
-    // before — a real, correctly-scoped hold, just aimed at a stale target).
-    // Uses ForgeOutline instead: the real outline-shader highlight every vanilla
-    // module/BuildBox hover uses. Scoped to VisualHandle specifically (the same
-    // "Handle" mesh the rotation animation below drives) rather than the whole
-    // module — mirrors ForgeCommitInteractable's LeverBox scoping. Falls back to
-    // the whole module only if the prefab has no Handle mesh.
+    // ClickerInteractable.Highlighted (what this would otherwise inherit) iterates
+    // a private outlineObjects[] that only the Unity Inspector populates — null on
+    // every Forge interactable, since all are AddComponent'd at runtime. Calling it
+    // threw an NRE from RaycastHandler.RaycastInteractables() every time the raycast
+    // target changed to/away from this trigger. Uncaught, that exception aborted
+    // the rest of RaycastInteractables() for the frame — including the line that
+    // reassigns RaycastHandler.Current — so looking away left Current permanently
+    // stuck pointing at this trigger. Every later Hold-to-deconstruct attempt
+    // anywhere then read that stuck Current in EnvironmentInteract.TryStartInteract
+    // and fired on the Forge instead: this WAS the "deconstructing any other module
+    // deconstructs the Forge too" bug. Uses ForgeOutline instead (the real
+    // outline-shader highlight vanilla uses), scoped to VisualHandle rather than
+    // the whole module, falling back to the whole module only if there's no Handle mesh.
     public override void Highlighted(bool isHighlighted)
     {
         var target = VisualHandle != null ? VisualHandle : (_module != null ? _module.transform : null);

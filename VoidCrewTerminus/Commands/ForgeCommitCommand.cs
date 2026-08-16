@@ -14,12 +14,6 @@ using VoidManager.Utilities;
 
 namespace VoidCrewTerminus.Commands;
 
-// Phase 3 dev commands — drive the UpgradeForgeBehavior state machine end-to-end
-// via chat, so the test plan runs without needing physical socket wiring.
-//
-// These commands all gate on TerminusConfig.EnableDevMode. Once
-// ForgeInteractionPatch's socket wiring is fleshed out (post-preflight), most of
-// these become redundant with the in-world interactions.
 internal static class ForgeCommandHelper
 {
     public static UpgradeForgeBehavior FindNearestForge()
@@ -39,8 +33,6 @@ internal static class ForgeCommandHelper
 
     public static GameObject NearestRelic(Vector3 pos)
     {
-        // Any CarryableObject whose (normalized) name is recognised by RelicTierData
-        // or starts with "Relic_" is a candidate.
         return UnityEngine.Object.FindObjectsOfType<CarryableObject>()
             .Select(c => c.gameObject)
             .Where(UpgradeForgeBehavior.IsRelic)
@@ -64,9 +56,9 @@ internal class ForgeCostCommand : PublicCommand
         int from = ForgeCostCurve.MinLevel;
         int to;
         if (parts.Length == 1 && int.TryParse(parts[0], out to))
-        { /* from stays at MinLevel */ }
+        { }
         else if (parts.Length == 2 && int.TryParse(parts[0], out from) && int.TryParse(parts[1], out to))
-        { /* both parsed */ }
+        { }
         else
         {
             Messaging.Notification("Usage: !forgecost <toLevel> | !forgecost <fromLevel> <toLevel>");
@@ -252,33 +244,15 @@ internal class ForgeCommitCommand : PublicCommand
     }
 }
 
-// Spawns the Forge's BuildBox by its registered GUID, same as any other
-// runtime-registered asset — AssetLoader.EnsureBuildBoxTemplateReady does the
-// real work, cloning a live vanilla donor and presetting its moduleRef to the
-// Forge module BEFORE any instance ever spawns (not relabeling one after the
-// fact — an earlier version of this command tried that and left the box in a
-// broken half-donor-half-Forge state: no hover label, couldn't be placed or
-// dropped, held wrong, because BuildBoxActor.Awake and apparently other
-// systems too key off moduleRef and had already run against the donor's
-// ORIGINAL one by the time the relabel happened).
-//
-// This whole approach — clone a real donor instead of grafting components onto
-// our own custom prefab — exists because the custom-grafted prefab never
-// worked: correct Rigidbody/Collider/PhotonView/BuildBoxActor and all, spawned
-// instances never got connected into MovingSpacePlatform's simulated
-// PhysicsScene (no "..._simulated" shadow object ever appeared — confirmed
-// live via Runtime Unity Editor) and just fell through the ship floor forever.
-// Root cause never pinned down; a real vanilla BuildBox already has 100%
-// correct physics/rendering/simulation, so cloning one sidesteps the mystery
-// entirely instead of reverse-engineering it component by component.
-//
-// This IS the donor-borrowing approach the codebase used before the dedicated
-// BuildBox existed (see git history) — reintroduced because the dedicated
-// prefab never actually worked, this time with the donor guid found ONCE and
-// cached (AssetLoader.TryFindDonorBuildBoxGuid), not re-scanned per spawn — a
-// per-spawn scan of the whole module registry was the likely cause of the
-// ORIGINAL !forgespawn lag spike that motivated moving away from donors in the
-// first place, and that risk doesn't apply to a cached one-time lookup.
+// Spawns the Forge's BuildBox via AssetLoader.EnsureBuildBoxTemplateReady, which
+// clones a live vanilla donor and presets moduleRef on the template before any
+// instance's Awake runs. A custom-grafted prefab was tried first, but its
+// Rigidbody never connected into MovingSpacePlatform's simulated PhysicsScene
+// (root cause never pinned down), so it fell through the ship floor forever;
+// cloning a real donor — which already has correct physics/rendering — sidesteps
+// that entirely. The donor guid is found once and cached
+// (AssetLoader.TryFindDonorBuildBoxGuid); a per-spawn scan of the whole module
+// registry previously caused a !forgespawn lag spike.
 internal class ForgeSpawnCommand : PublicCommand
 {
     public override string[] CommandAliases() => new[] { "forgespawn" };
@@ -307,11 +281,9 @@ internal class ForgeSpawnCommand : PublicCommand
         Messaging.Notification("Spawned Forge BuildBox. Carry to an empty socket to install.");
     }
 
-    // The mod's runtime-registered Forge assets (module cell at startup, BuildBox
-    // lazily — see AssetLoader.EnsureBuildBoxTemplateReady) are registered by
-    // AssetLoader; walk the register looking for the GameObject whose name
-    // matches the shipped prefab name. Internal so BossDefeatHook's
-    // award-on-2nd-boss reuses the same lookup for the box GUID.
+    // Walks AssetLoader's runtime asset register for the GameObject whose name
+    // matches the shipped prefab name. Internal so BossDefeatHook's award-on-2nd-boss
+    // reuses the same lookup for the box GUID.
     internal static bool TryFindForgeAssetGuid(string prefabName, out GUIDUnion guid)
     {
         guid = default;
@@ -329,15 +301,10 @@ internal class ForgeSpawnCommand : PublicCommand
     }
 }
 
-// Triggers the boss-defeat care-package reward directly, without needing to
-// actually defeat two bosses in a run first. Same delivery path as the real
-// thing (Patches.BossDefeatHook.AwardForgeBuildBox — spawns a vanilla care
-// package via SpawnUtils.SpawnCarePackage, which flies in and, once opened/
-// destroyed, spawns the Forge BuildBox through LootOnDeathDropper's own
-// predefined-item path) — exists specifically to make that whole pipeline
-// testable in isolation, since it was still an unverified TODO item after
-// everything else about the Forge BuildBox (spawn, hover, deconstruct,
-// highlight) got exercised and fixed this session.
+// Triggers the boss-defeat care-package reward directly, without needing to defeat
+// two bosses first. Same delivery path as the real thing
+// (Patches.BossDefeatHook.AwardForgeBuildBox spawns a care package that, once
+// opened/destroyed, drops the Forge BuildBox via LootOnDeathDropper).
 internal class ForgeBoxDropCommand : PublicCommand
 {
     public override string[] CommandAliases() => new[] { "forgeboxdrop" };

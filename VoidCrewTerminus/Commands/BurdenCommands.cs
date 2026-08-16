@@ -9,8 +9,6 @@ using VoidManager.Utilities;
 
 namespace VoidCrewTerminus.Commands;
 
-// Phase 7-C dev commands — inspect / trigger Maintenance Burdens. Gated on EnableDevMode.
-
 internal class ListBurdensCommand : PublicCommand
 {
     public override string[] CommandAliases() => new[] { "listburdens" };

@@ -14,10 +14,9 @@ namespace VoidCrewTerminus.Forge;
 // MonoBehaviour attached at runtime to the Upgrade Forge prefab
 // (Assets/voidcrewterminus.metem → UpgradeForgeModuleCell.prefab).
 //
-// Phase 3 responsibilities:
+// Responsibilities:
 //   - Hold at most one BuildBox in the module socket (the target being upgraded).
-//   - Hold up to Capacity relics in the relic slots (Capacity = 4 hardcoded; Phase 5
-//     ties this to the Forge Meter).
+//   - Hold up to Capacity relics in the relic slots.
 //   - Enforce the cost curve on commit.
 //   - Persist the new level via ForgeStateStore.SaveSnapshot so the level rides
 //     the BuildBox through reconstruction — ForgePersistPatch does the restoration.
@@ -35,8 +34,8 @@ namespace VoidCrewTerminus.Forge;
 //     docked item back out or a commit destroys consumed relics.
 public class UpgradeForgeBehavior : MonoBehaviour
 {
-    // Phase 5: relic capacity is the Forge's progression level (1..4). Filling the
-    // meter — sector jumps + alloys — is what unlocks the bigger upgrade steps.
+    // Relic capacity is the Forge's progression level. Filling the meter — sector
+    // jumps + alloys — is what unlocks the bigger upgrade steps.
     public static int Capacity => ForgeMeterController.Capacity;
 
     // Name of the shipped prefab inside voidcrewterminus.metem — used by
@@ -50,21 +49,19 @@ public class UpgradeForgeBehavior : MonoBehaviour
     public const string BuildBoxPrefabName = "UpgradeForgeBuildBox";
 
     // Anchor names baked into the shipped prefab. CommitTarget is required for
-    // in-world commits; AlloyTarget is the Phase 5 meter terminal (optional — the
+    // in-world commits; AlloyTarget is the meter terminal (optional — the
     // !setmeter dev command covers testing until the prefab gains the anchor).
     // Handle and DeconstructTrigger are two different objects on the prefab:
     // Handle is a visual-only part of the modeled mesh (purely cosmetic — the
     // rotating lever ForgeDeconstructInteractable animates while held) and
     // DeconstructTrigger is a dedicated, hand-authored-and-sized Collider (the
-    // actual click/raycast target). They used to be conflated under one anchor
-    // name, which meant the click region either had to reuse Handle's own
-    // (nonexistent) collider or fall back to BuildAnchorClickRegion's generated
-    // box — sized by dividing a world-space size by the anchor's lossyScale,
-    // which can balloon past the intended bounds on odd FBX import scales and
-    // steal raycasts aimed at a neighboring module's own deconstruct lever (see
-    // TODO's "scoop-deconstructs-Forge" investigation). Using DeconstructTrigger's
-    // own authored Collider directly sidesteps the generated-fallback path
-    // entirely.
+    // actual click/raycast target). Conflating them under one anchor name meant
+    // the click region either had to reuse Handle's own (nonexistent) collider or
+    // fall back to BuildAnchorClickRegion's generated box — sized by dividing a
+    // world-space size by the anchor's lossyScale, which can balloon past the
+    // intended bounds on odd FBX import scales and steal raycasts aimed at a
+    // neighboring module's own deconstruct lever. Using DeconstructTrigger's own
+    // authored Collider directly sidesteps the generated-fallback path entirely.
     public const string RelicTubeAnchorName = "RelicTubeTarget";
     public const string InputAnchorName = "InputTarget";
     public const string CommitAnchorName = "CommitTarget";
@@ -96,8 +93,6 @@ public class UpgradeForgeBehavior : MonoBehaviour
     public BuildBox ModuleBox => _moduleBox;
     public IReadOnlyList<GameObject> Relics => _relics;
 
-    // Current effective level of the box in the module socket. Reads any pending level
-    // stashed by prior upgrades / deconstructions; falls back to vanilla L3.
     public int CurrentBoxLevel => LevelOfBox(_moduleBox);
 
     // Static so the host can compute a client-operated box's level from the box
@@ -108,8 +103,7 @@ public class UpgradeForgeBehavior : MonoBehaviour
         if (box == null || box.photonView == null) return 0;
 
         // Only a module at its final vanilla mark may be forged; below that the
-        // vanilla upgrade-chip path still applies. The mark comes from the game's
-        // UpgradableAssetDataTable chain (the same data the vanilla chips walk).
+        // vanilla upgrade-chip path still applies.
         int mark = GetBoxMark(box, out bool isFinalMark);
         if (!isFinalMark) return mark; // 1 or 2 → below MinLevel → InvalidModuleLevel on commit
 
@@ -118,11 +112,10 @@ public class UpgradeForgeBehavior : MonoBehaviour
             : ForgeCostCurve.MinLevel;
     }
 
-    // Vanilla mark (1-based position in the module's upgrade chain) of the module
-    // this box builds. STRICT policy: only modules provably at the END of an
-    // upgrade chain are forgeable — anything we can't resolve (no identity, table
-    // missing, guid in no chain) is refused. The permissive alternative ("unknown
-    // = final") let MkI/MkII modules with unresolvable identities slip through.
+    // STRICT policy: only modules provably at the END of an upgrade chain are
+    // forgeable — anything we can't resolve (no identity, table missing, guid in
+    // no chain) is refused. The permissive alternative ("unknown = final") let
+    // MkI/MkII modules with unresolvable identities slip through.
     //
     // Identity differs by box type: composite weapon boxes are GENERIC prefabs —
     // their moduleRef is unset and the weapon identity is a CompositeWeaponDataRef
@@ -157,13 +150,12 @@ public class UpgradeForgeBehavior : MonoBehaviour
             }
         }
 
-        // Not in any chain. If a legitimately single-form module ever needs to
-        // forge, this log line names the guid to whitelist.
+        // If a legitimately single-form module ever needs to forge, this log line
+        // names the guid to whitelist.
         BepinPlugin.Log.LogInfo($"[Forge] Module {guid.AsHex()} not in any upgrade chain — refusing to forge (strict Mark III policy).");
         return 1;
     }
 
-    // The guid the upgrade chains key this box's module by.
     private bool TryGetBoxIdentity(out GUIDUnion guid) => TryGetBoxIdentity(_moduleBox, out guid);
 
     private static bool TryGetBoxIdentity(BuildBox box, out GUIDUnion guid)
@@ -184,7 +176,7 @@ public class UpgradeForgeBehavior : MonoBehaviour
         return true;
     }
 
-    // Dev diagnostic (!forgemark): full dump of how the docked box's mark resolves.
+    // !forgemark dev command: full dump of how the docked box's mark resolves.
     public string DescribeBoxMark()
     {
         if (_moduleBox == null) return "No box docked in the Forge.";
@@ -207,12 +199,9 @@ public class UpgradeForgeBehavior : MonoBehaviour
         return sb.ToString();
     }
 
-    // How far the currently-loaded relics would push the socketed module if committed now.
-    // Equal to CurrentBoxLevel when nothing is loaded, or when the next-level cost exceeds
-    // the inserted relic count.
+    // Equal to CurrentBoxLevel when nothing is loaded, or when the next-level cost
+    // exceeds the inserted relic count.
     public int ProjectedTargetLevel => ForgeCostCurve.MaxReachable(CurrentBoxLevel, _relics.Count);
-
-    // ---- Module socket ------------------------------------------------
 
     public bool TryTakeModule(BuildBox box)
     {
@@ -227,8 +216,6 @@ public class UpgradeForgeBehavior : MonoBehaviour
         _moduleBox = null;
         return released != null;
     }
-
-    // ---- Relic slots --------------------------------------------------
 
     public bool TryInsertRelic(GameObject relic)
     {
@@ -247,18 +234,15 @@ public class UpgradeForgeBehavior : MonoBehaviour
         return true;
     }
 
-    // ---- Commit -------------------------------------------------------
-
-    // Attempts to upgrade the socketed box using as many inserted relics as the cost
-    // curve permits. Consumes only the relics actually spent; leftovers stay in the
-    // Forge. On success the new pending state (level + any rolled perk) is written
-    // to ForgeStateStore so reconstruction picks it up automatically.
+    // Consumes only the relics actually spent; leftovers stay in the Forge. On
+    // success the new pending state (level + any rolled perk) is written to
+    // ForgeStateStore so reconstruction picks it up automatically.
     //
     // Local operator entry (host / solo): ForgeCommit computes, persists and
-    // broadcasts the authoritative outcome; consuming OUR relics is what is left
-    // over, and stays here because we own them (which is what makes the networked
-    // destroy propagate). A client operator never reaches this — the policy routes
-    // its click to RequestCommit instead (Phase 8-C).
+    // broadcasts the authoritative outcome; consuming OUR relics stays here
+    // because we own them (which is what makes the networked destroy propagate).
+    // A client operator never reaches this — the policy routes its click to
+    // RequestCommit instead.
     public CommitOutcome TryCommit()
     {
         var outcome = ForgeCommit.Execute(_moduleBox, _relics);
@@ -277,8 +261,8 @@ public class UpgradeForgeBehavior : MonoBehaviour
         }
     }
 
-    // Phase 8-C — ViewIDs of the relics currently docked here (for a client's
-    // commit request to the host).
+    // ViewIDs of the relics currently docked here (for a client's commit request
+    // to the host).
     internal int[] RelicViewIds()
     {
         var ids = new List<int>(_relics.Count);
@@ -290,9 +274,9 @@ public class UpgradeForgeBehavior : MonoBehaviour
         return ids.ToArray();
     }
 
-    // Phase 8-C — the host's authoritative commit result arrived. If we're the
-    // operator (we hold the relics), consume our share and notify; non-operators
-    // (empty tubes) no-op. The snapshot itself is applied by ForgeNetSync.
+    // The host's authoritative commit result arrived. If we're the operator (we
+    // hold the relics), consume our share and notify; non-operators (empty
+    // tubes) no-op. The snapshot itself is applied by ForgeNetSync.
     internal void OnNetworkCommitResult(int relicsConsumed)
     {
         if (_relics.Count == 0) return; // not the operator
@@ -303,10 +287,6 @@ public class UpgradeForgeBehavior : MonoBehaviour
             "Rebuild the module to apply.");
     }
 
-    // Phase 8-C — find the forge behaviour operating a given module box (by its
-    // Photon ViewID), across all installed forges.
-    // ---- remote dock mirroring (Phase 8-E) ---------------------------------
-    //
     // Docking is a LOCAL interaction: HandleInteraction runs only for the player
     // who clicked, so before this every other player saw an empty Forge no matter
     // how many relics were loaded. The operator announces each dock/undock and
@@ -316,6 +296,8 @@ public class UpgradeForgeBehavior : MonoBehaviour
     // the Update reconcile. The mirroring paths below deliberately say nothing,
     // which is what stops two clients echoing each other forever.
 
+    // Find the forge behaviour operating a given module box (by its Photon
+    // ViewID), across all installed forges.
     internal static UpgradeForgeBehavior FindByViewId(int forgeViewId)
     {
         var pv = Photon.Pun.PhotonView.Find(forgeViewId);
@@ -366,7 +348,7 @@ public class UpgradeForgeBehavior : MonoBehaviour
         if (box != null) _moduleBox ??= box;
         else if (!_relics.Contains(go)) _relics.Add(go);
 
-        _dock.Dock(go, anchor); // no BroadcastDock — we are mirroring, not originating
+        _dock.Dock(go, anchor); // no BroadcastDock — mirroring, not originating
 
         BepinPlugin.Log.LogDebug($"[Net] ← applied dock item={itemViewId} anchor={anchorIndex} on forge={ForgeViewId}.");
     }
@@ -400,9 +382,6 @@ public class UpgradeForgeBehavior : MonoBehaviour
         return null;
     }
 
-    // ---- In-world interactables ----------------------------------------
-
-    // Spawns ForgeInteractable click targets on the prefab's named anchors.
     // Idempotent — called every time ForgeInteractionPatch re-attaches after a
     // module rebuild.
     public void BuildInteractables()
@@ -687,7 +666,7 @@ public class UpgradeForgeBehavior : MonoBehaviour
                 break;
 
             case ForgeAction.RequestCommit:
-                // Phase 8-C: the client asks, the host rolls and broadcasts back.
+                // The client asks, the host rolls and broadcasts back.
                 Net.ForgeNetSync.RequestCommit(_moduleBox.photonView.ViewID, RelicViewIds());
                 break;
 
@@ -715,8 +694,6 @@ public class UpgradeForgeBehavior : MonoBehaviour
         Destroy(this);
     }
 
-    // ---- Physical docking ------------------------------------------------
-    //
     // The physics itself lives in AnchorDock. What stays here is what a docked
     // item MEANS to the Forge — whether it is the module or a relic, and who has
     // to be told when it arrives or leaves.
@@ -771,8 +748,6 @@ public class UpgradeForgeBehavior : MonoBehaviour
             Destroy(relic);
     }
 
-    // ---- Helpers ------------------------------------------------------
-
     // A GameObject is a relic when its carryable carries the game's canonical relic
     // CsTag (RuntimeAssetTable.RelicTag — the same check the vanilla relic shrine
     // filter resolves to, and the tag RuntimeCarryable stamps on modded relics).
@@ -794,8 +769,7 @@ public class UpgradeForgeBehavior : MonoBehaviour
                normalized.StartsWith("Relic_", System.StringComparison.Ordinal);
     }
 
-    // Locate the closest Forge instance to a world position. Nullable — returns null
-    // if no Forge is currently installed on the ship.
+    // Returns null if no Forge is currently installed on the ship.
     public static UpgradeForgeBehavior FindNearest(Vector3 worldPosition)
     {
         UpgradeForgeBehavior nearest = null;

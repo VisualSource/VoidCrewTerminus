@@ -3,43 +3,27 @@ using System.Collections.Generic;
 
 namespace VoidCrewTerminus.Escalation;
 
-// Phase 6 — Sector Escalation loot half. Reshapes relic entries in the sector's
-// vanilla loot pool so early sectors flood Common relics and later sectors admit
-// Rare/Legendary. Non-relic entries pass through untouched.
+// Sector Escalation loot half. Reshapes relic entries in the sector's vanilla
+// loot pool so early sectors flood Common relics and later sectors admit
+// Rare/Legendary. Non-relic entries pass through untouched. The max allowed
+// tier is the higher of a scalar-based ceiling (natural progression) and a
+// boss-based ceiling (guaranteed unlock on boss kills) — see TierFromScalar
+// and TierFromBossCount. Relics over the max are swapped for a random
+// same-list relic at the max tier (seeded from quest+sector for MP
+// determinism); dropped if the list has no candidate at that tier.
 //
-// The max allowed tier is the higher of two independent signals:
-//   * Scalar-based ceiling (natural progression through sector jumps):
-//       scalar < RareUnlock       → Common ceiling
-//       scalar < LegendaryUnlock  → Rare ceiling
-//       scalar ≥ LegendaryUnlock  → Legendary ceiling
-//   * Boss-based ceiling (rare event unlock, guaranteed):
-//       bossesDefeated ≥ 1        → at least Rare
-//       bossesDefeated ≥ 2        → at least Legendary
-//
-// When a relic's tier exceeds the max, we swap its reference for a random
-// same-list relic of the max tier (seeded from quest+sector for MP determinism).
-// If the list has no candidate at the target tier, the entry is dropped.
-//
-// Escalation state (BossesDefeated) lives here rather than on the Forge —
-// bosses don't affect the Forge module itself (level, capacity, meter);
-// they affect what tier of relics the loot table can drop.
+// BossesDefeated lives here rather than on the Forge because bosses affect
+// loot table tier, not the Forge module itself.
 //
 // Activation gate: all escalation systems (density, HP, damage, loot bias)
-// stay dormant until BossesDefeated reaches EscalationBossActivationThreshold
-// (default 2). The player has to demonstrate combat capability with the
-// vanilla difficulty before the mod starts turning up the pressure. Scalar
-// and boss count still accumulate during the warm-up period, so the moment
-// the threshold is crossed, scaling activates at whatever intensity has
-// piled up.
+// stay dormant until BossesDefeated reaches the configured threshold — the
+// player has to prove out vanilla difficulty first. Scalar and boss count
+// still accumulate during the warm-up period, so scaling activates at
+// whatever intensity has already piled up the moment the threshold is crossed.
 public static class SectorEscalation
 {
-    // Independent of DifficultyScalar. Each boss defeat unlocks the next relic
-    // tier ceiling regardless of scalar progression. Reset per-run from
-    // Plugins.cs; incremented by BossDefeatHook.
     public static int BossesDefeated { get; private set; }
 
-    // Whether any escalation should apply right now. Read by every escalation
-    // patch/hook before it does anything.
     public static bool IsScalingActive =>
         BossesDefeated >= TerminusConfig.BossActivationThreshold;
 
@@ -57,13 +41,12 @@ public static class SectorEscalation
         BepinPlugin.Log?.LogDebug($"[Escalation] BossesDefeated set to {BossesDefeated} (dev)");
     }
 
-    // Phase 8-A — client-side apply of the host-authoritative boss count. Silent
-    // (no notification); the host owns the count and drives the unlock messages.
+    // Client-side apply of the host-authoritative boss count. Silent (no
+    // notification) — the host owns the count and drives the unlock messages.
     internal static void ApplyNetworkBosses(int bosses) => BossesDefeated = System.Math.Max(0, bosses);
 
-    // Reshape `entries` in place. Generic over the item ref type so tests can
-    // pass plain strings; production callers pass CraftableItemRef and a name
-    // extractor that reads .Filename.
+    // Generic over the item ref type so tests can pass plain strings; production
+    // callers pass CraftableItemRef and a name extractor reading .Filename.
     public static void DowngradeRelics<T>(
         List<T> entries,
         Func<T, string> getName,
@@ -75,11 +58,9 @@ public static class SectorEscalation
 
         var maxAllowed = MaxAllowedTier(scalar, bossesDefeated);
 
-        // Optimisation and correctness: at max scalar nothing is ever downgraded,
-        // so skip the walk (and skip triggering any RelicTierData lookups) entirely.
+        // At max scalar nothing is ever downgraded, so skip the walk entirely.
         if (maxAllowed == Loot.RelicTier.Legendary) return;
 
-        // Cache tier per entry so we don't hit RelicTierData twice per relic.
         // Null = non-relic (name not in the tier data map).
         var tiers = new Loot.RelicTier?[entries.Count];
         for (int i = 0; i < entries.Count; i++)
@@ -95,17 +76,14 @@ public static class SectorEscalation
             var tier = tiers[i];
             if (tier == null || tier <= maxAllowed) continue;
 
-            // Downgrade: swap for a random same-tier candidate already in the list.
-            // Rebuild the candidate index on demand — usually small (single-digit).
             var candidates = new List<int>();
             for (int j = 0; j < entries.Count; j++)
                 if (tiers[j] == maxAllowed) candidates.Add(j);
 
             if (candidates.Count == 0)
             {
+                // tiers[] stays valid: iterating in reverse means tiers[i] is never re-read.
                 entries.RemoveAt(i);
-                // tiers[] parallel array: no update needed since we iterate in
-                // reverse and don't re-read tiers[i] again.
                 continue;
             }
 
@@ -115,10 +93,8 @@ public static class SectorEscalation
         }
     }
 
-    // Ceiling at the configured unlock thresholds. The four-argument overload
-    // below takes them explicitly so the tier table can be tested without config
-    // bound; production callers should use this one so the thresholds are read
-    // from a single place.
+    // The four-argument overload below takes thresholds explicitly so the tier
+    // table can be tested without config bound; production callers use this one.
     public static Loot.RelicTier MaxAllowedTier(int scalar, int bossesDefeated) =>
         MaxAllowedTier(scalar, bossesDefeated,
             TerminusConfig.RareUnlockScalar, TerminusConfig.LegendaryUnlockScalar);
@@ -137,8 +113,6 @@ public static class SectorEscalation
         return Loot.RelicTier.Legendary;
     }
 
-    // First boss unlocks Rare; second boss unlocks Legendary. Third+ bosses have
-    // no further tier to unlock (Legendary is the ceiling).
     private static Loot.RelicTier TierFromBossCount(int bossesDefeated)
     {
         if (bossesDefeated <= 0) return Loot.RelicTier.Common;

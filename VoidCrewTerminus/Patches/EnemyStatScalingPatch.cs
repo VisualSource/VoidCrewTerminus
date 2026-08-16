@@ -9,16 +9,14 @@ using VoidCrewTerminus.Escalation;
 
 namespace VoidCrewTerminus.Patches;
 
-// Phase 6 — HP scaling half. Postfixes DestroyableComponent.InitializeHealth
-// so every enemy component gets a MaxHitPoints AdditiveMultiplier proportional
-// to the current DifficultyScalar. Uses the game's native StatMod pipeline
-// (same as ForgeModuleState for player modules) rather than patching stat
-// getters directly.
+// Postfixes DestroyableComponent.InitializeHealth so every enemy component gets
+// a MaxHitPoints AdditiveMultiplier proportional to DifficultyScalar, via the
+// game's native StatMod pipeline (same as ForgeModuleState for player modules)
+// rather than patching stat getters directly.
 //
-// Boss exclusion is NOT implemented in this pass — linking a spawned ship to
-// its ObjectiveData boss reference needs another chunk of pre-flight and the
-// "minor boost" rate (0.05/scalar default) keeps a scalar-6 boss at +30% HP,
-// which is meaningful but not game-breaking.
+// Boss exclusion is not implemented: linking a spawned ship to its ObjectiveData
+// boss reference needs more pre-flight, and the default rate (0.05/scalar) keeps
+// a scalar-6 boss at +30% HP, which is meaningful but not game-breaking.
 [HarmonyPatch(typeof(DestroyableComponent), nameof(DestroyableComponent.InitializeHealth))]
 internal static class EnemyHealthScalingPatch
 {
@@ -33,8 +31,7 @@ internal static class EnemyHealthScalingPatch
             if (parent == null) return;
             if (!EnemyScalingHelpers.IsEnemyFaction(parent.Faction)) return;
 
-            // A zero/negative rate is a separate no-op from a zero scalar —
-            // registering a zero-value StatMod would attach a modifier for nothing.
+            // Skip registering a zero-value StatMod outright rather than attach a modifier for nothing.
             float amount = escalation.StatBonus;
             if (amount <= 0f) return;
 
@@ -54,11 +51,10 @@ internal static class EnemyHealthScalingPatch
     }
 }
 
-// Phase 6 — damage scaling half. Postfixes DestroyableComponent.CalculateRawDamage
-// on the RECEIVER side: when an enemy hits a player-faction object, we scale
-// the damage before it's applied. One hook captures every enemy damage source
-// (turrets, missiles, ramming) without needing to walk each enemy weapon's
-// stat collection.
+// Postfixes DestroyableComponent.CalculateRawDamage on the receiver side: when an
+// enemy hits a player-faction object, we scale the damage before it's applied.
+// One hook captures every enemy damage source (turrets, missiles, ramming)
+// without needing to walk each enemy weapon's stat collection.
 [HarmonyPatch(typeof(DestroyableComponent), nameof(DestroyableComponent.CalculateRawDamage))]
 internal static class EnemyDamageScalingPatch
 {

@@ -5,10 +5,7 @@ using Gameplay.Utilities;
 
 namespace VoidCrewTerminus.Forge;
 
-// Category-wide perk pools (~3 per category, v1 authoring) and the roll entry
-// point. Signature perks and cursed-augmented pools are Phase 7.
-//
-// Slot gating (design: "Perks & Slots"):
+// Slot gating:
 //   Slot 0 — any tier · Slot 1 — Rare+ · Slot 2 — Legendary only.
 // A roll targets the LOWEST empty slot the relic tier is eligible for; if every
 // eligible slot is taken the roll is skipped entirely (a Common after slot 0 is
@@ -66,12 +63,11 @@ public static class PerkPool
         },
     };
 
-    // Signature perks — tied to specific relic identities. Roll only when that
-    // exact relic is consumed in a commit; take priority over category pool draws.
-    // Grouped by SignatureRelicId at first-touch (see EnsureSignatureIndex).
+    // Tied to specific relic identities. Roll only when that exact relic is
+    // consumed in a commit; take priority over category pool draws. Grouped by
+    // SignatureRelicId at first-touch (see EnsureSignatureIndex).
     private static readonly PerkDefinition[] _signatures = new[]
     {
-        // Legendary tier — flagship relics get flavourful, larger-bonus perks.
         new PerkDefinition("sig_biomass_ram", "Biomass Ram", ForgeCategory.BuiltIn,
             "+20% forward power, +15% ram damage",
             signatureRelicId: "Relic_15_BiomassForThrustersAndDamage",
@@ -81,7 +77,6 @@ public static class PerkPool
             signatureRelicId: "Relic_28_PayloadRecharge",
             payload: new[] { (StatType.FireRate, 0.25f), (StatType.Damage, 0.10f) }),
 
-        // Rare tier — a handful of weapon-specific / mechanic-flavoured signatures.
         new PerkDefinition("sig_overcharged_grid", "Overcharged Grid", ForgeCategory.PowerProvider,
             "+15% power provided, +20% battery recharge",
             signatureRelicId: "Relic_02_PowerForBreakers",
@@ -96,9 +91,8 @@ public static class PerkPool
             payload: new[] { (StatType.FireRate, 0.30f), (StatType.ProjectileSpeed, 0.10f) }),
     };
 
-    // Signature lookup: relic id → list of eligible signature perks. Built lazily
-    // on first access to keep the static ctor cheap and avoid StatType touches
-    // during test-host init.
+    // Built lazily on first access to keep the static ctor cheap and avoid
+    // StatType touches during test-host init.
     private static Dictionary<string, List<PerkDefinition>> _signaturesByRelic;
 
     private static void EnsureSignatureIndex()
@@ -117,8 +111,7 @@ public static class PerkPool
         _signaturesByRelic = idx;
     }
 
-    // Look up the signature perks that only roll when this specific relic is
-    // consumed. Returns empty if the relic has no authored signatures.
+    // Returns empty if the relic has no authored signatures.
     public static IReadOnlyList<PerkDefinition> SignaturesFor(string relicName)
     {
         if (string.IsNullOrEmpty(relicName)) return System.Array.Empty<PerkDefinition>();
@@ -141,9 +134,9 @@ public static class PerkPool
 
     public static IReadOnlyList<PerkDefinition> PoolFor(ForgeCategory category)
     {
-        // Short-circuit before touching _pools so callers can query the Unknown case
-        // without triggering the dictionary's static initializer (which references
-        // StatType and other game types).
+        // Short-circuits before touching _pools so callers can query Unknown
+        // without triggering the dictionary's static initializer, which references
+        // StatType and other game types.
         if (category == ForgeCategory.Unknown) return System.Array.Empty<PerkDefinition>();
         return _pools.TryGetValue(category, out var pool) ? pool : System.Array.Empty<PerkDefinition>();
     }
@@ -151,7 +144,7 @@ public static class PerkPool
     public static IEnumerable<PerkDefinition> AllPerks() =>
         _pools.Values.SelectMany(p => p).Concat(_signatures);
 
-    // Highest slot index a relic tier may fill (inclusive).
+    // Inclusive.
     public static int MaxSlotForTier(Loot.RelicTier tier) => tier switch
     {
         Loot.RelicTier.Legendary => 2,
@@ -159,8 +152,7 @@ public static class PerkPool
         _ => 0,
     };
 
-    // Lowest empty slot the tier is eligible for, or -1 when every eligible slot
-    // is occupied. `slots` uses null/empty = free.
+    // -1 when every eligible slot is occupied. `slots` uses null/empty = free.
     public static int TargetSlot(IReadOnlyList<string> slots, Loot.RelicTier tier)
     {
         int max = MaxSlotForTier(tier);
@@ -177,8 +169,7 @@ public static class PerkPool
         _ => TerminusConfig.PerkChanceCommon,
     };
 
-    // Resolve a module's Forge category from its CsTags (checked against the
-    // built-in category tags by reference).
+    // Checked against the built-in category tags by reference.
     public static ForgeCategory CategoryOf(CellModule module)
     {
         if (module == null || module.CsTags == null) return ForgeCategory.Unknown;

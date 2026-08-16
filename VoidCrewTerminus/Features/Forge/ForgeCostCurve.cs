@@ -80,8 +80,6 @@ public static class ForgeCostCurve
         return parsed;
     }
 
-    // Diagnostic — returns the currently-effective curve as a comma-separated string
-    // (default values if the config is malformed).
     public static string DescribeCurrent() => string.Join(",", Parse());
 
     public static int TotalToMax => Enumerable.Range(MinLevel + 1, MaxLevel - MinLevel)

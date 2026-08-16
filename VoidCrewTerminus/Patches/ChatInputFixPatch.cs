@@ -10,43 +10,27 @@ namespace VoidCrewTerminus.Patches;
 
 // Works around two vanilla chat bugs that between them can leave a player unable
 // to type in chat for the rest of the session. Neither is caused by this mod, and
-// VoidManager does not fix them (its chat features are postfix-only additions:
-// mouse unlock, input history, tab-complete). Full write-up with sources:
-// docs/chat-bug-research.md.
+// VoidManager doesn't fix them. Full write-up: docs/chat-bug-research.md.
 //
-// BUG 1 — the text field is never released.
-//   TextChatVE.GetMessage() blanks the field while it still holds focus:
-//       string text = inputField.text;
-//       inputField.value = "";        // cursorIndex/selectIndex still index the OLD string
-//   and TextChatVE.HideInput() only toggles CSS classes — there is no Blur() and
-//   no SelectNone() anywhere in the chat code. The UIElements panel keeps routing
-//   keydowns into a hidden editor whose selection range now points past the end of
-//   an empty string, so the next keystroke throws deep in the engine:
-//       ArgumentOutOfRangeException (startIndex)
-//         String.Insert → TextEditingUtilities.ReplaceSelection
-//         → TextEditingUtilities.Insert(char) → KeyboardTextEditorEventHandler.OnKeyDown
-//   Unity's tracker documents this as throwing on EVERY subsequent keypress once
-//   the indices desync, which is the "chat eats my input" symptom.
+// BUG 1 — the text field is never released. TextChatVE.GetMessage() blanks the
+// field (inputField.value = "") while it still holds focus, so cursorIndex/
+// selectIndex keep pointing into the now-empty string, and TextChatVE.HideInput()
+// never calls Blur()/SelectNone() either. The next keystroke throws
+// ArgumentOutOfRangeException deep in TextEditingUtilities.ReplaceSelection —
+// Unity's own "chat eats my input" failure mode. The game already has the right
+// pattern (UIToolkitNavigationExtensions.OnGainedFocus: SelectNone() then
+// Blur()); we apply it after the field is blanked.
 //
-//   The game already knows the right pattern — UIToolkitNavigationExtensions
-//   .OnGainedFocus does SelectNone() then Blur() — the chat widget just skips it.
-//   We apply exactly that, after the field is blanked.
+// BUG 2 — "TextChatting" state latches and chat never reopens. TextChat.OpenChat
+// early-returns unless that state is false, and only RemoveInput() clears it.
+// RemoveInput is guarded by `if (LocalPlayer.I)`, so if the player reference is
+// momentarily null (respawn / scene load) the cleanup silently skips and nothing
+// else ever resets the flag. We clear it on the next OpenChat via the game's own
+// RemoveInput, once LocalPlayer.I is guaranteed alive.
 //
-// BUG 2 — "TextChatting" latches and chat never reopens.
-//   TextChat.OpenChat early-returns unless that character state is false, and ONLY
-//   RemoveInput() clears it. RemoveInput is itself guarded by `if (LocalPlayer.I)`,
-//   so if the player reference is momentarily null (respawn / scene load) the
-//   cleanup silently skips, the flag stays true, and Enter does nothing forever.
-//   Nothing else in the game resets it.
-//
-//   We clear it on the next OpenChat, using the game's OWN RemoveInput — by then
-//   LocalPlayer.I is alive (OpenChat dereferences it), so the cleanup that failed
-//   earlier now succeeds.
-//
-// Everything here is defensive: this is vanilla UI the mod otherwise never touches,
-// and a missing member must degrade to a logged warning, never a failed
-// CreateAndPatchAll (which would take the whole mod down — see the Phase 8-A
-// Photon regression).
+// Defensive throughout: this is vanilla UI the mod otherwise never touches, so a
+// missing member must degrade to a logged warning, never a failed
+// CreateAndPatchAll (which would take the whole mod down).
 internal static class ChatInputFix
 {
     private static readonly FieldInfo _inputField =
@@ -71,9 +55,8 @@ internal static class ChatInputFix
 
     internal static bool Enabled => TerminusConfig.ChatInputFixEnabled;
 
-    // One-shot so a playtest log says plainly whether this patch is live. If the
-    // vanilla UI moves in a game update the members stop resolving and the fix goes
-    // inert — that needs to be visible, not silent.
+    // One-shot: if a game update moves the vanilla UI, these members stop
+    // resolving and the fix goes inert — that needs to be visible, not silent.
     private static void LogResolveOnce()
     {
         if (_loggedResolve) return;
@@ -88,8 +71,6 @@ internal static class ChatInputFix
                 "partially or fully inert. Vanilla chat UI likely changed in a game update.");
     }
 
-    // Release keyboard focus and clear the selection range, so the editor can't be
-    // left indexing a string that no longer exists.
     internal static void ReleaseField(TextChatVE view)
     {
         if (!Enabled || view == null) return;
@@ -104,16 +85,13 @@ internal static class ChatInputFix
         }
         catch (Exception e)
         {
-            // Runs on every sent message and every chat close — log once or this
-            // floods the file (cf. the burden's "already off" spam, TODO 8-E).
+            // Runs on every sent message and every chat close — log once or this floods the file.
             if (_loggedReleaseFailure) return;
             _loggedReleaseFailure = true;
             BepinPlugin.Log.LogWarning($"[ChatFix] could not release the chat field (suppressing further): {e}");
         }
     }
 
-    // If the state flag is set but chat isn't actually open, the flag is stale —
-    // clear it through the game's own cleanup so chat becomes usable again.
     internal static void ClearStaleTextChattingState(TextChat chat)
     {
         if (!Enabled || chat == null) return;
@@ -146,24 +124,21 @@ internal static class ChatInputFix
     }
 }
 
-// --- BUG 1: release the field after the game blanks it on send ---
-
+// BUG 1: release the field after the game blanks it on send.
 [HarmonyPatch(typeof(TextChatVE), nameof(TextChatVE.GetMessage))]
 internal static class ChatFieldReleaseOnSendPatch
 {
     static void Postfix(TextChatVE __instance) => ChatInputFix.ReleaseField(__instance);
 }
 
-// --- BUG 1: and when chat is closed without sending ---
-
+// BUG 1: and when chat is closed without sending.
 [HarmonyPatch(typeof(TextChatVE), nameof(TextChatVE.HideInput))]
 internal static class ChatFieldReleaseOnHidePatch
 {
     static void Postfix(TextChatVE __instance) => ChatInputFix.ReleaseField(__instance);
 }
 
-// --- BUG 2: un-latch a stale "TextChatting" state before the open check runs ---
-
+// BUG 2: un-latch a stale "TextChatting" state before the open check runs.
 [HarmonyPatch(typeof(TextChat), "OpenChat")]
 internal static class ChatStaleStateRecoveryPatch
 {

@@ -6,14 +6,11 @@ using VoidCrewTerminus.Escalation;
 
 namespace VoidCrewTerminus.Patches;
 
-// Phase 6 — density escalation. Intercepts every scenario-driven change to
-// spawner intensity and re-scales it by DifficultyScalar. Both Set and Add
-// mutators are patched so scenarios that flip intensity mid-encounter still
-// get the escalation applied consistently.
-//
-// AIDirector's tick is host-only, so scale writes on non-host clients are
-// harmless (their local Spawner state isn't authoritative for the actual
-// spawn count). The scale itself is deterministic — same scalar, same result.
+// Both Set and Add mutators are patched so scenarios that flip intensity
+// mid-encounter still get escalation applied consistently. AIDirector's tick is
+// host-only, so scale writes on non-host clients are harmless — their local
+// Spawner state isn't authoritative for the actual spawn count, and the scale
+// itself is deterministic (same scalar, same result).
 
 [HarmonyPatch(typeof(AIDirector), nameof(AIDirector.SetSpawnerTargetIntensity))]
 internal static class AIDirectorSetTargetIntensityPatch
@@ -63,20 +60,16 @@ internal static class AIDirectorAddMaxTargetIntensityPatch
     }
 }
 
-// The actual density fix. Scenarios drive spawn count by raising a spawner's
-// TARGET intensity, but Spawner.SetTargetIntensity clamps it to maxTargetIntensity
-// — and maxTargetIntensity is baked in from the profile at spawner creation
-// (Spawner.InitSpawner(SpawnerProfile)), which never routes through the AIDirector
-// mutators above. So scaling the target alone gets clipped back to the vanilla
-// ceiling and produces no extra enemies. Here we raise the ceiling itself (and
-// the initial target) at creation so the target scaling has headroom and
-// DirectorTick actually spawns more.
+// Scaling the target intensity alone (above) gets clipped: Spawner.SetTargetIntensity
+// clamps to maxTargetIntensity, which is baked in from the profile at spawner
+// creation and never routes through the AIDirector mutators above. So the ceiling
+// itself (and the initial target) has to be raised here too, at creation, or
+// scaling produces no extra enemies.
 //
 // Host-only: maxTargetIntensity/targetIntensity are IPunObservable-synced from
-// the master client (the only one that ticks spawns), so scaling on the host is
-// authoritative and clients receive the boosted values. Clients scaling locally
-// would just be overwritten by the next sync (and their DifficultyScalar isn't
-// networked yet — Phase 8), so we skip them to avoid transient divergence.
+// the master client, so scaling on the host is authoritative and clients receive
+// the boosted values. Clients scaling locally would just be overwritten by the
+// next sync, so they're skipped to avoid transient divergence.
 [HarmonyPatch(typeof(Spawner), "InitSpawner", new[] { typeof(SpawnerProfile) })]
 internal static class SpawnerInitIntensityScalingPatch
 {

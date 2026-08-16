@@ -12,9 +12,8 @@ using VoidManager.Utilities;
 
 namespace VoidCrewTerminus.Net;
 
-// Phase 8-A — host-authoritative sync of the meter / escalation state
-// (DifficultyScalar, BossesDefeated, Meter, Level) plus the client→host alloy
-// spend hop.
+// Host-authoritative sync of the meter / escalation state (DifficultyScalar,
+// BossesDefeated, Meter, Level) plus the client→host alloy spend hop.
 //
 // Authority == Photon master client, and ALSO true in solo/offline play, so
 // single-player is unchanged: you are the authority, and BroadcastState simply
@@ -52,8 +51,6 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         set => _transport = value ?? OfflineTransport.Instance;
     }
 
-    // ---- gates ------------------------------------------------------------
-    //
     // Four distinct rules, stated together so the differences are visible. Each is
     // a composition of the two facts the transport reports:
     //
@@ -153,8 +150,6 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         _pendingModuleOverlay.Clear();
     }
 
-    // ---- outbound (authority → clients) -----------------------------------
-
     internal static void BroadcastState()
     {
         if (!ShouldBroadcast) return;
@@ -185,8 +180,6 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
     private static string Describe(object[] a) =>
         $"{{scalar={a[0]}, bosses={a[1]}, meter={Convert.ToSingle(a[2]):0.#}, level={a[3]}}}";
 
-    // ---- inbound (client applies host state) ------------------------------
-
     internal static void ApplyIncomingState(object[] a)
     {
         if (a == null || a.Length < 4) return;
@@ -204,8 +197,6 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         BepinPlugin.Log?.LogDebug(
             $"[Net] ← applied forge state {{scalar={scalar}, bosses={bosses}, meter={meter:0.#}, level={level}}}.");
     }
-
-    // ---- alloy spend hop (client → host) ----------------------------------
 
     internal static void RequestAlloySpend()
     {
@@ -251,14 +242,12 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         BepinPlugin.Log?.LogDebug($"[Net] ← applied alloy-spend result: {(ok ? "ok" : "failed")} ({message}).");
     }
 
-    // ---- cursed relic sync (Phase 8-B) ------------------------------------
-    //
     // Cursed state is host-authoritative (rolled at spawn in CursedRelicSpawnPatch)
-    // and purely for client AWARENESS — 8-C's authoritative commit reads the host's
-    // own markers, so a client mis-seeing cursed can't change an outcome. Relics
-    // are keyed by PhotonView.ViewID. A live broadcast can beat the relic's own
-    // instantiation on the client, so unresolved ViewIDs are buffered and drained
-    // from the client's OnPhotonInstantiate (see CursedRelicSpawnPatch).
+    // and purely for client AWARENESS — the authoritative commit below reads the
+    // host's own markers, so a client mis-seeing cursed can't change an outcome.
+    // Relics are keyed by PhotonView.ViewID. A live broadcast can beat the relic's
+    // own instantiation on the client, so unresolved ViewIDs are buffered and
+    // drained from the client's OnPhotonInstantiate (see CursedRelicSpawnPatch).
 
     // ViewID → burden, for cursed flags that arrived before the object existed.
     private static readonly PendingByViewId<BurdenType> _pendingCursed = new();
@@ -333,8 +322,6 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         BepinPlugin.Log?.LogDebug($"[Net] ← applied buffered cursed relic viewID={pv.ViewID} ({burden}).");
     }
 
-    // ---- authoritative commit (Phase 8-C) ---------------------------------
-    //
     // The commit ROLL is host-authoritative (cursed markers + RNG live on the
     // host). A client sends {boxViewID, relicViewIDs}; the host resolves the
     // relics itself (never trusting client-reported tier/cursed), rolls, persists,
@@ -423,10 +410,9 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
             $"({DescribeOverlay(snap.PerkSlots, snap.Burdens)}) to all.");
     }
 
-    // Compact perk/burden summary for the paired →sent / ←applied log lines.
-    // Both sides format through here so a 2-client verification can diff them
-    // directly: the level alone can't prove burdens crossed the wire, which is
-    // exactly the gap that left burden sync unverifiable in the 26-07-18 session.
+    // Compact perk/burden summary for the paired →sent / ←applied log lines. Both
+    // sides format through here so a 2-client verification can diff them directly —
+    // the level alone can't prove burdens crossed the wire.
     private static string DescribeOverlay(IReadOnlyList<string> perkSlots, IReadOnlyList<BurdenType> burdens)
     {
         int filled = 0;
@@ -453,8 +439,6 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         BepinPlugin.Log?.LogDebug($"[Net] → sent overlay snapshot ({all.Count} boxes) to joiner #{actorNumber}.");
     }
 
-    // ---- installed-module overlay (Phase 8-D) -----------------------------
-    //
     // BuildBox.BuildModule ends in PhotonNetwork.Instantiate, so it runs ONLY on
     // the machine that placed the box. Every remote client receives the module
     // through Photon's own instantiation path and never executes BuildModule —
@@ -535,11 +519,8 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
             $"({DescribeOverlay(snap.PerkSlots, snap.Burdens)}).");
     }
 
-    // ---- forge docking (Phase 8-E) ----------------------------------------
-    //
     // HandleInteraction only runs for the player who clicked, so docking a relic
-    // or a build box was invisible to everyone else — the 26-07-19 session's
-    // "forge module placement of relics and buildbox do not sync" report.
+    // or a build box was invisible to everyone else without this relay.
     //
     // Relayed from the operator rather than routed through the host: docking is a
     // presentation/staging concern, and the commit that consumes these items is
@@ -578,8 +559,6 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         if (docked) forge.ApplyRemoteDock(itemViewId, anchorIndex);
         else forge.ApplyRemoteUndock(itemViewId);
     }
-
-    // ---- IInRoomCallbacks -------------------------------------------------
 
     public void OnPlayerEnteredRoom(Player newPlayer)
     {

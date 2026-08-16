@@ -4,12 +4,12 @@ using System.Collections.Generic;
 namespace VoidCrewTerminus.Forge;
 
 // Opaque, immutable value carrying a module's forge overlay across the deconstruct
-// → reconstruct bridge. Also the shape that ForgeCommit folds commit outcomes into
+// → reconstruct bridge. Also the shape ForgeCommit folds commit outcomes into
 // before saving.
 //
 // Any change to what a "forge overlay" contains happens here; the two conversion
 // points on ForgeModuleState (Snapshot / ApplySnapshot) then fail to compile until
-// they match — the forcing function that stops the old parallel-shapes drift.
+// they match — the compiler is the forcing function against shape drift.
 public sealed class ForgeSnapshot
 {
     public int Level { get; }
@@ -63,9 +63,8 @@ public sealed class ForgeSnapshot
         return new ForgeSnapshot(Level, next, (BurdenType[])_burdens.Clone());
     }
 
-    // Add a burden to the module's set. Idempotent — if the type is already
-    // present (or if `burden == None`), returns `this` unchanged. Different
-    // burden types stack; identical types don't.
+    // Idempotent — if the type is already present (or `burden == None`), returns
+    // `this` unchanged. Different burden types stack; identical types don't.
     public ForgeSnapshot WithBurdenAdded(BurdenType burden)
     {
         if (burden == BurdenType.None) return this;
@@ -88,22 +87,21 @@ public sealed class ForgeSnapshot
     //
     // Layout: [int viewId, int level, string[] perkSlots, int[] burdens, int relicsConsumed]
     //
-    // This lives HERE rather than in the net layer because the net layer had
-    // three hand-rolled copies of it, which meant adding a field to a snapshot
-    // compiled fine and then silently dropped it on the wire — the one hole in
-    // the compile-time forcing function described above.
+    // This lives HERE rather than in the net layer because the net layer had three
+    // hand-rolled copies of it, so adding a field to a snapshot used to compile fine
+    // and then silently drop it on the wire.
     //
-    // Note the compiler CANNOT close this hole the way it closes the
-    // ForgeModuleState conversions: Create() takes its arguments positionally, so
-    // a new field simply doesn't get passed and nothing fails to build. The guard
-    // is ToPayload_CarriesEveryPublicSnapshotField in ForgeSnapshotTests, which
-    // reflects over this type's public properties and fails on any it wasn't
-    // taught about. Keep it updated in lock-step with the two methods below.
+    // Unlike the ForgeModuleState conversions above, the compiler can't catch that
+    // hole: Create() takes its arguments positionally, so a new field simply isn't
+    // passed and nothing fails to build. The guard is
+    // ToPayload_CarriesEveryPublicSnapshotField in ForgeSnapshotTests, which
+    // reflects over this type's public properties — keep it updated alongside the
+    // two methods below.
     public const int PayloadLength = 5;
 
     // Empty perk slots travel as "" rather than null; TryFromPayload normalises
     // them back. Both spellings read as empty everywhere else in the mod, but
-    // only one of them should ever cross the wire.
+    // only one should ever cross the wire.
     public object[] ToPayload(int viewId, int relicsConsumed)
     {
         var perks = new string[_perkSlots.Length];
@@ -117,10 +115,9 @@ public sealed class ForgeSnapshot
         return new object[] { viewId, Level, perks, burdens, relicsConsumed };
     }
 
-    // Decode a payload produced by ToPayload. Returns false with every out
-    // parameter left at a safe default when the payload is absent or too short —
-    // an arity check is the only validation the wire has ever had. Level
-    // clamping and burden dedup come free via Create.
+    // Returns false with every out parameter at a safe default when the payload is
+    // absent or too short — an arity check is the only validation the wire has ever
+    // had. Level clamping and burden dedup come free via Create.
     public static bool TryFromPayload(
         object[] payload, out int viewId, out ForgeSnapshot snapshot, out int relicsConsumed)
     {
@@ -147,8 +144,8 @@ public sealed class ForgeSnapshot
         return true;
     }
 
-    // Dedup at construction time — Create() may receive an unfiltered list from
-    // Snapshot() callers. Preserves first-occurrence order.
+    // Create() may receive an unfiltered list from Snapshot() callers; preserves
+    // first-occurrence order.
     private static BurdenType[] DedupBurdens(IReadOnlyList<BurdenType> source)
     {
         var seen = new List<BurdenType>();

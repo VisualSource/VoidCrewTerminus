@@ -53,8 +53,7 @@ class TerminusModMenu : ModSettingsMenu
     private void renderGeneralTab()
     {
         TerminusConfig.AllowRelicReplication.Value = Toggle(TerminusConfig.AllowRelicReplication.Value, "Allow Relic replication in fabractor");
-        // Writes go through the ConfigEntry itself — TerminusConfig's accessors are
-        // read-only views for consumers.
+        // Writes go through the ConfigEntry — TerminusConfig's accessors are read-only.
         TerminusConfig.EnableDevMode.Value = Toggle(TerminusConfig.EnableDevMode.Value, "Enable dev mode, allows for spawning items amoung other things");
     }
 

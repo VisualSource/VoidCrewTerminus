@@ -82,25 +82,17 @@ public readonly struct ForgeDecision
 }
 
 // Every rule about what a click on the Upgrade Forge means, in one place and free
-// of Unity.
-//
-// These rules previously lived inline in UpgradeForgeBehavior.HandleInteraction,
-// where nothing could reach them: a MonoBehaviour method body cannot even be
-// JIT-compiled in the test host, so the entire payload x target matrix — which
-// target each payload is legal on, which refusal wins when two apply, what the
-// counts read after an insert, whether a commit runs here or goes to the host —
-// was verifiable only by standing in front of a Forge in-game and clicking.
+// of Unity — a MonoBehaviour method body cannot even be JIT-compiled in the test
+// host, so this used to be verifiable only by standing in front of a Forge and
+// clicking.
 //
 // The split is: everything decidable BEFORE touching the world is decided here;
 // everything that depends on the outcome of touching it (the commit result, the
-// alloy spend) is reported by the caller afterwards. So this owns the wording of
-// every refusal and every readout, and none of the wording of a result.
+// alloy spend) is reported by the caller afterwards.
 //
 // Commit refusals deliberately route through ForgeLabels.DescribeCommit rather
-// than carrying their own strings. The client path used to keep private copies of
-// them, and answered a box with no network identity with "load a module box",
-// which was simply wrong — both paths now refuse identically, which is the drift
-// ForgeLabels exists to prevent.
+// than carrying their own strings — the host and client paths used to drift
+// (a box with no network identity was once misreported as "load a module box").
 public static class ForgeInteractionPolicy
 {
     public static ForgeDecision Decide(in ForgeView forge, in ForgeClick click)
@@ -184,8 +176,8 @@ public static class ForgeInteractionPolicy
         if (!forge.SocketedBoxHasViewId) return Refuse(CommitStatus.MissingViewId, forge);
         if (forge.RelicCount == 0) return Refuse(CommitStatus.NoRelics, forge);
 
-        // The roll is host-authoritative — cursed markers and RNG live there
-        // (Phase 8-C). Solo counts as authority, so single-player runs inline.
+        // The roll is host-authoritative — cursed markers and RNG live there.
+        // Solo counts as authority, so single-player runs inline.
         return forge.IsAuthority
             ? new ForgeDecision(ForgeAction.Commit, null)   // the outcome does the talking
             : new ForgeDecision(ForgeAction.RequestCommit, "Requesting upgrade from the host…");

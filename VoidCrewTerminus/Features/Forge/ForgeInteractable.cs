@@ -26,21 +26,19 @@ public enum ForgeInteractableKind
 //
 // Covers every Forge interactable EXCEPT the Commit button, which is a
 // ForgeCommitInteractable instead (a hold-to-confirm gate on an irreversible
-// action needs a different vanilla base class entirely — see its doc comment).
-// ForgeInteractableKind.CommitButton still exists as a value here because
-// ForgeInteractionPolicy's click matrix is keyed by it regardless of which
-// component originates the interaction.
+// action needs a different vanilla base class entirely). ForgeInteractableKind.
+// CommitButton still exists as a value here because ForgeInteractionPolicy's
+// click matrix is keyed by it regardless of which component originates the interaction.
 public class ForgeInteractable : AbstractInteractable
 {
     public UpgradeForgeBehavior Forge;
     public ForgeInteractableKind Kind;
     public Transform Anchor;
 
-    // Click colliders surround the items docked on their anchors, so they would
-    // swallow every click aimed at those items. When an anchor is occupied and the
-    // player's hands are empty, step aside: RaycastHandler then skips this trigger
-    // and the ray reaches the docked item's own Grabbable — retrieval of the
-    // BuildBox (before or after committing) and of relics is the vanilla grab.
+    // Click colliders surround items docked on their anchors and would swallow
+    // every click aimed at them. When an anchor is occupied and the player's
+    // hands are empty, step aside: RaycastHandler then skips this trigger and
+    // the ray reaches the docked item's own Grabbable for retrieval.
     public override bool IsInteractive
     {
         get
@@ -64,14 +62,10 @@ public class ForgeInteractable : AbstractInteractable
         set => base.IsInteractive = value;
     }
 
-    // No outline yet, deliberately: unlike Commit (LeverBox) and Deconstruct
-    // (Handle), this covers RelicTube/ModuleSocket/AlloyTerminal, and which mesh
-    // each of those should scope its outline to hasn't been decided/modeled yet.
-    // Whole-module outlining for these was an assumption-of-convenience, not a
-    // requested design — pulled until that's actually settled, rather than
-    // outlining the whole Forge on every tube/socket/terminal hover in the
-    // meantime. base.Highlighted is still called (AbstractInteractable's; empty,
-    // harmless) to keep the override chain intact for whenever this is revisited.
+    // No outline yet, deliberately: this covers RelicTube/ModuleSocket/AlloyTerminal,
+    // and which mesh each should scope its outline to hasn't been decided/modeled
+    // yet. base.Highlighted (empty, harmless) is still called to keep the override
+    // chain intact for whenever this is revisited.
     public override void Highlighted(bool isHighlighted)
     {
         base.Highlighted(isHighlighted);
@@ -140,28 +134,19 @@ public class ForgeInteractable : AbstractInteractable
         return info;
     }
 
-    // CommitButton/AlloyTerminal have no vanilla InteractionInfo asset to borrow, so build
-    // one: same interact key binding as _insertInfo (the same F prompt already shown on the
-    // relic tubes and module socket — vanilla's generic "action key", e.g. toggling a
-    // module's power) with our own label swapped in, instead of the default's empty
-    // Interactions list, which the HUD renders as no prompt at all. interactionType lets a
-    // caller override the borrowed Press default — Commit needs Hold (see ForgeCommitInteractable).
+    // CommitButton/AlloyTerminal have no vanilla InteractionInfo asset to borrow, so
+    // build one from _insertInfo's key binding with our own label swapped in.
+    // interactionType lets a caller override the borrowed Press default — Commit
+    // needs Hold (see ForgeCommitInteractable).
     //
-    // KeyBindVE.Init resolves its icon by taking InteractionDescription.Key.FallBackString,
-    // stripping "<keybind>...</keybind>" tags, and looking THAT UP BY NAME as an InputAction
-    // (InputService.FindActionKey — a live search through InputActionAsset.actionMaps, not
-    // just a display string). _insertInfo's own Key names vanilla's regular click/interact
-    // action — correct for Press-type prompts (RelicTube/ModuleSocket/AlloyTerminal all
-    // borrow it verbatim), but Commit and Deconstruct are actually driven by
-    // HoldClickerInteractable's SEPARATE InputActionReferences.HoldAction (see that class),
-    // a different bound key/mouse-button than the click action. Borrowing the click action's
-    // Key for a Hold-type prompt made KeyBindVE resolve and display the CLICK action's icon
-    // (in practice a mouse-click glyph) instead of the Hold action's — even though
-    // InteractionType was already correctly set to Hold. Built fresh from the Hold action's
-    // OWN live name (read off ServiceBase<InputService>.Instance.InputActionReferences.HoldAction
-    // rather than hardcoded, so a rebind/rename in the Input Actions asset can't silently
-    // desync this from what HoldClickerInteractable itself actually listens on) instead of
-    // reusing source.Key for Hold-type prompts specifically.
+    // For Hold-type prompts specifically, the Key must NOT be borrowed from
+    // _insertInfo: KeyBindVE.Init resolves its icon by taking Key.FallBackString and
+    // looking it up BY NAME as an InputAction (InputService.FindActionKey), and
+    // _insertInfo's Key names the regular click/interact action — not
+    // HoldClickerInteractable's separate InputActionReferences.HoldAction that Commit
+    // and Deconstruct actually listen on. Borrowing it made the HUD show the click
+    // action's icon even with InteractionType correctly set to Hold. Built fresh
+    // instead from the Hold action's own live name so a rebind can't desync it.
     private static InteractionInfo ActionInfo(string label, InteractionDescription.EInteractionType? interactionType = null)
     {
         var info = ScriptableObject.CreateInstance<InteractionInfo>();

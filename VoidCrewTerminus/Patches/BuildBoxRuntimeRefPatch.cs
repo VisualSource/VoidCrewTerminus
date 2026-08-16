@@ -5,25 +5,16 @@ using ResourceAssets;
 
 namespace VoidCrewTerminus.Patches;
 
-// BuildBoxActor.Awake() resolves the module its crate represents via
-// moduleRef.Asset, which branches on CloneStarObjectRef.IsRuntime (mod-registered
-// lookup via RuntimeAssetsRegister vs. vanilla ResourcePaths/Resources.Load).
-// IsRuntime is declared [NonSerialized] on the base ResourceAssetRef though —
-// Unity's prefab→instance clone (what PhotonNetwork.Instantiate does under the
-// hood) does not carry NonSerialized fields across. AssetLoader.LinkForgeBuildBox
-// sets moduleRef.IsRuntime = true once on the prefab ASSET, but every spawned
-// INSTANCE's copy resets to false, so Awake() falls through to the vanilla
-// Resources.Load path with an empty ResourcePaths entry (our guid isn't
-// vanilla-registered), gets null back, and BuildingConstraints NREs on it inside
-// GetMeshSetup — confirmed in-game: box spawns (Rigidbody/Collider/PhotonView
-// intact) but Awake() dies before wiring the mesh/timeline/diodes, so it's
-// invisible and non-interactable. BuildBox.BuildModule/GetBuildSize read the same
-// moduleRef.Asset later (when actually installing the box into a ship socket),
-// so this one bug blocks both the dev-spawn visuals and the real build flow.
+// moduleRef.IsRuntime is [NonSerialized], so Unity's prefab→instance clone
+// (PhotonNetwork.Instantiate) doesn't carry it: AssetLoader.LinkForgeBuildBox
+// sets it true on the prefab asset, but every spawned instance's copy resets to
+// false. BuildBoxActor.Awake() then falls through to the vanilla Resources.Load
+// path, gets null for our non-vanilla-registered guid, and NREs inside
+// GetMeshSetup — the box spawns but is invisible and non-interactable, and the
+// same moduleRef.Asset read later blocks BuildBox.BuildModule/GetBuildSize too.
 //
-// Re-stamp IsRuntime immediately before Awake reads it, gated to only guids
-// RuntimeAssetsRegister actually knows about — vanilla BuildBox instances (whose
-// moduleRef legitimately resolves via ResourcePaths, IsRuntime correctly false)
+// Re-stamp IsRuntime immediately before Awake reads it, gated to guids
+// RuntimeAssetsRegister actually knows about so real vanilla BuildBox instances
 // are left untouched.
 [HarmonyPatch(typeof(BuildBoxActor), nameof(BuildBoxActor.Awake))]
 internal static class BuildBoxRuntimeRefPatch
