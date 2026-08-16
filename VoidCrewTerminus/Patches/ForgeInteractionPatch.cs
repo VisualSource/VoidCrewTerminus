@@ -141,7 +141,17 @@ internal static class ForgeAttachHelper
         bool alreadyRegistered = _colliderObjectsField?.GetValue(platform) is IDictionary dict
             && dict.Contains(module.gameObject);
 
-        platform.AddColliderObject(module.gameObject);
+        // AddColliderObject is NOT idempotent despite the doc comment above: it
+        // unconditionally clones fresh shadow colliders into the simulation scene
+        // before trying colliderObjects.TryAdd(obj, list), and silently drops the
+        // clones it just made if the key's already present — they stay parented
+        // in the scene but nothing is tracking them for RemoveColliderObject to
+        // destroy on deconstruct. Calling this when vanilla's own path already
+        // registered the module leaks an orphaned, permanently-uncollectable set
+        // of colliders at the module's position every time. Must only call when
+        // truly missing.
+        if (!alreadyRegistered)
+            platform.AddColliderObject(module.gameObject);
         BepinPlugin.Log.LogDebug(
             $"[Forge] Ship-platform collider registration for {module.name}: " +
             (alreadyRegistered
