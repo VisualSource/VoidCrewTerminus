@@ -66,6 +66,16 @@ class TerminusModMenu : ModSettingsMenu
         TerminusConfig.AllowRelicReplication.Value = Toggle(TerminusConfig.AllowRelicReplication.Value, "Allow Relic replication in fabractor");
         // Writes go through the ConfigEntry — TerminusConfig's accessors are read-only.
         TerminusConfig.EnableDevMode.Value = Toggle(TerminusConfig.EnableDevMode.Value, "Enable dev mode, allows for spawning items amoung other things");
+
+
+        Label("Credits");
+
+        BeginVertical();
+        Label("==== Playtesters =====");
+
+        Label("- Diamondrunner1");
+        Label("- Mark (TODO replace this with username)");
+        EndVertical();
     }
 
     private void renderUpgradeForgeTab()
