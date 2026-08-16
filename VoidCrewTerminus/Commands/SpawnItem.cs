@@ -6,6 +6,7 @@ using CG.Game.Player;
 using CG.Game.Scenarios;
 using CG.Objects;
 using Photon.Pun;
+using ResourceAssets;
 using UnityEngine;
 using VoidManager.Chat.Router;
 using VoidManager.Utilities;
@@ -14,20 +15,31 @@ namespace VoidCrewTerminus.Commands;
 
 internal class SpawnItemCommand : PublicCommand
 {
+    internal sealed class SpawnableCarryable
+    {
+        public readonly string Name;
+        public readonly GUIDUnion Guid;
+        public readonly bool IsLocked;
+
+        public SpawnableCarryable(string name, GUIDUnion guid, bool isLocked)
+        {
+            Name = name;
+            Guid = guid;
+            IsLocked = isLocked;
+        }
+    }
+
     public override string[] CommandAliases() => new[] { "spawn" };
 
     public override string Description() => "Spawn a carryable item at your position for testing";
 
     public override List<Argument> Arguments() =>
     [
-        new("list"),
         new("%item_name")
     ];
 
     public override string[] UsageExamples() =>
     [
-        "!spawn list",
-        "!spawn list oxygen",
         "!spawn Power Fuse",
         "!spawn oxygen"
     ];
@@ -41,35 +53,7 @@ internal class SpawnItemCommand : PublicCommand
 
         if (string.IsNullOrWhiteSpace(arguments))
         {
-            Messaging.Notification("Usage: !spawn <item name>  |  !spawn list [filter]");
-            return;
-        }
-
-        EnsureListPopulated();
-
-        var carryables = DebugSpawnObjects.SpawnablesList
-            .Where(s => s._objectType == typeof(CarryableObject))
-            .ToList();
-
-        if (arguments.StartsWith("list", StringComparison.OrdinalIgnoreCase))
-        {
-            var filter = arguments.Length > 4 ? arguments[4..].Trim() : string.Empty;
-            var matches = string.IsNullOrEmpty(filter)
-                ? carryables
-                : carryables.Where(s => s.name.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
-
-            if (matches.Count == 0)
-            {
-                Messaging.Notification($"No items match '{filter}'");
-                return;
-            }
-
-            const int chunkSize = 10;
-            for (int i = 0; i < matches.Count; i += chunkSize)
-            {
-                var chunk = matches.Skip(i).Take(chunkSize).Select(s => s.name);
-                Messaging.Notification(string.Join(", ", chunk));
-            }
+            Messaging.Notification("Usage: !spawn <item name>  |  browse the full list in the Terminus settings menu's Spawn tab.");
             return;
         }
 
@@ -80,14 +64,15 @@ internal class SpawnItemCommand : PublicCommand
             return;
         }
 
+        var carryables = GetCarryables();
         var item = carryables.FirstOrDefault(s =>
-                s.name.Equals(arguments, StringComparison.OrdinalIgnoreCase))
+                s.Name.Equals(arguments, StringComparison.OrdinalIgnoreCase))
             ?? carryables.FirstOrDefault(s =>
-                s.name.IndexOf(arguments, StringComparison.OrdinalIgnoreCase) >= 0);
+                s.Name.IndexOf(arguments, StringComparison.OrdinalIgnoreCase) >= 0);
 
         if (item == null)
         {
-            Messaging.Notification($"No carryable found matching '{arguments}'. Use !spawn list to browse.");
+            Messaging.Notification($"No carryable found matching '{arguments}'. Browse the Spawn tab in the Terminus settings menu.");
             return;
         }
 
@@ -95,17 +80,46 @@ internal class SpawnItemCommand : PublicCommand
 
         if (PhotonNetwork.IsMasterClient)
         {
-            var spawned = SpawnUtils.SpawnCarryable(item._guidUnion, spawnPos, Quaternion.identity);
+            var spawned = SpawnUtils.SpawnCarryable(item.Guid, spawnPos, Quaternion.identity);
             Messaging.Notification(spawned != null
-             ? $"Spawned: {item.name}"
-             : $"Failed to spawn: {item.name}");
+             ? $"Spawned: {item.Name}"
+             : $"Failed to spawn: {item.Name}");
         }
-
     }
 
-    private static void EnsureListPopulated()
+    // Repopulates DebugSpawnObjects' Carryable-only list on every call rather than
+    // trusting its cached state: that list is shared with the vanilla debug menu's
+    // own Object Type toolbar, so if a player ever switches it to WeaponBuildBox/
+    // SpaceObject, our filter on _objectType silently returns nothing until it's
+    // switched back. Clearing first avoids appending duplicates on repeat calls.
+    internal static List<SpawnableCarryable> GetCarryables()
     {
-        if (DebugSpawnObjects.SpawnablesList.Count == 0)
-            DebugSpawnObjects.PopulateList();
+        DebugSpawnObjects.SpawnablesList.Clear();
+        DebugSpawnObjects.PopulateCarryablesList();
+
+        return DebugSpawnObjects.SpawnablesList
+            .Where(s => s._objectType == typeof(CarryableObject))
+            .Select(s => new SpawnableCarryable(s.name, s._guidUnion, s.IsLocked))
+            .ToList();
+    }
+
+    internal static bool TrySpawnAtPlayer(SpawnableCarryable item, out string message)
+    {
+        var player = LocalPlayer.Instance;
+        if (player == null)
+        {
+            message = "Cannot spawn: not in an active game session";
+            return false;
+        }
+        if (!PhotonNetwork.IsMasterClient)
+        {
+            message = "Only the host can spawn items";
+            return false;
+        }
+
+        var spawnPos = player.transform.position + player.transform.forward * 2f;
+        var spawned = SpawnUtils.SpawnCarryable(item.Guid, spawnPos, Quaternion.identity);
+        message = spawned != null ? $"Spawned: {item.Name}" : $"Failed to spawn: {item.Name}";
+        return spawned != null;
     }
 }

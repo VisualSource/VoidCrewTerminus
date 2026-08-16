@@ -1,9 +1,10 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using static UnityEngine.GUILayout;
 using VoidManager.CustomGUI;
-using Mono.CompilerServices.SymbolWriter;
 using UnityEngine;
-using Unity.Collections;
-using UnityEngine.UIElements;
+using VoidCrewTerminus.Commands;
 
 namespace VoidCrewTerminus;
 
@@ -12,7 +13,12 @@ class TerminusModMenu : ModSettingsMenu
     readonly GUILayoutOption[] labelWidth = { MaxWidth(5) };
 
     int selectedTab = 0;
-    string[] tabs = { "General", "Lobby Ships", "Upgrade Foge", "Gameplay" };
+    string[] tabs = { "General", "Lobby Ships", "Upgrade Foge", "Gameplay", "Spawn" };
+
+    string spawnFilter = string.Empty;
+    bool hideLockedSpawnables = true;
+    Vector2 spawnScrollPosition;
+    List<SpawnItemCommand.SpawnableCarryable> cachedCarryables = new();
 
     public override string Name()
     {
@@ -21,6 +27,7 @@ class TerminusModMenu : ModSettingsMenu
 
     public override void Draw()
     {
+        var previousTab = selectedTab;
         selectedTab = Toolbar(selectedTab, tabs);
 
         switch (selectedTab)
@@ -36,6 +43,10 @@ class TerminusModMenu : ModSettingsMenu
                 break;
             case 3:
                 renderGameplayTab();
+                break;
+            case 4:
+                if (previousTab != 4) RefreshCarryables();
+                renderSpawnTab();
                 break;
         }
     }
@@ -101,14 +112,48 @@ class TerminusModMenu : ModSettingsMenu
 
     private void renderGameplayTab() { }
 
+    private void renderSpawnTab()
+    {
+        if (!TerminusConfig.DevMode)
+        {
+            Label("Enable Dev Mode in the General tab to spawn items.");
+            return;
+        }
+
+        BeginHorizontal();
+        Label("Filter", labelWidth);
+        spawnFilter = TextField(spawnFilter);
+        if (Button("Refresh", MaxWidth(70))) RefreshCarryables();
+        EndHorizontal();
+
+        hideLockedSpawnables = Toggle(hideLockedSpawnables, "Hide Locked/Debug Items");
+
+        var matches = cachedCarryables
+            .Where(c => !hideLockedSpawnables || !c.IsLocked)
+            .Where(c => string.IsNullOrEmpty(spawnFilter) || c.Name.IndexOf(spawnFilter, StringComparison.OrdinalIgnoreCase) >= 0)
+            .ToList();
+
+        Label($"{matches.Count} item(s)");
+
+        spawnScrollPosition = BeginScrollView(spawnScrollPosition);
+        foreach (var item in matches)
+        {
+            if (Button(item.Name, Height(30)))
+            {
+                SpawnItemCommand.TrySpawnAtPlayer(item, out var message);
+                BepinPlugin.Log.LogInfo($"[Spawn] {message}");
+            }
+        }
+        EndScrollView();
+    }
+
+    private void RefreshCarryables()
+    {
+        cachedCarryables = SpawnItemCommand.GetCarryables();
+    }
 
     private int IntInput(int value)
     {
-
-
-
-
-
         try
         {
             var result = TextField(value.ToString());
@@ -133,7 +178,6 @@ class TerminusModMenu : ModSettingsMenu
             return value;
         }
     }
-
 
     private Vector3 InputGroup(Vector3 source)
     {
