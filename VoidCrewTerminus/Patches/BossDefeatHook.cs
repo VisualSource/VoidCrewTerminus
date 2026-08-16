@@ -120,6 +120,11 @@ internal static class BossDefeatHook
         }
     }
 
+    // Dev-only direct trigger for !forgeboxdrop (Commands/ForgeCommitCommand.cs) —
+    // same delivery path as the real 2nd-boss reward, without needing to actually
+    // defeat two bosses in a run just to test the care-package pipeline.
+    internal static void DebugAwardForgeBuildBox() => AwardForgeBuildBox();
+
     // Delivered via vanilla's own objective-reward pipeline (SpawnUtils.SpawnCarePackage
     // — the same call Objective.ObjectiveCompleted's CompletionDrop uses) rather than
     // hooking monster loot drops: there is no boss-exclusive loot list to hook into
@@ -129,13 +134,23 @@ internal static class BossDefeatHook
     // Caller already holds the IsAuthority gate.
     private static void AwardForgeBuildBox()
     {
+        // Must run BEFORE the guid lookup, not after — EnsureBuildBoxTemplateReady
+        // is what actually registers the box into RuntimeAssetsRegister (what
+        // TryFindForgeAssetGuid searches) in the first place. This method had them
+        // backwards: if no one had triggered the box template yet this session
+        // (e.g. via !forgespawn), the guid lookup always failed and this bailed
+        // out before ever giving EnsureBuildBoxTemplateReady a chance to run —
+        // "Forge BuildBox isn't registered" on a fresh !forgeboxdrop, works fine
+        // right after a !forgespawn only because THAT command builds the template
+        // first. ForgeSpawnCommand.Execute already has the correct order; this
+        // just didn't match it.
+        AssetLoader.EnsureBuildBoxTemplateReady();
+
         if (!ForgeSpawnCommand.TryFindForgeAssetGuid(UpgradeForgeBehavior.BuildBoxPrefabName, out var boxGuid))
         {
             BepinPlugin.Log.LogWarning("[Forge] 2nd boss defeated but the Forge BuildBox isn't registered — reward not spawned.");
             return;
         }
-
-        AssetLoader.EnsureBuildBoxTemplateReady();
 
         var playerShip = ClientGame.Current?.PlayerShip;
         if (playerShip == null) return;

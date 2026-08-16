@@ -699,9 +699,7 @@ In Progress:
                     guid (in EnsureRuntimeAssetsRegisteredInVanillaContainers's loop) and the box guid
                     (in EnsureBuildBoxTemplateReady) — same both-guids hedge as the Category fix, same
                     reasoning (unclear which guid the crate's own hover target actually resolves to).
-                    [] VERIFY (next test): hover both surfaces — left edge should now show the gray
-                       Common-rarity band. Watch the log for "[AssetLoader] Registered ... into vanilla
-                       UnlockContainer as Common." (×2) or a "Failed to register" error if it doesn't.
+                    ✔ CONFIRMED (user): rarity band color is correct now.
 
                  NEW BUG (user): deconstructing an unrelated module (a "scoop module") instead
                  deconstructed the Forge module.
@@ -839,8 +837,8 @@ In Progress:
                     Deconstructing an unrelated module no longer touches the Forge. This closes out the
                     whole "scoop-deconstructs-Forge" saga (donor-collider theory → leaked-Hold-
                     subscription theory → the actual root cause found via log instrumentation).
-                    [] VERIFY: the deconstruct lever mesh (Handle) still visually rotates while
-                       holding the trigger (now on the X axis — see further below).
+                    ✔ CONFIRMED (user): lever rotation is correct (ended on the Z axis after two
+                    revisions — X was still wrong, Z is right).
                     [] VERIFY: holding Commit still works normally (never reported broken).
 
                  FOLLOW-UP (user, same session): the Commit prompt icon shows a mouse-click glyph
@@ -871,10 +869,7 @@ In Progress:
                     _insertInfo's Key as before, which is correct for them (Press-type, same click action).
                     Also added a LogDebug reporting the resolved action name for every Hold prompt built,
                     in case the name it resolves to isn't what's expected.
-                    [] VERIFY (next test): Commit and Deconstruct prompts should now show a keyboard-key
-                       icon (matching whatever HoldAction is actually bound to) instead of a mouse glyph.
-                       If not, check the log for "[Forge] Hold prompt ... bound to action name ..." — if
-                       that name doesn't resolve via FindActionKey either, the guess needs revisiting.
+                    ✔ CONFIRMED (user): Commit/Deconstruct prompt icons are correct now.
 
                  FOLLOW-UP (user, same session): requested the Forge's hover highlight use the same
                  outline-shader effect vanilla modules/BuildBoxes use, instead of whatever the mod was
@@ -956,19 +951,59 @@ In Progress:
                        pattern Commit/Deconstruct already have — likely per-Kind or per-anchor lookup
                        rather than one shared field, since ForgeInteractable is reused across all three
                        kinds and all 6 tube instances.
-                    [] VERIFY: defeating the 2nd boss still delivers a working Forge BuildBox via
-                       care package (BossDefeatHook path, now on the same fixed template).
-                    [] VERIFY: deconstructing an installed Forge module produces a working BuildBox
-                       (not yet tested at all this session — genuinely unknown whether the whole
-                       install → deconstruct loop functions).
-                    [] VERIFY: hold the Handle to completion on an installed Forge → module
-                       deconstructs back to a BuildBox, no ArgumentNullException, no leftover
-                       ForgeDeconstructInteractable warning in the log.
-                    [] VERIFY: releasing the Handle early cancels cleanly (no deconstruct, handle
-                       visually springs back to 0).
-                    [] VERIFY: defeating the 2nd boss in a run spawns an incoming care package
-                       that contains the Forge BuildBox (not just the vanilla notification text —
-                       confirm the package actually opens into a real, carryable box).
+                 FOLLOW-UP (user, same session): "the drop mechanic" (clarified: boss care-package
+                 delivery of the Forge BuildBox) called out as the last unverified piece of the whole
+                 Forge BuildBox arc.
+                    TRACED (not yet live-tested): BossDefeatHook.AwardForgeBuildBox calls
+                    SpawnUtils.SpawnCarePackage(boxGuid, ...), which does NOT spawn our box directly —
+                    it spawns DataTable<DefaultAssetTable>.DefaultCarePackageAsset (the vanilla flying-
+                    crate prefab) with our guid encoded into its instantiation data under key 15
+                    (InstantiationDataParser.PIDI_PREDEFINED_DROP) / key 16 (…_QUANTITY). That prefab
+                    carries a Gameplay.Loot.LootOnDeathDropper component, which reads those two keys in
+                    OnPhotonInstantiate and, once the care package object itself is destroyed
+                    (OrbitObject.OnDestroyed → LootOnDeathDropper.SpawnPredefinedLoot), spawns the
+                    predefined guid via ObjectFactory.InstantiateSpaceObjectByGUID — the SAME method
+                    SpawnUtils.SpawnCarryable uses for our guid, which !forgespawn already exercises and
+                    the user already CONFIRMED working earlier this session. Same guid, same method, no
+                    instantiation-data difference between the two call sites — structurally this should
+                    already work off the registrations EnsureBuildBoxTemplateReady already sets up
+                    (called before SpawnCarePackage in AwardForgeBuildBox), but "should work by analogy"
+                    isn't the same as tested, and this exact class of bug (vanilla code resolving our
+                    runtime-registered guids) has bitten this mod repeatedly this session in ways that
+                    weren't obvious from reading code alone.
+                    NEW: !forgeboxdrop dev command (Commands/ForgeCommitCommand.cs, ForgeBoxDropCommand) —
+                    calls BossDefeatHook.DebugAwardForgeBuildBox() (a new internal wrapper around the
+                    existing private AwardForgeBuildBox) directly, so the whole care-package pipeline can
+                    be tested on demand instead of needing to actually defeat two real bosses per attempt.
+                    Host/authority-gated (same as the real path), DevMode-gated (same as every other dev
+                    command here).
+                    HIT (user): !forgeboxdrop on a fresh session (no prior !forgespawn) failed with
+                    "[Forge] 2nd boss defeated but the Forge BuildBox isn't registered — reward not
+                    spawned." !forgespawn worked fine right after.
+                    ROOT CAUSE: AwardForgeBuildBox had the two setup calls BACKWARDS — it called
+                    TryFindForgeAssetGuid (searches RuntimeAssetsRegister) BEFORE
+                    AssetLoader.EnsureBuildBoxTemplateReady() (the method that actually REGISTERS the
+                    box into RuntimeAssetsRegister in the first place, idempotent/one-time via
+                    _modulePrefabs.ContainsKey guard). ForgeSpawnCommand.Execute (!forgespawn) already
+                    had the correct order (EnsureBuildBoxTemplateReady, THEN the guid lookup) — that's
+                    why using !forgespawn once "fixed" a subsequent !forgeboxdrop in the same session
+                    (the template was already built by then, so the backwards order in AwardForgeBuildBox
+                    no longer mattered) but a fresh session hit it immediately. Not a "should work by
+                    analogy" gap after all — a straightforward ordering bug, unrelated to the
+                    ObjectFactory.InstantiateSpaceObjectByGUID theory above (never got that far).
+                    FIXED: swapped the two calls in AwardForgeBuildBox to match ForgeSpawnCommand's order.
+                    ✔ CONFIRMED (user): full chain works end-to-end — !forgeboxdrop spawns the care
+                    package, it arrives and opens, drops a real Forge BuildBox, and it's pickable. The
+                    ObjectFactory.InstantiateSpaceObjectByGUID guid-resolution theory is resolved: it
+                    works, same as SpawnCarryable's use of it already proved via !forgespawn. This closes
+                    out the whole "drop mechanic" thread — boss care-package delivery is done.
+                    [] VERIFY (low priority, not urgent): a REAL 2nd boss defeat in a live run should
+                    trigger the identical (now-fixed) path — the dev-command path is proven, this would
+                    just confirm nothing about the real BossDefeatHook trigger itself (vs. the
+                    DebugAwardForgeBuildBox dev shortcut) behaves differently. Not blocking.
+                    ✔ CONFIRMED (user): the full place → deconstruct → pickup loop works end-to-end —
+                    installed Forge module deconstructs cleanly back to a real, pickable BuildBox.
+                    (Care-package delivery already confirmed separately above.)
                     [] VERIFY (carried over from the Commit-button entry above, same session):
                        Commit prompt shows Hold not Press, right-click no longer commits.
         [] 8-* full-run 2-client soak once A/B/C individually verified

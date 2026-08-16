@@ -328,3 +328,29 @@ internal class ForgeSpawnCommand : PublicCommand
         return false;
     }
 }
+
+// Triggers the boss-defeat care-package reward directly, without needing to
+// actually defeat two bosses in a run first. Same delivery path as the real
+// thing (Patches.BossDefeatHook.AwardForgeBuildBox — spawns a vanilla care
+// package via SpawnUtils.SpawnCarePackage, which flies in and, once opened/
+// destroyed, spawns the Forge BuildBox through LootOnDeathDropper's own
+// predefined-item path) — exists specifically to make that whole pipeline
+// testable in isolation, since it was still an unverified TODO item after
+// everything else about the Forge BuildBox (spawn, hover, deconstruct,
+// highlight) got exercised and fixed this session.
+internal class ForgeBoxDropCommand : PublicCommand
+{
+    public override string[] CommandAliases() => new[] { "forgeboxdrop" };
+    public override string Description() => "[DevMode] Trigger the Forge BuildBox boss-reward care package immediately (same delivery as the real 2nd-boss reward)";
+    public override List<Argument> Arguments() => [];
+    public override string[] UsageExamples() => ["!forgeboxdrop"];
+
+    public override void Execute(string arguments, int sender)
+    {
+        if (!TerminusConfig.DevMode) return;
+        if (!Net.ForgeNetSync.IsAuthority) { Messaging.Notification("Only the host can trigger the care package."); return; }
+
+        Patches.BossDefeatHook.DebugAwardForgeBuildBox();
+        Messaging.Notification("Care package triggered — watch for it flying in near the ship.");
+    }
+}

@@ -1,3 +1,7 @@
+## 0.0.16
+- fix placement bug on upgrade forge
+- add buildbox for upgrade forge
+- add drop for upgrade forge
 ## 0.0.15
 - refactor upgrade forge by spliting out non unity parts.
 ## 0.0.14
