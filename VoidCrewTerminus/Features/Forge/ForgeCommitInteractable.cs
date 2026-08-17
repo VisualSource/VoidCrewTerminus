@@ -1,27 +1,32 @@
+using CG.Client.Ship.Interactions;
 using CG.Game.Player;
 using UnityEngine;
 
 namespace VoidCrewTerminus.Forge;
 
 // The Forge's Commit button, held rather than clicked — committing consumes relics
-// irreversibly, so an accidental tap on the wrong target shouldn't be able to fire
-// it the way an accidental click could. Uses the same vanilla mechanism as module
-// deconstruction: HoldClickerInteractable, driven by EnvironmentInteract (the F/Hold
-// action) rather than CarryableInteract (the click every other Forge interactable
-// still uses). HoldCompleted only fires once the Input System's configured Hold
-// interaction on InputActionReferences.HoldAction actually completes; releasing
-// early never reaches it at all.
+// irreversibly, so an accidental tap shouldn't be able to fire it.
+//
+// Extends ClickerInteractable directly, NOT HoldClickerInteractable, and times the
+// hold itself via ForgeHoldGate. HoldClickerInteractable fires on the global
+// HoldAction's own duration — the short generic "hold F" — which is far too quick to
+// gate an irreversible action, and it cannot be lengthened because that duration is
+// shared with every other prompt in the game. Vanilla's own levers don't use it
+// either (see ForgeHoldGate). EnvironmentInteract drives StartClick/EndClick off any
+// ClickerInteractable, so dropping down a level costs nothing.
+//
+// Dropping HoldClickerInteractable also removes this component from the global
+// HoldAction subscription entirely, which is what made a leaked subscription able to
+// fire an unwanted Commit whenever ANY unrelated hold completed. The gate is local
+// state; there is nothing left to leak.
 //
 // Deliberately NOT a ForgeInteractable — ClickerInteractable is a SIBLING branch off
-// AbstractInteractable, not a base either shares. Built at runtime with no
-// prefab-authored Inspector data, which matters for two ClickerInteractable fields
-// specifically: UpgradeForgeBehavior must set DontSelfSetInteractionInfo before
-// ClickerInteractable.Start() runs SetClickable(), or Start() overwrites the
-// InteractionInfo assignment with the null it captured back in Awake(); and
-// Highlighted() is overridden here to skip ClickerInteractable's own
-// implementation entirely, which iterates an `outlineObjects` array nothing ever
-// populates outside the Unity Inspector.
-public class ForgeCommitInteractable : HoldClickerInteractable
+// AbstractInteractable, not a shared base. Being built at runtime with no Inspector
+// data matters for two of its fields: DontSelfSetInteractionInfo must be set before
+// Start() (see UpgradeForgeBehavior.CreateCommitInteractable), and Highlighted() is
+// overridden below to skip an outlineObjects array nothing populates outside the
+// Unity Inspector.
+public class ForgeCommitInteractable : ClickerInteractable
 {
     public UpgradeForgeBehavior Forge;
     public Transform Anchor;
@@ -32,59 +37,52 @@ public class ForgeCommitInteractable : HoldClickerInteractable
     // LeverBox — falls back to outlining the whole module.
     public Transform OutlineTarget;
 
-    private bool _holding;
+    private readonly ForgeHoldGate _gate = new();
 
-    public override void Awake()
-    {
-        base.Awake();
-        HoldCompleted += OnCommit;
-    }
-
-    // Subscribed once here in Awake, not in whoever builds this component:
-    // UpgradeForgeBehavior.BuildInteractables() re-runs (reusing this same
-    // component via GetComponent) on every hot-reload attach, so subscribing
-    // there would stack a new handler each time.
     public override void StartClick()
     {
         base.StartClick();
-        _holding = true;
-        BepinPlugin.Log.LogDebug($"[Forge] Commit StartClick (GetInstanceID={GetInstanceID()}).");
+        // base.StartClick is a no-op unless clickable; don't start timing what it
+        // ignored.
+        if (!isClickable) return;
+        _gate.Begin(TerminusConfig.CommitHoldSeconds);
+        BepinPlugin.Log.LogDebug(
+            $"[Forge] Commit hold started ({TerminusConfig.CommitHoldSeconds:0.00}s required).");
     }
 
     public override void EndClick()
     {
         base.EndClick();
-        _holding = false;
-        BepinPlugin.Log.LogDebug($"[Forge] Commit EndClick (GetInstanceID={GetInstanceID()}).");
+        if (_gate.IsHolding)
+            BepinPlugin.Log.LogDebug($"[Forge] Commit hold released early at {_gate.Progress:P0}.");
+        _gate.Cancel();
     }
 
-    // HoldClickerInteractable.StartClick subscribes onto a single GLOBAL
-    // InputAction shared by every Hold-driven interactable in the game — see
-    // ForgeDeconstructInteractable's OnDestroy/OnDeconstruct comments for the
-    // full leak mechanism (same base class, same risk: a leaked subscription
-    // would fire an unwanted Commit whenever ANY unrelated Hold completes
-    // anywhere). Same two-part defense: force-unsubscribe on destroy, and gate
-    // on our own locally-tracked hold state so a stray callback is a no-op.
+    // Releasing the hold is what cancels it, so a component destroyed mid-hold would
+    // otherwise leave the HUD ring spinning on a lever that no longer exists.
     public override void OnDestroy()
     {
         base.OnDestroy();
-        EndClick();
+        _gate.Cancel();
+    }
+
+    private void Update()
+    {
+        if (_gate.Tick(Time.deltaTime)) OnCommit();
     }
 
     private void OnCommit()
     {
-        BepinPlugin.Log.LogInfo($"[Forge] OnCommit fired (GetInstanceID={GetInstanceID()}), _holding={_holding}.");
-        if (!_holding || Forge == null) return;
+        BepinPlugin.Log.LogInfo($"[Forge] Commit hold completed (GetInstanceID={GetInstanceID()}).");
+        if (Forge == null) return;
         var player = LocalPlayer.Instance;
         if (player == null) return;
         Forge.HandleInteraction(ForgeInteractableKind.CommitButton, Anchor, player);
     }
 
-    // Uses ForgeOutline instead of base.Highlighted (ClickerInteractable's own,
-    // which iterates an outlineObjects[] array only the Unity Inspector ever
-    // populates — see ForgeOutline's doc comment). Scoped to OutlineTarget (the
-    // lever mesh) rather than the whole module — Commit is a distinct,
-    // separately-modeled part the player should see highlighted on its own.
+    // ForgeOutline instead of base.Highlighted, which NREs on a runtime-built
+    // component (see ForgeOutline). Scoped to the lever mesh rather than the whole
+    // module — Commit is a separately-modeled part.
     public override void Highlighted(bool isHighlighted)
     {
         var target = OutlineTarget != null ? OutlineTarget : (Forge != null ? Forge.transform : null);
