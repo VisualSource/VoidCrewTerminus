@@ -127,6 +127,15 @@ internal static class TerminusConfig
     internal static ConfigEntry<float> BurdenApplicationChance;
     internal static float BurdenChance => BurdenApplicationChance?.Value ?? DefaultBurdenApplicationChance;
 
+    // Deconstruct has no knob on purpose — it is measured off a live vanilla
+    // ExtruderLever at runtime (ForgeHoldGate.VanillaDeconstructSeconds) so it tracks
+    // whatever the game ships. Commit has no vanilla counterpart to match, so it gets
+    // a knob to tune by feel.
+    private const float DefaultForgeCommitHoldSeconds = 3f;
+    [BindConfig("forge", DefaultForgeCommitHoldSeconds, "Seconds the Commit lever must be held to fire. Committing is irreversible and consumes relics, so this is deliberately longer than the generic hold prompt. Deconstruct is not configurable — it matches vanilla's module deconstruct lever.")]
+    internal static ConfigEntry<float> ForgeCommitHoldSeconds;
+    internal static float CommitHoldSeconds => ForgeCommitHoldSeconds?.Value ?? DefaultForgeCommitHoldSeconds;
+
     private const float DefaultBurdenIntervalMinSeconds = 30f;
     [BindConfig("forge", DefaultBurdenIntervalMinSeconds, "RandomShutoff burden — minimum seconds between shutoff events (the burden only turns the module OFF; the crew restores it manually)")]
     internal static ConfigEntry<float> BurdenIntervalMinSeconds;

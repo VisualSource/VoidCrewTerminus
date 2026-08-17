@@ -1,4 +1,5 @@
 using CG.Client.Player.Interactions.Build;
+using CG.Client.Ship.Interactions;
 using CG.Game;
 using CG.Ship.Hull;
 using CG.Ship.Modules;
@@ -18,51 +19,59 @@ namespace VoidCrewTerminus.Forge;
 // checks and BuildProcessController.TryDeconstructModule, already fully networked —
 // so replicating them here is lower-risk than grafting three more component types.
 //
-// Visual: rotates VisualHandle on Z while held, spring-back on early release. This
-// component sits on DeconstructTrigger (the collider), not the lever mesh, so
-// VisualHandle may be null — deconstruct still works, just without the animation.
-public class ForgeDeconstructInteractable : HoldClickerInteractable
+// The hold DURATION, though, is matched to vanilla exactly: ForgeHoldGate measures a
+// live ExtruderLever in the scene and times this lever to the same figure, rather
+// than firing on the short global HoldAction the way HoldClickerInteractable does.
+//
+// Visual: rotates VisualHandle on Z, driven by hold progress so the lever bottoms out
+// exactly when the deconstruct fires. This component sits on DeconstructTrigger (the
+// collider), not the lever mesh, so VisualHandle may be null — deconstruct still
+// works, just without the animation.
+public class ForgeDeconstructInteractable : ClickerInteractable
 {
-    private const float RotateSpeedDegPerSec = 90f;
     private const float MaxAngle = 80f;
+
+    // Only used for the spring-back after an early release; the pull itself tracks
+    // hold progress directly.
+    private const float SpringBackDegPerSec = 180f;
 
     public Transform VisualHandle;
 
     private CellModule _module;
-    private bool _holding;
+    private readonly ForgeHoldGate _gate = new();
     private float _angle;
 
     public override void Awake()
     {
         base.Awake();
-        // Sits on the "Handle" child, not the module root — walk up to find it.
+        // Sits on the "DeconstructTrigger" child, not the module root — walk up.
         _module = GetComponentInParent<CellModule>();
-        HoldCompleted += OnDeconstruct;
     }
 
     public override void StartClick()
     {
         base.StartClick();
-        _holding = true;
-        BepinPlugin.Log.LogDebug($"[Forge] Deconstruct StartClick on {(_module != null ? _module.name : "?")} (GetInstanceID={GetInstanceID()}).");
+        if (!isClickable) return;
+        float seconds = ForgeHoldGate.VanillaDeconstructSeconds;
+        _gate.Begin(seconds);
+        BepinPlugin.Log.LogDebug(
+            $"[Forge] Deconstruct hold started on {(_module != null ? _module.name : "?")} ({seconds:0.00}s required).");
     }
 
     public override void EndClick()
     {
         base.EndClick();
-        _holding = false;
-        BepinPlugin.Log.LogDebug($"[Forge] Deconstruct EndClick on {(_module != null ? _module.name : "?")} (GetInstanceID={GetInstanceID()}).");
+        if (_gate.IsHolding)
+            BepinPlugin.Log.LogDebug($"[Forge] Deconstruct hold released early at {_gate.Progress:P0}.");
+        _gate.Cancel();
     }
 
-    // StartClick subscribes onto a single GLOBAL InputAction shared by every
-    // Hold-driven interactable, unsubscribing only in EndClick or on completion — a
-    // leak risk if this is destroyed mid-hold. (NOT the cause of the "deconstructing
-    // any module hit the Forge" bug — see Highlighted — but cheap insurance.)
-    // EndClick unconditionally unsubscribes, so calling it here is always safe.
+    // Releasing the hold is what cancels it, so a component destroyed mid-hold would
+    // otherwise leave the HUD ring spinning on a lever that no longer exists.
     public override void OnDestroy()
     {
         base.OnDestroy();
-        EndClick();
+        _gate.Cancel();
     }
 
     // Root cause of the "deconstructing any other module deconstructs the Forge too"
@@ -81,20 +90,28 @@ public class ForgeDeconstructInteractable : HoldClickerInteractable
 
     private void Update()
     {
-        if (VisualHandle == null) return;
-        float target = _holding ? MaxAngle : 0f;
-        _angle = Mathf.MoveTowards(_angle, target, RotateSpeedDegPerSec * Time.deltaTime);
-        VisualHandle.localRotation = Quaternion.Euler(0f, 0f, _angle);
+        bool fired = _gate.Tick(Time.deltaTime);
+
+        // Tracking progress rather than easing toward a fixed target at a fixed speed:
+        // at any hold longer than MaxAngle/speed the old version bottomed the lever out
+        // early and left it sitting there, which reads as "it's stuck" rather than
+        // "keep holding".
+        if (VisualHandle != null)
+        {
+            _angle = _gate.IsHolding
+                ? MaxAngle * _gate.Progress
+                : Mathf.MoveTowards(_angle, 0f, SpringBackDegPerSec * Time.deltaTime);
+            VisualHandle.localRotation = Quaternion.Euler(0f, 0f, _angle);
+        }
+
+        if (fired) OnDeconstruct();
     }
 
-    // _holding only goes true between this component's own StartClick/EndClick, so a
-    // stale subscription firing from the shared Hold action becomes a no-op rather
-    // than deconstructing the wrong module.
     private void OnDeconstruct()
     {
         BepinPlugin.Log.LogInfo(
-            $"[Forge] OnDeconstruct fired on {(_module != null ? _module.name : "?")} (GetInstanceID={GetInstanceID()}), _holding={_holding}.");
-        if (!_holding || _module == null) return;
+            $"[Forge] Deconstruct hold completed on {(_module != null ? _module.name : "?")} (GetInstanceID={GetInstanceID()}).");
+        if (_module == null) return;
         var result = Deconstruct.CanRemoveModule(_module);
         if (Deconstruct.CanStartDeconstruct(_module) == ConstructResult.Valid)
             BuildProcessController.Instance.TryDeconstructModule(_module);

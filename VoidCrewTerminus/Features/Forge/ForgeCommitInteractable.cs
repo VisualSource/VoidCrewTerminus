@@ -1,14 +1,24 @@
+using CG.Client.Ship.Interactions;
 using CG.Game.Player;
 using UnityEngine;
 
 namespace VoidCrewTerminus.Forge;
 
 // The Forge's Commit button, held rather than clicked — committing consumes relics
-// irreversibly, so an accidental tap shouldn't be able to fire it. Same vanilla
-// mechanism as module deconstruction: HoldClickerInteractable driven by
-// EnvironmentInteract's Hold action, not CarryableInteract's click. HoldCompleted
-// only fires once the configured Hold interaction completes; an early release never
-// reaches it.
+// irreversibly, so an accidental tap shouldn't be able to fire it.
+//
+// Extends ClickerInteractable directly, NOT HoldClickerInteractable, and times the
+// hold itself via ForgeHoldGate. HoldClickerInteractable fires on the global
+// HoldAction's own duration — the short generic "hold F" — which is far too quick to
+// gate an irreversible action, and it cannot be lengthened because that duration is
+// shared with every other prompt in the game. Vanilla's own levers don't use it
+// either (see ForgeHoldGate). EnvironmentInteract drives StartClick/EndClick off any
+// ClickerInteractable, so dropping down a level costs nothing.
+//
+// Dropping HoldClickerInteractable also removes this component from the global
+// HoldAction subscription entirely, which is what made a leaked subscription able to
+// fire an unwanted Commit whenever ANY unrelated hold completed. The gate is local
+// state; there is nothing left to leak.
 //
 // Deliberately NOT a ForgeInteractable — ClickerInteractable is a SIBLING branch off
 // AbstractInteractable, not a shared base. Being built at runtime with no Inspector
@@ -16,7 +26,7 @@ namespace VoidCrewTerminus.Forge;
 // Start() (see UpgradeForgeBehavior.CreateCommitInteractable), and Highlighted() is
 // overridden below to skip an outlineObjects array nothing populates outside the
 // Unity Inspector.
-public class ForgeCommitInteractable : HoldClickerInteractable
+public class ForgeCommitInteractable : ClickerInteractable
 {
     public UpgradeForgeBehavior Forge;
     public Transform Anchor;
@@ -27,46 +37,44 @@ public class ForgeCommitInteractable : HoldClickerInteractable
     // LeverBox — falls back to outlining the whole module.
     public Transform OutlineTarget;
 
-    private bool _holding;
+    private readonly ForgeHoldGate _gate = new();
 
-    public override void Awake()
-    {
-        base.Awake();
-        HoldCompleted += OnCommit;
-    }
-
-    // HoldCompleted is subscribed in Awake, not by whoever builds this component:
-    // BuildInteractables() re-runs on every hot-reload attach and reuses this same
-    // component, so subscribing there would stack a handler each time.
     public override void StartClick()
     {
         base.StartClick();
-        _holding = true;
-        BepinPlugin.Log.LogDebug($"[Forge] Commit StartClick (GetInstanceID={GetInstanceID()}).");
+        // base.StartClick is a no-op unless clickable; don't start timing what it
+        // ignored.
+        if (!isClickable) return;
+        _gate.Begin(TerminusConfig.CommitHoldSeconds);
+        BepinPlugin.Log.LogDebug(
+            $"[Forge] Commit hold started ({TerminusConfig.CommitHoldSeconds:0.00}s required).");
     }
 
     public override void EndClick()
     {
         base.EndClick();
-        _holding = false;
-        BepinPlugin.Log.LogDebug($"[Forge] Commit EndClick (GetInstanceID={GetInstanceID()}).");
+        if (_gate.IsHolding)
+            BepinPlugin.Log.LogDebug($"[Forge] Commit hold released early at {_gate.Progress:P0}.");
+        _gate.Cancel();
     }
 
-    // StartClick subscribes onto a single GLOBAL InputAction shared by every
-    // Hold-driven interactable, so a leaked subscription would fire an unwanted
-    // Commit whenever ANY unrelated Hold completes. Two-part defense, same as
-    // ForgeDeconstructInteractable: force-unsubscribe on destroy, and gate on our own
-    // _holding flag so a stray callback is a no-op.
+    // Releasing the hold is what cancels it, so a component destroyed mid-hold would
+    // otherwise leave the HUD ring spinning on a lever that no longer exists.
     public override void OnDestroy()
     {
         base.OnDestroy();
-        EndClick();
+        _gate.Cancel();
+    }
+
+    private void Update()
+    {
+        if (_gate.Tick(Time.deltaTime)) OnCommit();
     }
 
     private void OnCommit()
     {
-        BepinPlugin.Log.LogInfo($"[Forge] OnCommit fired (GetInstanceID={GetInstanceID()}), _holding={_holding}.");
-        if (!_holding || Forge == null) return;
+        BepinPlugin.Log.LogInfo($"[Forge] Commit hold completed (GetInstanceID={GetInstanceID()}).");
+        if (Forge == null) return;
         var player = LocalPlayer.Instance;
         if (player == null) return;
         Forge.HandleInteraction(ForgeInteractableKind.CommitButton, Anchor, player);
