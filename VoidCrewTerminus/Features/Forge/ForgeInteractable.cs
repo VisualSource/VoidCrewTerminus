@@ -18,27 +18,24 @@ public enum ForgeInteractableKind
     AlloyTerminal, // feed alloys into the Forge Meter (AlloyTarget anchor)
 }
 
-// Raycast target for the player's interaction system. AbstractInteractable instances
-// are picked up by RaycastHandler via their collider (layer "InteractiveObjects"),
-// and clicks reach us through the CarryableInteract.StartInteraction prefix in
-// ForgeInteractionPatch. Created at runtime by UpgradeForgeBehavior.BuildInteractables —
-// the shipped prefab carries only named anchor transforms, no game components.
+// Raycast target for the player's interaction system: RaycastHandler picks these up
+// by collider (layer "InteractiveObjects") and clicks arrive through the
+// CarryableInteract prefix in ForgeInteractionPatch. Built at runtime by
+// BuildInteractables — the shipped prefab carries only anchor transforms.
 //
-// Covers every Forge interactable EXCEPT the Commit button, which is a
-// ForgeCommitInteractable instead (a hold-to-confirm gate on an irreversible
-// action needs a different vanilla base class entirely). ForgeInteractableKind.
-// CommitButton still exists as a value here because ForgeInteractionPolicy's
-// click matrix is keyed by it regardless of which component originates the interaction.
+// Covers every Forge interactable EXCEPT the Commit button, which needs a different
+// vanilla base class for its hold gate. ForgeInteractableKind.CommitButton still
+// exists here because the policy's click matrix is keyed by it regardless of which
+// component originates the interaction.
 public class ForgeInteractable : AbstractInteractable
 {
     public UpgradeForgeBehavior Forge;
     public ForgeInteractableKind Kind;
     public Transform Anchor;
 
-    // Click colliders surround items docked on their anchors and would swallow
-    // every click aimed at them. When an anchor is occupied and the player's
-    // hands are empty, step aside: RaycastHandler then skips this trigger and
-    // the ray reaches the docked item's own Grabbable for retrieval.
+    // Click colliders surround the items docked on their anchors and would swallow
+    // every click aimed at them. When occupied and the player's hands are empty, step
+    // aside so the ray reaches the docked item's own Grabbable for retrieval.
     public override bool IsInteractive
     {
         get
@@ -62,19 +59,18 @@ public class ForgeInteractable : AbstractInteractable
         set => base.IsInteractive = value;
     }
 
-    // No outline yet, deliberately: this covers RelicTube/ModuleSocket/AlloyTerminal,
-    // and which mesh each should scope its outline to hasn't been decided/modeled
-    // yet. base.Highlighted (empty, harmless) is still called to keep the override
-    // chain intact for whenever this is revisited.
+    // No outline yet, deliberately — which mesh RelicTube/ModuleSocket/AlloyTerminal
+    // should each scope to hasn't been modeled. base.Highlighted is empty and
+    // harmless; called to keep the override chain intact for when this is revisited.
     public override void Highlighted(bool isHighlighted)
     {
         base.Highlighted(isHighlighted);
     }
 
-    // HUD prompt assets are serialized private fields on vanilla components, so we
-    // borrow them from whatever CarryablesSocketActor the ship already has (every
-    // ship has sockets — fabricator, void drive). Falls back to an empty
-    // InteractionInfo, which the HUD renders as no prompt rather than crashing.
+    // HUD prompt assets are private serialized fields, so borrow them from whatever
+    // CarryablesSocketActor the ship already has (every ship has sockets). Falls back
+    // to an empty InteractionInfo, which the HUD renders as no prompt rather than
+    // crashing.
     private static InteractionInfo _insertInfo;
     private static InteractionInfo _defaultInfo;
     private static InteractionInfo _commitInfo;
@@ -134,19 +130,15 @@ public class ForgeInteractable : AbstractInteractable
         return info;
     }
 
-    // CommitButton/AlloyTerminal have no vanilla InteractionInfo asset to borrow, so
-    // build one from _insertInfo's key binding with our own label swapped in.
-    // interactionType lets a caller override the borrowed Press default — Commit
-    // needs Hold (see ForgeCommitInteractable).
+    // CommitButton/AlloyTerminal have no vanilla InteractionInfo to borrow, so build
+    // one from _insertInfo's key binding with our own label swapped in.
     //
-    // For Hold-type prompts specifically, the Key must NOT be borrowed from
-    // _insertInfo: KeyBindVE.Init resolves its icon by taking Key.FallBackString and
-    // looking it up BY NAME as an InputAction (InputService.FindActionKey), and
-    // _insertInfo's Key names the regular click/interact action — not
-    // HoldClickerInteractable's separate InputActionReferences.HoldAction that Commit
-    // and Deconstruct actually listen on. Borrowing it made the HUD show the click
-    // action's icon even with InteractionType correctly set to Hold. Built fresh
-    // instead from the Hold action's own live name so a rebind can't desync it.
+    // For Hold prompts the Key must NOT be borrowed: KeyBindVE.Init resolves its icon
+    // by looking up Key.FallBackString BY NAME as an InputAction, and _insertInfo's
+    // Key names the click action, not the separate HoldAction that Commit and
+    // Deconstruct listen on — so the HUD showed the click icon even with
+    // InteractionType set to Hold. Built fresh from the Hold action's own live name,
+    // so a rebind can't desync it.
     private static InteractionInfo ActionInfo(string label, InteractionDescription.EInteractionType? interactionType = null)
     {
         var info = ScriptableObject.CreateInstance<InteractionInfo>();

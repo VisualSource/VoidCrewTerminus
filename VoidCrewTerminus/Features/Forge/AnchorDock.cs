@@ -6,16 +6,14 @@ namespace VoidCrewTerminus.Forge;
 
 // The items physically held on an Upgrade Forge's anchors.
 //
-// Inserted relics and the loaded BuildBox are never absorbed into an inventory —
-// they stay live in the world, frozen onto their anchor, pinned there while the
-// ship moves, and still grabbable. This class owns the hazardous half of that:
-// two rigidbodies per item, a per-frame teleport against a moving platform, and
-// the velocity that silently accumulates from it.
+// Docked items are never absorbed into an inventory — they stay live in the world,
+// frozen onto their anchor, pinned while the ship moves, still grabbable. This class
+// owns the hazardous half of that: two rigidbodies per item, a per-frame teleport
+// against a moving platform, and the velocity that silently accumulates from it.
 //
-// Not tested, and not testable: every line is a Unity physics call, and a method
-// body containing one cannot even be JIT-compiled in the test host. It knows
-// nothing about relics, module sockets or the network — it reports which items
-// have left; the Forge decides what that means and who to tell.
+// Not testable: every line is a Unity physics call, and a method body containing one
+// cannot be JIT-compiled in the test host. Knows nothing about relics, sockets or the
+// network — it reports which items left; the Forge decides what that means.
 internal sealed class AnchorDock
 {
     private readonly Dictionary<GameObject, Transform> _docked = new();
@@ -43,15 +41,12 @@ internal sealed class AnchorDock
 
         var co = item.GetComponent<CarryableObject>();
 
-        // A dock mirrored from another client (ApplyRemoteDock in
-        // UpgradeForgeBehavior) can race the placer's own carry-release: our
-        // custom dock message is a separate RPC from Photon's carry/ownership
-        // sync, so it can arrive here before Carrier has actually cleared on this
-        // machine. Reconcile must not mistake that stale non-null read for "a
-        // player just grabbed this back out" — so an item only becomes eligible
-        // to be reported as departed once we've actually observed Carrier go
-        // null while docked. A normal local dock (Carrier already null here,
-        // since ReleaseCarryable already ran synchronously) is confirmed immediately.
+        // A mirrored dock (ApplyRemoteDock) can race the placer's own carry-release:
+        // our dock message is a separate RPC from Photon's carry/ownership sync, so it
+        // can arrive before Carrier has cleared here. Reconcile must not read that
+        // stale non-null as "a player grabbed this back out" — so an item is only
+        // eligible to be reported departed once Carrier has been observed null while
+        // docked. A local dock is confirmed immediately (ReleaseCarryable ran already).
         if (co == null || co.Carrier == null)
             _confirmedReleased.Add(item);
         else
@@ -91,10 +86,9 @@ internal sealed class AnchorDock
         }
     }
 
-    // Items leave in exactly two ways: destroyed (a commit consumed the relic) —
-    // reaped silently, nothing to release or announce — or grabbed back out
-    // through the vanilla Grabbable flow, appended to `grabbed` still alive and
-    // still owed an explanation to the rest of the crew.
+    // Items leave in exactly two ways: destroyed (a commit consumed the relic),
+    // reaped silently; or grabbed back out, appended to `grabbed` still alive and
+    // still owed an announcement to the rest of the crew.
     internal void Reconcile(List<KeyValuePair<GameObject, Transform>> grabbed)
     {
         if (_docked.Count == 0) return;
@@ -160,12 +154,11 @@ internal sealed class AnchorDock
         itemTr.SetPositionAndRotation(pos, rot);
     }
 
-    // CarryableObject is an ISimulatedBody: while it rides a MovingSpacePlatform
-    // (the ship) its real physics lives on SimulationRigidbody, NOT MainRigidbody
-    // — Rigidbody and MainRigidbody return the same field, so the simulation body
-    // has to be addressed explicitly. Both are frozen unconditionally rather than
-    // branching on IsBeingSimulated, since that flag can flip while an item is
-    // docked and a body left un-frozen would integrate in the background.
+    // CarryableObject is an ISimulatedBody: while it rides the ship its real physics
+    // lives on SimulationRigidbody, NOT MainRigidbody (Rigidbody and MainRigidbody
+    // return the same field), so the simulation body must be addressed explicitly.
+    // Both are frozen unconditionally — IsBeingSimulated can flip while docked, and
+    // a body left un-frozen would integrate in the background.
     private static void SetDockedKinematic(CarryableObject co, GameObject go, bool kinematic)
     {
         var main = co != null ? co.MainRigidbody : go.GetComponent<Rigidbody>();
@@ -175,14 +168,12 @@ internal sealed class AnchorDock
         if (sim != null) sim.isKinematic = kinematic;
     }
 
-    // The per-frame Pin against a moving-ship anchor accumulates an implicit
-    // velocity estimate; without zeroing it the item inherits roughly the ship's
-    // velocity the instant kinematic goes false and drifts through the ship — the
-    // "BuildBox floats away" bug. Writing straight to MainRigidbody is the WRONG
-    // body whenever the item is being simulated (velocity survives on
-    // SimulationRigidbody instead, so the box still drifts — this is why the bug
-    // only reproduced intermittently). Going through the Velocity/AngularVelocity
-    // properties routes to whichever body is live; zero is safe in either space.
+    // The per-frame Pin accumulates an implicit velocity estimate; without zeroing it
+    // the item inherits roughly the ship's velocity the instant kinematic goes false
+    // and drifts through the ship — the "BuildBox floats away" bug. Writing straight
+    // to MainRigidbody is the WRONG body while the item is simulated (velocity
+    // survives on SimulationRigidbody, which is why the bug only reproduced
+    // intermittently); the Velocity properties route to whichever body is live.
     private static void ReleaseRigidbody(GameObject go)
     {
         if (go == null) return;
@@ -218,9 +209,9 @@ internal sealed class AnchorDock
             if (rb != null) { rb.velocity = Vector3.zero; rb.angularVelocity = Vector3.zero; }
         }
 
-        // The float-away is rare and not reliably reproducible, so it has to be
-        // diagnosed from a log of the one run where it happens. A non-zero `was=`
-        // on a simulated item is the signature of the original bug.
+        // The float-away isn't reliably reproducible, so it has to be diagnosed from
+        // the one run where it happens. A non-zero `was=` on a simulated item is the
+        // signature of the original bug.
         BepinPlugin.Log.LogDebug(
             $"[Forge] undock {go.name}: simulated={simulated}, was={before}, zeroed both bodies.");
     }

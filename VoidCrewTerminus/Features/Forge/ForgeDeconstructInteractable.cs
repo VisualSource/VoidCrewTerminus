@@ -8,25 +8,19 @@ using UnityEngine;
 namespace VoidCrewTerminus.Forge;
 
 // The Forge's deconstruct handle. Same hold-to-confirm mechanism as
-// ForgeCommitInteractable (HoldClickerInteractable, driven by EnvironmentInteract's
-// Hold action) — reused here instead of vanilla's Mediator/ExtruderLever chain.
+// ForgeCommitInteractable, reused instead of vanilla's Mediator/ExtruderLever chain.
 //
-// Vanilla wires deconstruct through AbstractModuleMediator<T>.InitializeDeconstructButton,
-// which needs BaseModuleMediator + ModuleDeconstructButton + ExtruderLever all present
-// on the prefab — none of which can be authored in the modding SDK or runtime-grafted
-// (ExtruderLever needs real geometry and a configured AnimationCurve). But
-// AbstractModuleMediator.OnClickedDeconstructButton turns out to be three plain calls
-// with zero dependency on the Mediator instance itself — Deconstruct.CanRemoveModule /
-// Deconstruct.CanStartDeconstruct (both static) and
-// BuildProcessController.Instance.TryDeconstructModule (already fully networked, RPCs
-// to the master client itself) — so replicating them directly here is simpler and
-// lower-risk than grafting three more vanilla component types.
+// Vanilla wires deconstruct through AbstractModuleMediator.InitializeDeconstructButton,
+// needing BaseModuleMediator + ModuleDeconstructButton + ExtruderLever on the prefab —
+// none authorable in the modding SDK or runtime-graftable (ExtruderLever needs real
+// geometry and a configured AnimationCurve). But OnClickedDeconstructButton is three
+// plain calls with no dependency on the Mediator instance — two static Deconstruct
+// checks and BuildProcessController.TryDeconstructModule, already fully networked —
+// so replicating them here is lower-risk than grafting three more component types.
 //
-// Visual: rotates VisualHandle (a separate cosmetic mesh part — this component sits
-// on DeconstructTrigger, the click collider, not the visual lever) on the Z axis
-// while held, spring-back to 0 on early release, approximating a lever pull without
-// ExtruderLever's AnimationCurve machinery. VisualHandle may be null (no Handle mesh
-// on the prefab) — deconstruct still works, just with no visible animation.
+// Visual: rotates VisualHandle on Z while held, spring-back on early release. This
+// component sits on DeconstructTrigger (the collider), not the lever mesh, so
+// VisualHandle may be null — deconstruct still works, just without the animation.
 public class ForgeDeconstructInteractable : HoldClickerInteractable
 {
     private const float RotateSpeedDegPerSec = 90f;
@@ -60,33 +54,25 @@ public class ForgeDeconstructInteractable : HoldClickerInteractable
         BepinPlugin.Log.LogDebug($"[Forge] Deconstruct EndClick on {(_module != null ? _module.name : "?")} (GetInstanceID={GetInstanceID()}).");
     }
 
-    // HoldClickerInteractable.StartClick subscribes OnHoldCompleted onto a single
-    // GLOBAL InputAction (InputActionReferences.HoldAction) shared by every
-    // Hold-driven interactable in the game, and only unsubscribes in EndClick()
-    // or once the hold completes — a real leak risk if this is destroyed mid-hold
-    // before EndClick runs (turned out NOT to be the cause of the "deconstructing
-    // any other module deconstructs the Forge too" bug — see Highlighted below
-    // for the actual root cause — but kept as cheap, harmless belt-and-braces).
-    // EndClick() unconditionally unsubscribes, so calling it here is always safe.
+    // StartClick subscribes onto a single GLOBAL InputAction shared by every
+    // Hold-driven interactable, unsubscribing only in EndClick or on completion — a
+    // leak risk if this is destroyed mid-hold. (NOT the cause of the "deconstructing
+    // any module hit the Forge" bug — see Highlighted — but cheap insurance.)
+    // EndClick unconditionally unsubscribes, so calling it here is always safe.
     public override void OnDestroy()
     {
         base.OnDestroy();
         EndClick();
     }
 
-    // ClickerInteractable.Highlighted (what this would otherwise inherit) iterates
-    // a private outlineObjects[] that only the Unity Inspector populates — null on
-    // every Forge interactable, since all are AddComponent'd at runtime. Calling it
-    // threw an NRE from RaycastHandler.RaycastInteractables() every time the raycast
-    // target changed to/away from this trigger. Uncaught, that exception aborted
-    // the rest of RaycastInteractables() for the frame — including the line that
-    // reassigns RaycastHandler.Current — so looking away left Current permanently
-    // stuck pointing at this trigger. Every later Hold-to-deconstruct attempt
-    // anywhere then read that stuck Current in EnvironmentInteract.TryStartInteract
-    // and fired on the Forge instead: this WAS the "deconstructing any other module
-    // deconstructs the Forge too" bug. Uses ForgeOutline instead (the real
-    // outline-shader highlight vanilla uses), scoped to VisualHandle rather than
-    // the whole module, falling back to the whole module only if there's no Handle mesh.
+    // Root cause of the "deconstructing any other module deconstructs the Forge too"
+    // bug: ClickerInteractable.Highlighted iterates a private outlineObjects[] that
+    // only the Inspector populates — null on every runtime-built Forge interactable —
+    // and the NRE aborted the rest of RaycastHandler.RaycastInteractables() for that
+    // frame, including the line reassigning Current. Looking away therefore left
+    // Current stuck on this trigger, and every later Hold anywhere fired on the Forge.
+    //
+    // ForgeOutline instead, scoped to VisualHandle, falling back to the whole module.
     public override void Highlighted(bool isHighlighted)
     {
         var target = VisualHandle != null ? VisualHandle : (_module != null ? _module.transform : null);
@@ -101,12 +87,9 @@ public class ForgeDeconstructInteractable : HoldClickerInteractable
         VisualHandle.localRotation = Quaternion.Euler(0f, 0f, _angle);
     }
 
-    // _holding is our own locally-tracked "is the player actually holding THIS
-    // interactable right now" state — belt-and-braces against the shared-Hold-
-    // action leak above: even if a stale subscription does fire (from some path
-    // OnDestroy doesn't catch), it becomes a no-op instead of deconstructing the
-    // wrong module, since _holding only goes true between this component's own
-    // StartClick/EndClick pair.
+    // _holding only goes true between this component's own StartClick/EndClick, so a
+    // stale subscription firing from the shared Hold action becomes a no-op rather
+    // than deconstructing the wrong module.
     private void OnDeconstruct()
     {
         BepinPlugin.Log.LogInfo(

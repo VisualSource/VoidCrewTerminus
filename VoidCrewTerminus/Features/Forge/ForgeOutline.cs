@@ -5,15 +5,11 @@ using UnityEngine;
 
 namespace VoidCrewTerminus.Forge;
 
-// ClickerInteractable's own highlight mechanism (an outlineObjects[] array toggling
-// Knife.HDRPOutline.Core.OutlineObject components) is [SerializeField], populated
-// only by the Unity Inspector — and every Forge interactable is built at runtime via
-// AddComponent with no Inspector data behind it, so calling the base implementation
-// NREs on the null array. This walks the module's own renderers instead, adding an
-// OutlineObject on each on first use and toggling them together — same outline-shader
-// mechanism vanilla modules/BuildBoxes use, with no Unity-side authoring required.
-// Whichever Forge interactable is hovered outlines the whole module, matching how
-// vanilla hover highlights as a single unit rather than a specific sub-mesh.
+// ClickerInteractable's own highlight walks an outlineObjects[] that only the Unity
+// Inspector populates, so it NREs on every Forge interactable (all built at runtime
+// via AddComponent). This walks the module's renderers instead, adding an
+// OutlineObject to each on first use — the same outline-shader mechanism vanilla
+// modules use, with no Unity-side authoring required.
 internal static class ForgeOutline
 {
     private static readonly ConditionalWeakTable<Transform, OutlineObject[]> _cache = new();
