@@ -492,7 +492,10 @@ public class UpgradeForgeBehavior : MonoBehaviour
         var action = ForgeInteractionPolicy.Decide(view, click).Action;
 
         if (action == ForgeAction.LoadModule || action == ForgeAction.InsertRelic)
-            _ghosts.Show(anchor, payload);
+        {
+            var align = kind == ForgeInteractableKind.ModuleSocket ? AnchorAlign.Center : AnchorAlign.Base;
+            _ghosts.Show(anchor, payload, align);
+        }
         else
             _ghosts.Hide(anchor);
     }

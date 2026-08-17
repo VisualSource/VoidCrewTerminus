@@ -37,7 +37,7 @@ internal sealed class ForgeGhosts
 
     internal int Count => _ghosts.Count;
 
-    internal void Show(Transform anchor, CarryableObject source)
+    internal void Show(Transform anchor, CarryableObject source, AnchorAlign align)
     {
         if (anchor == null || source == null) return;
 
@@ -54,7 +54,7 @@ internal sealed class ForgeGhosts
         var hologram = HologramMaterial;
         if (hologram == null) return;
 
-        var ghost = Build(anchor, source, hologram);
+        var ghost = Build(anchor, source, align, hologram);
         if (ghost != null) _ghosts[anchor] = ghost;
     }
 
@@ -81,7 +81,7 @@ internal sealed class ForgeGhosts
         _ghosts.Clear();
     }
 
-    private static Ghost Build(Transform anchor, CarryableObject source, Material hologram)
+    private static Ghost Build(Transform anchor, CarryableObject source, AnchorAlign align, Material hologram)
     {
         var sourceTr = source.transform;
         var root = CloneGraphics(sourceTr.gameObject, hologram);
@@ -93,7 +93,11 @@ internal sealed class ForgeGhosts
         // needs none of AnchorDock's per-frame pinning.
         root.transform.SetParent(anchor, worldPositionStays: false);
 
-        var pivot = source.BasePivot != null ? source.BasePivot : sourceTr;
+        // Must match AnchorDock.PlaceAtAnchor's pivot choice, or the preview lands
+        // somewhere the item won't — e.g. previewing a BuildBox with its BasePivot
+        // pins the top to the module socket's center instead of centering the box.
+        var pivot = align == AnchorAlign.Center ? source.CenterPivot : source.BasePivot;
+        if (pivot == null) pivot = sourceTr;
         ForgeAnchors.ComputeDockedPose(sourceTr, pivot, anchor, out var pos, out var rot);
         root.transform.SetPositionAndRotation(pos, rot);
 

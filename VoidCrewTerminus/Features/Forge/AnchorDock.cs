@@ -236,12 +236,32 @@ internal sealed class AnchorDock
     // lives in ForgeAnchors.ComputeDockedPose so the translucent placement
     // preview (ForgeGhosts) can pose itself with the exact same rule and land
     // where the item actually will.
+    //
+    // MUST write through CarryableObject.Position/Rotation, not the raw Transform:
+    // an item riding the ship unclaimed (Carrier null, same as everything AnchorDock
+    // holds) is an ISimulatedBody, and MovingSpacePlatform drives its VISIBLE
+    // transform every tick from a separate proxy Rigidbody's LOCAL pose
+    // (MovingSpacePlatform.AddSimulationObject / its per-tick copy-back), not from
+    // whatever we last wrote to item.transform directly. Writing the raw transform
+    // only lasted one frame — the next platform tick stomped it back to the proxy's
+    // stale pre-dock orientation, which is exactly the "rotation drifted ~90-110°"
+    // fight the Pin() diagnostic below was built to catch. The Position/Rotation
+    // setters keep the proxy's local pose in sync when IsBeingSimulated, so the
+    // platform's copy-back reproduces the pose we asked for instead of overwriting it.
     private static Quaternion PlaceAtAnchor(GameObject item, CarryableObject co, Transform anchor, AnchorAlign align)
     {
         var itemTr = item.transform;
         var pivot = co == null ? itemTr : align == AnchorAlign.Center ? co.CenterPivot : co.BasePivot;
         ForgeAnchors.ComputeDockedPose(itemTr, pivot, anchor, out var pos, out var rot);
-        itemTr.SetPositionAndRotation(pos, rot);
+        if (co != null)
+        {
+            co.Position = pos;
+            co.Rotation = rot;
+        }
+        else
+        {
+            itemTr.SetPositionAndRotation(pos, rot);
+        }
         return rot;
     }
 
