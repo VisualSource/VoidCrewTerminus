@@ -348,7 +348,10 @@ public class UpgradeForgeBehavior : MonoBehaviour
         if (box != null) _moduleBox ??= box;
         else if (!_relics.Contains(go)) _relics.Add(go);
 
-        _dock.Dock(go, anchor); // no BroadcastDock — mirroring, not originating
+        // -1 = the module socket (see AnchorIndexOf/AnchorFromIndex) — align by
+        // Center there to match the local LoadModule path below.
+        var align = anchorIndex < 0 ? AnchorAlign.Center : AnchorAlign.Base;
+        _dock.Dock(go, anchor, align); // no BroadcastDock — mirroring, not originating
 
         BepinPlugin.Log.LogDebug($"[Net] ← applied dock item={itemViewId} anchor={anchorIndex} on forge={ForgeViewId}.");
     }
@@ -637,7 +640,10 @@ public class UpgradeForgeBehavior : MonoBehaviour
                 player.Carrier.ReleaseCarryable();
                 TryTakeModule((BuildBox)payload);
                 var socket = _inputAnchor != null ? _inputAnchor : transform;
-                _dock.Dock(payload.gameObject, socket);
+                // Center-pivot align: the module socket's generated trigger volume
+                // is centered on the anchor, so the box's own center — not its
+                // BasePivot — is what should land there (see AnchorAlign).
+                _dock.Dock(payload.gameObject, socket, AnchorAlign.Center);
                 BroadcastDock(payload.gameObject, socket, docked: true);
                 break;
 

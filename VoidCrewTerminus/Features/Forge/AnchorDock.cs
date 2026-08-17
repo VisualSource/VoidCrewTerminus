@@ -16,26 +16,61 @@ namespace VoidCrewTerminus.Forge;
 // body containing one cannot even be JIT-compiled in the test host. It knows
 // nothing about relics, module sockets or the network — it reports which items
 // have left; the Forge decides what that means and who to tell.
+
+// Mirrors CG.Ship.Hull.CarryablesSocket.AnchorType: which of the carryable's
+// authored pivots gets pinned to the anchor's origin. Base is right for a
+// relic resting in a tube; Center is right for the module socket, whose
+// generated trigger volume is centered on the anchor — Base there pins e.g.
+// the box's top to the volume's center, leaving the box's body hanging off
+// to one side instead of sitting centered in the socket.
+internal enum AnchorAlign
+{
+    Base,
+    Center,
+}
+
 internal sealed class AnchorDock
 {
-    private readonly Dictionary<GameObject, Transform> _docked = new();
+    private sealed class Docked
+    {
+        internal readonly Transform Anchor;
+        internal readonly AnchorAlign Align;
+        // The rotation we actually wrote the last time we placed this item —
+        // NOT recomputable from the item's current transform (pivot-alignment
+        // math is invariant to the item's current orientation by construction,
+        // so recomputing "expected" from current state is a tautology that can
+        // never detect drift). Snapshotting the literal value we wrote is the
+        // only way to tell whether something else touched it since.
+        internal Quaternion LastAppliedRotation;
+        internal Docked(Transform anchor, AnchorAlign align) { Anchor = anchor; Align = align; }
+    }
+
+    private readonly Dictionary<GameObject, Docked> _docked = new();
 
     // Items docked here whose Carrier has been directly observed null at least
     // once since docking — see Dock() and Reconcile() for why this exists.
     private readonly HashSet<GameObject> _confirmedReleased = new();
 
     // Reused across frames: Reconcile runs every Update and must not allocate.
-    private readonly List<KeyValuePair<GameObject, Transform>> _departedScratch = new();
+    private readonly List<KeyValuePair<GameObject, Docked>> _departedScratch = new();
 
     internal bool IsDocked(GameObject item) => item != null && _docked.ContainsKey(item);
 
     // Read by ForgeInteractable so it can step aside and let a docked item be grabbed.
-    internal bool IsOccupied(Transform anchor) => anchor != null && _docked.ContainsValue(anchor);
+    internal bool IsOccupied(Transform anchor)
+    {
+        if (anchor == null) return false;
+        foreach (var kv in _docked)
+            if (kv.Value.Anchor == anchor) return true;
+        return false;
+    }
 
-    internal void Dock(GameObject item, Transform anchor)
+    internal void Dock(GameObject item, Transform anchor, AnchorAlign align = AnchorAlign.Base)
     {
         if (item == null || anchor == null) return;
-        _docked[item] = anchor;
+        var docked = new Docked(anchor, align);
+        _docked[item] = docked;
+        _driftWarned.Remove(item);
 
         var co = item.GetComponent<CarryableObject>();
 
@@ -57,19 +92,46 @@ internal sealed class AnchorDock
         // keeps integrating in the platform's physics scene the whole time the
         // item is docked, which is what the per-frame pin was accumulating into.
         SetDockedKinematic(co, item, true);
-        PlaceAtAnchor(item, co, anchor);
+        docked.LastAppliedRotation = PlaceAtAnchor(item, co, anchor, align);
         ForgeAnchors.SetFilled(anchor, true);
+
+        // Diagnostic for the "relic doesn't rotate to match its tube" report:
+        // PlaceAtAnchor is the same code path for relics and the module box, so
+        // if the box aligns correctly and a relic doesn't, either this relic's
+        // CarryableObject.BasePivot isn't the plain identity fallback we expect,
+        // or something else is overwriting rotation after this runs. First round
+        // (pivotIsSelf/pivotRot/appliedRot) proved the write itself lands
+        // correctly for both — so this round also captures PhotonView ownership:
+        // CarryableObject.OnPhotonSerializeView's reading branch re-applies
+        // LocalPosition/LocalRotation from the network stream every sync tick
+        // unless Carrier != null && Carrier.AmOwner, and Carrier is null the
+        // instant we dock — so a docked item this client doesn't own would get
+        // silently snapped back toward whatever the actual owner last reported,
+        // undoing PlaceAtAnchor a moment after this log line. See also the
+        // Pin() drift check below, which catches that happening frame-to-frame.
+        var pivot = align == AnchorAlign.Center ? co?.CenterPivot : co?.BasePivot;
+        var pv = item.GetComponent<Photon.Pun.PhotonView>();
+        BepinPlugin.Log.LogDebug(
+            $"[Forge] Dock {item.name} align={align}: pivotIsSelf={pivot == item.transform}, " +
+            $"pivotRot={pivot?.rotation.eulerAngles}, anchorRot={anchor.rotation.eulerAngles}, " +
+            $"appliedRot={item.transform.rotation.eulerAngles}, " +
+            $"photonIsMine={pv?.IsMine}, photonOwner={pv?.Owner?.ActorNumber}");
     }
 
     internal bool Undock(GameObject item)
     {
-        if (item == null || !_docked.TryGetValue(item, out var anchor)) return false;
+        if (item == null || !_docked.TryGetValue(item, out var docked)) return false;
         _docked.Remove(item);
         _confirmedReleased.Remove(item);
-        ForgeAnchors.SetFilled(anchor, false);
+        _driftWarned.Remove(item);
+        ForgeAnchors.SetFilled(docked.Anchor, false);
         ReleaseRigidbody(item);
         return true;
     }
+
+    // Logged once per item, the first time Pin() finds its rotation has moved
+    // since the previous frame's placement — see the drift check below.
+    private readonly HashSet<GameObject> _driftWarned = new();
 
     // Driven from the Forge's LateUpdate.
     internal void Pin()
@@ -77,13 +139,39 @@ internal sealed class AnchorDock
         if (_docked.Count == 0) return;
         foreach (var kv in _docked)
         {
-            if (kv.Key == null || kv.Value == null) continue;
+            if (kv.Key == null || kv.Value.Anchor == null) continue;
             var co = kv.Key.GetComponent<CarryableObject>();
             // Skip once a player has grabbed the item — Reconcile undocks it next
             // frame. Otherwise the pin snaps a carried box back to the anchor and
             // the accumulated teleport delta drifts visibly when it wakes.
             if (co != null && co.Carrier != null) continue;
-            PlaceAtAnchor(kv.Key, co, kv.Value);
+
+            var docked = kv.Value;
+
+            // Diagnostic: compares against the literal rotation we wrote last
+            // frame (LastAppliedRotation), not a recomputed "expected" value —
+            // pivot-alignment math is invariant to the item's current rotation
+            // by construction, so recomputing from current state would always
+            // trivially match and could never catch anything. If something
+            // outside AnchorDock (network sync, physics) is fighting our
+            // placement between frames, this catches the item having moved
+            // since Pin()/Dock() set it, right before we stomp it back to
+            // correct. Logged once per item so a real, sustained fight (e.g.
+            // CarryableObject.OnPhotonSerializeView reapplying a stale
+            // networked LocalRotation every tick because this client isn't the
+            // PhotonView owner) shows up without spamming every frame.
+            if (!_driftWarned.Contains(kv.Key))
+            {
+                float drift = Quaternion.Angle(kv.Key.transform.rotation, docked.LastAppliedRotation);
+                if (drift > 2f)
+                {
+                    _driftWarned.Add(kv.Key);
+                    BepinPlugin.Log.LogDebug(
+                        $"[Forge] Pin {kv.Key.name}: rotation drifted {drift:F1}° since last placement — something else is overwriting it.");
+                }
+            }
+
+            docked.LastAppliedRotation = PlaceAtAnchor(kv.Key, co, docked.Anchor, docked.Align);
         }
     }
 
@@ -123,10 +211,10 @@ internal sealed class AnchorDock
         {
             _docked.Remove(kv.Key);
             _confirmedReleased.Remove(kv.Key);
-            ForgeAnchors.SetFilled(kv.Value, false);
+            ForgeAnchors.SetFilled(kv.Value.Anchor, false);
             if (kv.Key == null) continue;
             ReleaseRigidbody(kv.Key);
-            grabbed.Add(kv);
+            grabbed.Add(new KeyValuePair<GameObject, Transform>(kv.Key, kv.Value.Anchor));
         }
         _departedScratch.Clear();
     }
@@ -138,27 +226,28 @@ internal sealed class AnchorDock
         foreach (var kv in _docked)
         {
             if (kv.Key == null) continue;
-            ForgeAnchors.SetFilled(kv.Value, false);
+            ForgeAnchors.SetFilled(kv.Value.Anchor, false);
             ReleaseRigidbody(kv.Key);
         }
         _docked.Clear();
         _confirmedReleased.Clear();
     }
 
-    // Base-pivot alignment: the item's BasePivot lands on the anchor's origin with
-    // its axes matching the anchor's axes. Same intent as
+    // Pivot alignment: the item's Base or Center pivot (per align) lands on the
+    // anchor's origin with its axes matching the anchor's axes. Same intent as
     // CarryablesSocket.PlaceCarryableOnSocket, but computed with quaternions
     // instead of the anchor's matrices — our anchors inherit rotated,
     // non-uniformly scaled FBX nodes whose matrices would skew an extracted
     // rotation, unlike vanilla's unit-scale store transforms.
-    private static void PlaceAtAnchor(GameObject item, CarryableObject co, Transform anchor)
+    private static Quaternion PlaceAtAnchor(GameObject item, CarryableObject co, Transform anchor, AnchorAlign align)
     {
         var itemTr = item.transform;
-        var pivot = co != null ? co.BasePivot : itemTr;
+        var pivot = co == null ? itemTr : align == AnchorAlign.Center ? co.CenterPivot : co.BasePivot;
         var finalRot = anchor.rotation * Quaternion.Inverse(pivot.rotation) * itemTr.rotation;
         var delta = finalRot * Quaternion.Inverse(itemTr.rotation);
         var finalPos = anchor.position - delta * (pivot.position - itemTr.position);
         itemTr.SetPositionAndRotation(finalPos, finalRot);
+        return finalRot;
     }
 
     // CarryableObject is an ISimulatedBody: while it rides a MovingSpacePlatform
