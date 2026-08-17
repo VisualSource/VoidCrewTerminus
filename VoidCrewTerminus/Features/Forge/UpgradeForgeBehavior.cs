@@ -100,6 +100,12 @@ public class UpgradeForgeBehavior : MonoBehaviour
 
     public bool HasModule => _moduleBox != null;
     public int RelicCount => _relics.Count;
+
+    // Anything at all docked on an anchor — relics, the module box, or something
+    // still awaiting reconcile. Read by ForgeDeconstructGuardPatch, which is why it
+    // asks the dock rather than HasModule/RelicCount: the question is physical
+    // ("would deconstructing this module strand an item?"), not semantic.
+    internal bool IsLoaded => _dock.Count > 0;
     public BuildBox ModuleBox => _moduleBox;
     public IReadOnlyList<GameObject> Relics => _relics;
 
