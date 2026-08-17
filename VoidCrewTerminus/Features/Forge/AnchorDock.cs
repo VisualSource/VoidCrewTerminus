@@ -145,20 +145,15 @@ internal sealed class AnchorDock
         _confirmedReleased.Clear();
     }
 
-    // Base-pivot alignment: the item's BasePivot lands on the anchor's origin with
-    // its axes matching the anchor's axes. Same intent as
-    // CarryablesSocket.PlaceCarryableOnSocket, but computed with quaternions
-    // instead of the anchor's matrices — our anchors inherit rotated,
-    // non-uniformly scaled FBX nodes whose matrices would skew an extracted
-    // rotation, unlike vanilla's unit-scale store transforms.
+    // Base-pivot alignment — the math lives in ForgeAnchors.ComputeDockedPose so the
+    // translucent placement preview (ForgeGhosts) can pose itself with the exact
+    // same rule and land where the item actually will.
     private static void PlaceAtAnchor(GameObject item, CarryableObject co, Transform anchor)
     {
         var itemTr = item.transform;
         var pivot = co != null ? co.BasePivot : itemTr;
-        var finalRot = anchor.rotation * Quaternion.Inverse(pivot.rotation) * itemTr.rotation;
-        var delta = finalRot * Quaternion.Inverse(itemTr.rotation);
-        var finalPos = anchor.position - delta * (pivot.position - itemTr.position);
-        itemTr.SetPositionAndRotation(finalPos, finalRot);
+        ForgeAnchors.ComputeDockedPose(itemTr, pivot, anchor, out var pos, out var rot);
+        itemTr.SetPositionAndRotation(pos, rot);
     }
 
     // CarryableObject is an ISimulatedBody: while it rides a MovingSpacePlatform

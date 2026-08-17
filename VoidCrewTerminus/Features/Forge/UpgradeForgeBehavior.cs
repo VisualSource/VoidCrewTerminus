@@ -88,6 +88,16 @@ public class UpgradeForgeBehavior : MonoBehaviour
     private Transform _inputAnchor;
     private bool _interactablesBuilt;
 
+    // The translucent blue "this fits here" preview. Local and cosmetic only —
+    // see ForgeGhosts.
+    private readonly ForgeGhosts _ghosts = new();
+    private float _ghostRefreshCountdown;
+
+    // Vanilla SocketOutlines re-decides which sockets preview on a 0.2s
+    // InvokeRepeating; matched here so the Forge's previews pop in and out on the
+    // same cadence as the ship's own.
+    private const float GhostRefreshInterval = 0.2f;
+
     public bool HasModule => _moduleBox != null;
     public int RelicCount => _relics.Count;
     public BuildBox ModuleBox => _moduleBox;
@@ -450,8 +460,81 @@ public class UpgradeForgeBehavior : MonoBehaviour
     }
 
     private void OnEnable() => ForgeMeterController.LevelChanged += OnForgeLevelChanged;
-    private void OnDisable() => ForgeMeterController.LevelChanged -= OnForgeLevelChanged;
+
+    private void OnDisable()
+    {
+        ForgeMeterController.LevelChanged -= OnForgeLevelChanged;
+        // Nothing else will tick these while we're off — don't leave a hologram
+        // floating in a Forge that has stopped running.
+        _ghosts.Clear();
+    }
+
     private void OnForgeLevelChanged(int _) => RefreshTubeVisibility();
+
+    // Which anchors should be showing a preview, and of what. Runs on the slow tick:
+    // the answer only changes when the player picks something up, walks up to a
+    // different Forge, or fills a tube.
+    //
+    // Acceptance is asked of ForgeInteractionPolicy — the same call HandleInteraction
+    // makes — rather than re-derived from HasModule/RelicCount here. That is the whole
+    // point: the preview appears exactly when the click would be taken, so it can't
+    // drift into promising an insert the Forge would then refuse.
+    private void RefreshGhosts()
+    {
+        if (!_interactablesBuilt) return;
+
+        var payload = LocalPlayer.Instance != null ? LocalPlayer.Instance.Payload : null;
+        var carried = ClassifyPayload(payload);
+
+        // Empty-handed, or holding something the Forge has no anchor for. Bailing
+        // here also keeps LevelOfBox's upgrade-chain walk off the tick entirely
+        // unless a module box is actually in hand.
+        if (carried != ForgePayload.ModuleBox && carried != ForgePayload.Relic)
+        {
+            _ghosts.Clear();
+            return;
+        }
+
+        var view = SnapshotView();
+        int carriedLevel = carried == ForgePayload.ModuleBox ? LevelOfBox((BuildBox)payload) : 0;
+
+        PreviewAnchor(_inputAnchor, ForgeInteractableKind.ModuleSocket, view, carried, carriedLevel, payload);
+        foreach (var tube in _tubeAnchors)
+            PreviewAnchor(tube, ForgeInteractableKind.RelicTube, view, carried, carriedLevel, payload);
+    }
+
+    private void PreviewAnchor(Transform anchor, ForgeInteractableKind kind, in ForgeView view,
+                               ForgePayload carried, int carriedLevel, CarryableObject payload)
+    {
+        if (anchor == null) return;
+
+        // Tubes above the Forge's Capacity are deactivated wholesale by
+        // RefreshTubeVisibility — a locked tube takes nothing, so it previews nothing.
+        if (!anchor.gameObject.activeInHierarchy) { _ghosts.Hide(anchor); return; }
+
+        var click = new ForgeClick(carried, carriedLevel, kind, IsAnchorOccupied(anchor));
+        var action = ForgeInteractionPolicy.Decide(view, click).Action;
+
+        if (action == ForgeAction.LoadModule || action == ForgeAction.InsertRelic)
+            _ghosts.Show(anchor, payload);
+        else
+            _ghosts.Hide(anchor);
+    }
+
+    // The anchor the player's interact ray is currently on, or null. Read from
+    // RaycastHandler.Current the same way vanilla's
+    // CarryablesSocketActor.IsInteractableHighlighted does, rather than from
+    // ForgeInteractable.Highlighted — the raycast is the authority on where the
+    // player is looking, and reading it directly can't get out of step with a
+    // highlight callback that was missed while an interactable was rebuilt.
+    private Transform AimedAnchor()
+    {
+        var player = LocalPlayer.Instance;
+        if (player == null || player.RaycastHandler == null) return null;
+        return player.RaycastHandler.Current is ForgeInteractable fi && fi.Forge == this
+            ? fi.Anchor
+            : null;
+    }
 
     // The model reflects Forge progression: only the first Capacity tubes are
     // active. Deactivating a tube anchor hides everything under it — the click
@@ -615,17 +698,18 @@ public class UpgradeForgeBehavior : MonoBehaviour
     private ForgeClick DescribeClick(ForgeInteractableKind kind, Transform anchor, CarryableObject payload)
     {
         var box = payload as BuildBox;
-        var carried = payload == null ? ForgePayload.None
-            : box != null ? ForgePayload.ModuleBox
-            : IsRelic(payload.gameObject) ? ForgePayload.Relic
-            : ForgePayload.Other;
-
         return new ForgeClick(
-            payload: carried,
+            payload: ClassifyPayload(payload),
             carriedBoxLevel: box != null ? LevelOfBox(box) : 0,
             target: kind,
             targetOccupied: anchor == null || IsAnchorOccupied(anchor));
     }
+
+    private static ForgePayload ClassifyPayload(CarryableObject payload) =>
+        payload == null ? ForgePayload.None
+        : payload is BuildBox ? ForgePayload.ModuleBox
+        : IsRelic(payload.gameObject) ? ForgePayload.Relic
+        : ForgePayload.Other;
 
     // Carry out a decision. Nothing here re-checks a rule the policy already
     // applied, and nothing here decides what to say about a refusal.
@@ -688,6 +772,7 @@ public class UpgradeForgeBehavior : MonoBehaviour
     // removing itself. The reloaded assembly re-attaches on its own patch pass.
     public void TeardownForReload()
     {
+        _ghosts.Clear();
         _dock.ReleaseAll();
         _relics.Clear();
         _moduleBox = null;
@@ -731,6 +816,17 @@ public class UpgradeForgeBehavior : MonoBehaviour
             }
         }
         _grabbedScratch.Clear();
+
+        // Which anchors preview is re-decided on the slow tick; which one is aimed at
+        // is applied every frame, so hover feedback isn't up to 200ms behind the
+        // crosshair. Both are cheap no-ops when nothing is being previewed.
+        _ghostRefreshCountdown -= Time.deltaTime;
+        if (_ghostRefreshCountdown <= 0f)
+        {
+            _ghostRefreshCountdown = GhostRefreshInterval;
+            RefreshGhosts();
+        }
+        _ghosts.SetAimed(AimedAnchor());
     }
 
     // Keep docked items pinned to their anchors while the ship moves.

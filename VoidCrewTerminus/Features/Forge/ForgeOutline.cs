@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using Knife.HDRPOutline.Core;
 using UnityEngine;
@@ -25,18 +26,24 @@ internal static class ForgeOutline
             if (outline != null) outline.enabled = isHighlighted;
     }
 
+    // Placement-preview ghosts (ForgeGhosts) park render-only clones under the
+    // module's own anchors, so they turn up in this sweep — and it runs once per
+    // module and is cached forever, which would both capture a transient ghost
+    // permanently and make it flicker with the module's hover highlight. They own
+    // their own outlines; skip them.
     private static OutlineObject[] BuildOutlines(Transform moduleRoot)
     {
         var renderers = moduleRoot.GetComponentsInChildren<Renderer>(true);
-        var outlines = new OutlineObject[renderers.Length];
-        for (int i = 0; i < renderers.Length; i++)
+        var outlines = new List<OutlineObject>(renderers.Length);
+        foreach (var renderer in renderers)
         {
-            var outline = renderers[i].GetComponent<OutlineObject>();
-            if (outline == null) outline = renderers[i].gameObject.AddComponent<OutlineObject>();
+            if (renderer.GetComponentInParent<ForgeGhostMarker>() != null) continue;
+            var outline = renderer.GetComponent<OutlineObject>();
+            if (outline == null) outline = renderer.gameObject.AddComponent<OutlineObject>();
             outline.enabled = false;
-            outlines[i] = outline;
+            outlines.Add(outline);
         }
-        BepinPlugin.Log.LogDebug($"[Forge] Built {outlines.Length} outline object(s) for {moduleRoot.name}.");
-        return outlines;
+        BepinPlugin.Log.LogDebug($"[Forge] Built {outlines.Count} outline object(s) for {moduleRoot.name}.");
+        return outlines.ToArray();
     }
 }

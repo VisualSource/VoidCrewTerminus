@@ -36,6 +36,24 @@ internal static class ForgeAnchors
         return null;
     }
 
+    // Where an item's root transform ends up once docked on an anchor: the item's
+    // BasePivot lands on the anchor's origin with its axes matching the anchor's.
+    // Same intent as CarryablesSocket.PlaceCarryableOnSocket, but computed with
+    // quaternions instead of the anchor's matrices — our anchors inherit rotated,
+    // non-uniformly scaled FBX nodes whose matrices would skew an extracted
+    // rotation, unlike vanilla's unit-scale store transforms.
+    //
+    // Shared by AnchorDock (which moves the real item) and ForgeGhosts (which poses
+    // the translucent preview): a preview that landed anywhere else than the item
+    // would be lying about the result.
+    internal static void ComputeDockedPose(Transform item, Transform pivot, Transform anchor,
+        out Vector3 position, out Quaternion rotation)
+    {
+        rotation = anchor.rotation * Quaternion.Inverse(pivot.rotation) * item.rotation;
+        var delta = rotation * Quaternion.Inverse(item.rotation);
+        position = anchor.position - delta * (pivot.position - item.position);
+    }
+
     internal static void SetFilled(Transform anchor, bool filled)
     {
         var indicator = FindDeep(anchor, FilledName);
