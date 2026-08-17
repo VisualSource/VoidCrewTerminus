@@ -4,11 +4,8 @@ namespace VoidCrewTerminus.Forge;
 
 // The prefab authoring contract, and the only place its names are spelled.
 //
-// These anchors are deliberately NOT vanilla CarryablesSockets — see
-// docs/adr/0002-anchor-dock-not-carryables-socket.md for why, and for what it
-// costs. Bundle serialization is NOT the reason (AssetLoader.GraftModuleComponents
-// already grafts game components at runtime); the reason is that CarryablesSocket
-// is a networked CloneStar entity needing its own PhotonView per anchor.
+// These anchors are deliberately NOT vanilla CarryablesSockets — see ADR-0002 for
+// why and for what that costs. (Bundle serialization is not the reason.)
 //
 // Game components cannot be serialized into a metem bundle, so the shipped
 // prefab carries only named anchor transforms — every optional embellishment
@@ -42,16 +39,13 @@ internal static class ForgeAnchors
         return null;
     }
 
-    // Where an item's root transform ends up once docked on an anchor: the item's
-    // BasePivot lands on the anchor's origin with its axes matching the anchor's.
-    // Same intent as CarryablesSocket.PlaceCarryableOnSocket, but computed with
-    // quaternions instead of the anchor's matrices — our anchors inherit rotated,
-    // non-uniformly scaled FBX nodes whose matrices would skew an extracted
-    // rotation, unlike vanilla's unit-scale store transforms.
+    // Where an item's root ends up once docked: its BasePivot lands on the anchor's
+    // origin, axes aligned. Same intent as CarryablesSocket.PlaceCarryableOnSocket,
+    // but quaternion-based — our anchors inherit rotated, non-uniformly scaled FBX
+    // nodes whose matrices would skew an extracted rotation.
     //
-    // Shared by AnchorDock (which moves the real item) and ForgeGhosts (which poses
-    // the translucent preview): a preview that landed anywhere else than the item
-    // would be lying about the result.
+    // Shared by AnchorDock (the real item) and ForgeGhosts (the preview), so the
+    // preview can't land somewhere the item won't.
     internal static void ComputeDockedPose(Transform item, Transform pivot, Transform anchor,
         out Vector3 position, out Quaternion rotation)
     {

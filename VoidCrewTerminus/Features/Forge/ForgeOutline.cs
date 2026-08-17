@@ -26,11 +26,9 @@ internal static class ForgeOutline
             if (outline != null) outline.enabled = isHighlighted;
     }
 
-    // Placement-preview ghosts (ForgeGhosts) park render-only clones under the
-    // module's own anchors, so they turn up in this sweep — and it runs once per
-    // module and is cached forever, which would both capture a transient ghost
-    // permanently and make it flicker with the module's hover highlight. They own
-    // their own outlines; skip them.
+    // ForgeGhosts parks render-only clones under the module's anchors, so they turn
+    // up in this sweep — which runs once per module and is cached forever, capturing
+    // a transient ghost permanently. They own their own outlines; skip them.
     private static OutlineObject[] BuildOutlines(Transform moduleRoot)
     {
         var renderers = moduleRoot.GetComponentsInChildren<Renderer>(true);

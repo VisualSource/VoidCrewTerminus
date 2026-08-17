@@ -27,9 +27,8 @@ internal sealed class AnchorDock
     // Reused across frames: Reconcile runs every Update and must not allocate.
     private readonly List<KeyValuePair<GameObject, Transform>> _departedScratch = new();
 
-    // How many items are physically stuck to this Forge right now. This — not the
-    // Forge's relic/module bookkeeping — is what "deconstructing would strand
-    // something" actually means.
+    // Items physically stuck to this Forge right now — what "deconstructing would
+    // strand something" actually means.
     internal int Count => _docked.Count;
 
     internal bool IsDocked(GameObject item) => item != null && _docked.ContainsKey(item);
