@@ -4,6 +4,12 @@ namespace VoidCrewTerminus.Forge;
 
 // The prefab authoring contract, and the only place its names are spelled.
 //
+// These anchors are deliberately NOT vanilla CarryablesSockets — see
+// docs/adr/0002-anchor-dock-not-carryables-socket.md for why, and for what it
+// costs. Bundle serialization is NOT the reason (AssetLoader.GraftModuleComponents
+// already grafts game components at runtime); the reason is that CarryablesSocket
+// is a networked CloneStar entity needing its own PhotonView per anchor.
+//
 // Game components cannot be serialized into a metem bundle, so the shipped
 // prefab carries only named anchor transforms — every optional embellishment
 // an anchor can carry is a plain Unity object found by name at runtime:
