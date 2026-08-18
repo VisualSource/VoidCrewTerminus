@@ -119,6 +119,10 @@ internal static class ForgeAttachHelper
         }
         behavior.BuildInteractables();
 
+        // Bundle prefabs get none of the mediator wiring vanilla modules do, so the
+        // Forge's light had no idea the ship's power system existed.
+        ForgePowerLights.Attach(module);
+
         RegisterShipPlatformCollision(module);
     }
 
