@@ -1,4 +1,4 @@
-## 0.017
+## 0.0.17
 - fix leftover coliders after deconstruction of upgrade forge
 - fix placement of buildbox in upgrade forge
 - fix lighting via power
