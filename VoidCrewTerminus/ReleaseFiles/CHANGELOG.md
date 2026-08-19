@@ -1,6 +1,9 @@
 ## 0.017
 - fix leftover coliders after deconstruction of upgrade forge
 - fix placement of buildbox in upgrade forge
+- fix lighting via power
+- fix relic rotation
+- fix highlighting
 ## 0.0.16
 - fix placement bug on upgrade forge
 - add buildbox for upgrade forge

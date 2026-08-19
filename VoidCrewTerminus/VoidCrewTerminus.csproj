@@ -4,7 +4,7 @@
     <AssemblyName>VoidCrewTerminus</AssemblyName>
     <Description>
     </Description>
-    <Version>0.0.16</Version>
+    <Version>0.0.17</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
     <RestoreAdditionalProjectSources>
