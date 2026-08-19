@@ -1322,3 +1322,51 @@ Maybe:
 
 
 [] forge upgrade module leaves behind coliders
+
+[] relic-doesn't-rotate-to-tube bug: confirmed fixed for solo/owner client.
+   AnchorDock.PlaceAtAnchor/ComputeDockedPose write the correct rotation on
+   both InputTarget (box) and RelicTubeTarget (relic) — same code path, no
+   anchor-authoring issue. Leading suspect for the original symptom was
+   CarryableObject.OnPhotonSerializeView (decompiled CarryableObject.cs:680-721):
+   its reading branch only skips when Carrier != null && Carrier.AmOwner, and a
+   docked relic always has Carrier == null, so non-owner clients unconditionally
+   read LocalRotation off the network stream every tick and can stomp
+   PlaceAtAnchor's write right after it lands. STILL NEEDS: a 2-client check
+   with a non-owner client watching a relic someone else docked — that's the
+   case the theory predicts could still drift. Watch for "[Forge] Pin ...
+   rotation drifted" in the log (AnchorDock.cs:162-171) if it recurs.
+   UPDATE (26-08-18 solo log): "Pin Relic_12_... rotation drifted 19.0°" fired
+   with photonIsMine=True, photonOwner=1 — drift is happening for the OWNER
+   too, so OnPhotonSerializeView's non-owner branch can't be the whole story
+   (or isn't it at all in solo). Final visible rotation was still correct in
+   that run, so not user-blocking, but the theory needs revisiting: something
+   is nudging the relic ~19° after PlaceAtAnchor even when this client owns
+   the PhotonView. Re-open once solo repro steps are known.
+
+[] forge-buildbox-not-ready dev-workflow gotcha (26-08-18, not a code bug):
+   "Void Crew > Export Asset Bundle" silently no-ops (Debug.LogError to the
+   Unity console only) if the wrong thing is selected in the Project window —
+   it requires exactly one folder selected, not the prefab itself. `make
+   assets`/`make dev` will happily copy/build a STALE .metem_ext that predates
+   a prefab edit with no error anywhere in the mod's own log. Symptom is
+   "Forge BuildBox not ready yet — no vanilla BuildBox donor found" from
+   ForgeSpawnCommand even though the donor-module check is unrelated. Verify
+   by diffing timestamps/md5 of Exported Assets/voidcrewterminus.metem against
+   Assets/voidcrewterminus.metem_ext before chasing this as an AssetLoader bug
+   again.
+
+[] relic-tube centering @done(26-08-18) (relics were landing off-center in
+   their tubes. AnchorDock.PlaceAtAnchor pins the docked item's BasePivot
+   exactly to anchor.position — most relics have pivotIsSelf=True (no
+   authored BasePivot/CenterPivot), so Align type (Base vs Center) is a
+   no-op for them either way; the fix is repositioning the RelicTubeTarget_XX
+   anchor transform itself, not a code change. First attempt eyeballed the
+   anchor against the wrong reference point — RelicTubeTarget_XX's ClickTarget
+   child has its own authored local offset (~0.5 units) from the anchor for
+   hit-box purposes only (ForgeAnchors.cs:14-15), and is NOT where the item
+   docks; judging "center" against ClickTarget's gizmo/bounds instead of the
+   anchor's own position looked like a ~1 relic-width miss. Fixed by nudging
+   each RelicTubeTarget_XX transform directly (via the in-game Unity runtime
+   editor, writing back to the prefab, then Export Asset Bundle → make assets
+   → make dev) until relics land where wanted; ClickTarget left at its
+   original authored offset — it doesn't need to match the anchor.)
