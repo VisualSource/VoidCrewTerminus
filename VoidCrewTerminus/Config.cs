@@ -131,7 +131,7 @@ internal static class TerminusConfig
     // ExtruderLever at runtime (ForgeHoldGate.VanillaDeconstructSeconds) so it tracks
     // whatever the game ships. Commit has no vanilla counterpart to match, so it gets
     // a knob to tune by feel.
-    private const float DefaultForgeCommitHoldSeconds = 3f;
+    private const float DefaultForgeCommitHoldSeconds = 2f;
     [BindConfig("forge", DefaultForgeCommitHoldSeconds, "Seconds the Commit lever must be held to fire. Committing is irreversible and consumes relics, so this is deliberately longer than the generic hold prompt. Deconstruct is not configurable — it matches vanilla's module deconstruct lever.")]
     internal static ConfigEntry<float> ForgeCommitHoldSeconds;
     internal static float CommitHoldSeconds => ForgeCommitHoldSeconds?.Value ?? DefaultForgeCommitHoldSeconds;

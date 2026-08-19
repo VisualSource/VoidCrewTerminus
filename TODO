@@ -1370,3 +1370,25 @@ Maybe:
    editor, writing back to the prefab, then Export Asset Bundle → make assets
    → make dev) until relics land where wanted; ClickTarget left at its
    original authored offset — it doesn't need to match the anchor.)
+
+ ✔ FIX: non-host player couldn't see/use the spawned Forge BuildBox
+   @done(26-08-19) (2-client log pair confirmed it: host's log has the full
+   chain — Registered BuildBox 6ba474b1... into vanilla ModuleContainer,
+   Forge BuildBox template ready, Spawned Forge BuildBox — client's log has
+   ZERO mention of that GUID anywhere, not even a failed-instantiate warning.
+   BuildBoxActor.Awake never ran on the client at all: PhotonNetwork.Instantiate
+   ("#"+guid) needs each client to resolve the GUID locally via
+   RuntimeAssetsRegister before it can construct anything, and
+   AssetLoader.EnsureBuildBoxTemplateReady (which registers the box's own
+   GUID, not just the module's) previously only ran on whichever client
+   executed !forgespawn (or the host via BossDefeatHook) — no per-client hook
+   existed for the box, unlike the module. Confirmed in the client's log:
+   right after the host spawned the box, the client gave up and docked an
+   existing module's BuildBox_GravityScoop_01 instead. Same bug class as the
+   earlier "FIX #2 client forge had no hit targets" (module never attached on
+   remote clients) — same fix shape too: ForgeModuleSpawnPatch's
+   OnPhotonInstantiate postfix (already runs per-client for CellModule) now
+   also calls AssetLoader.EnsureBuildBoxTemplateReady() alongside
+   ForgeAttachHelper.TryAttach. Idempotent, so safe alongside the existing
+   command/boss-drop call sites. NEEDS 2-CLIENT RE-VERIFY: non-host runs
+   !forgespawn (or watches the host run it) and can see/dock the box.
