@@ -64,6 +64,10 @@ public class UpgradeForgeBehavior : MonoBehaviour
     // its own in the .prefab — grep won't find it, GetComponentsInChildren will.
     public const string CommitLeverBoxName = "LeverBox";
 
+    // The lever's cosmetic moving part, animated on hold the same way Deconstruct's
+    // Handle is — buried in the FBX hierarchy like LeverBox/Handle.
+    public const string CommitLevelName = "Lever";
+
     private BuildBox _moduleBox;
     private readonly List<GameObject> _relics = new();
 
@@ -391,6 +395,7 @@ public class UpgradeForgeBehavior : MonoBehaviour
         _inputAnchor = transforms.FirstOrDefault(t => t.name == InputAnchorName);
         var commitAnchor = transforms.FirstOrDefault(t => t.name == CommitAnchorName);
         var commitLeverBox = transforms.FirstOrDefault(t => t.name == CommitLeverBoxName);
+        var commitLevel = transforms.FirstOrDefault(t => t.name == CommitLevelName);
         var alloyAnchor = transforms.FirstOrDefault(t => t.name == AlloyAnchorName);
         var deconstructHandle = transforms.FirstOrDefault(t => t.name == DeconstructHandleName);
         var deconstructTrigger = transforms.FirstOrDefault(t => t.name == DeconstructTriggerName);
@@ -411,9 +416,11 @@ public class UpgradeForgeBehavior : MonoBehaviour
             CreateInteractable(_inputAnchor, ForgeInteractableKind.ModuleSocket, new Vector3(1.2f, 1.2f, 1.2f), layer);
         if (commitAnchor != null)
         {
-            CreateCommitInteractable(commitAnchor, commitLeverBox, new Vector3(0.3f, 0.3f, 0.3f), layer);
+            CreateCommitInteractable(commitAnchor, commitLeverBox, commitLevel, new Vector3(0.3f, 0.3f, 0.3f), layer);
             if (commitLeverBox == null)
                 BepinPlugin.Log.LogInfo("[Forge] Prefab has no LeverBox — Commit will outline the whole module instead of just the lever.");
+            if (commitLevel == null)
+                BepinPlugin.Log.LogInfo("[Forge] Prefab has no Level — Commit works but the lever won't animate.");
         }
         else
             BepinPlugin.Log.LogWarning("[Forge] Prefab has no CommitTarget anchor — in-world commits unavailable (use !forgecommit).");
@@ -545,7 +552,7 @@ public class UpgradeForgeBehavior : MonoBehaviour
     // Held, not clicked — a different vanilla input pathway (EnvironmentInteract's
     // Hold action), so it can't share ForgeInteractable's base. Building the click
     // region is identical though. See ForgeCommitInteractable.
-    private void CreateCommitInteractable(Transform anchor, Transform leverBox, Vector3 size, int layer)
+    private void CreateCommitInteractable(Transform anchor, Transform leverBox, Transform level, Vector3 size, int layer)
     {
         var go = BuildAnchorClickRegion(anchor, "ForgeInteractable_CommitButton", size, layer);
 
@@ -554,6 +561,7 @@ public class UpgradeForgeBehavior : MonoBehaviour
         hc.Forge = this;
         hc.Anchor = anchor;
         hc.OutlineTarget = leverBox;
+        hc.VisualLevel = level;
         hc.ShowContextInfo = false;
         // Must be set before Start(): ClickerInteractable.SetClickable would
         // otherwise stomp the assignment below back to the null it captured in Awake.

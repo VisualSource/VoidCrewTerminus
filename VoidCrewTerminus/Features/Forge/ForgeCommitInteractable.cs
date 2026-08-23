@@ -28,6 +28,12 @@ namespace VoidCrewTerminus.Forge;
 // Unity Inspector.
 public class ForgeCommitInteractable : ClickerInteractable
 {
+    // Mirrors ForgeDeconstructInteractable.VisualHandle's pull animation — same
+    // hold-progress-driven angle, same early-release spring-back — just on the X
+    // axis instead of Z, matching Level's authored pivot.
+    private const float MaxAngle = 80f;
+    private const float SpringBackDegPerSec = 180f;
+
     public UpgradeForgeBehavior Forge;
     public Transform Anchor;
 
@@ -36,6 +42,14 @@ public class ForgeCommitInteractable : ClickerInteractable
     // just the lever instead of the whole module. Null if the prefab has no
     // LeverBox — falls back to outlining the whole module.
     public Transform OutlineTarget;
+
+    // The lever's cosmetic moving part (UpgradeForgeBehavior.CommitLevelName —
+    // "Level" — buried in the FBX hierarchy same as OutlineTarget). Rotated on X
+    // around its own pivot, driven by hold progress. Optional — Commit still works
+    // with no lever animation if absent.
+    public Transform VisualLevel;
+
+    private float _angle;
 
     private readonly ForgeHoldGate _gate = new();
 
@@ -68,7 +82,19 @@ public class ForgeCommitInteractable : ClickerInteractable
 
     private void Update()
     {
-        if (_gate.Tick(Time.deltaTime)) OnCommit();
+        bool fired = _gate.Tick(Time.deltaTime);
+
+        // Tracking progress rather than easing toward a fixed target at a fixed
+        // speed — see ForgeDeconstructInteractable.Update for why.
+        if (VisualLevel != null)
+        {
+            _angle = _gate.IsHolding
+                ? MaxAngle * _gate.Progress
+                : Mathf.MoveTowards(_angle, 0f, SpringBackDegPerSec * Time.deltaTime);
+            VisualLevel.localRotation = Quaternion.Euler(_angle, 0f, 0f);
+        }
+
+        if (fired) OnCommit();
     }
 
     private void OnCommit()
