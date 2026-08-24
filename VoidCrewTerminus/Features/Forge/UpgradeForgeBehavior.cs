@@ -68,6 +68,17 @@ public class UpgradeForgeBehavior : MonoBehaviour
     // Handle is — buried in the FBX hierarchy like LeverBox/Handle.
     public const string CommitLevelName = "Lever";
 
+    // The screen mesh (its own FBX node, using Materials/ModuleScreen.mat) that
+    // ForgeScreenDisplay renders the level/alloy readout onto.
+    public const string AlloyTerminalScreenName = "AlloyTerminalScreen";
+
+    // Names of the two Unity-authored assets ForgeScreenDisplay needs, captured
+    // by AssetLoader.LoadBundle from the exported bundle (a VisualTreeAsset and a
+    // PanelSettings ScriptableObject aren't VoidCrewAsset-tagged GameObjects, so
+    // they're matched by asset name instead of the usual VCA lookup).
+    public const string ForgeScreenLayoutName = "ForgeScreenLayout";
+    public const string ForgeScreenPanelSettingsName = "ForgeScreenPanelSettings";
+
     private BuildBox _moduleBox;
     private readonly List<GameObject> _relics = new();
 
@@ -399,6 +410,7 @@ public class UpgradeForgeBehavior : MonoBehaviour
         var alloyAnchor = transforms.FirstOrDefault(t => t.name == AlloyAnchorName);
         var deconstructHandle = transforms.FirstOrDefault(t => t.name == DeconstructHandleName);
         var deconstructTrigger = transforms.FirstOrDefault(t => t.name == DeconstructTriggerName);
+        var alloyScreen = transforms.FirstOrDefault(t => t.name == AlloyTerminalScreenName);
 
         int layer = LayerMask.NameToLayer("InteractiveObjects");
         if (layer < 0)
@@ -436,6 +448,14 @@ public class UpgradeForgeBehavior : MonoBehaviour
         }
         else
             BepinPlugin.Log.LogInfo("[Forge] Prefab has no DeconstructTrigger — in-world deconstruct unavailable.");
+
+        if (alloyScreen != null)
+        {
+            if (alloyScreen.GetComponent<ForgeScreenDisplay>() == null)
+                alloyScreen.gameObject.AddComponent<ForgeScreenDisplay>();
+        }
+        else
+            BepinPlugin.Log.LogInfo("[Forge] Prefab has no AlloyTerminalScreen — level/alloy readout unavailable.");
 
         if (_tubeAnchors.Length == 0 || _inputAnchor == null)
             BepinPlugin.Log.LogWarning(

@@ -12,6 +12,13 @@ public static class ForgeMeterController
     // Raised on level change so installed Forges can update tube visibility.
     public static event Action<int> LevelChanged;
 
+    // Raised on ANY meter change, level-up or not — LevelChanged alone misses
+    // in-between progress (e.g. a single alloy feed that doesn't cross a
+    // threshold), which a live progress display (ForgeScreenDisplay) needs to
+    // track. Fired from every path that mutates Meter: AddMeter (authority)
+    // and ApplyNetworkState (client mirror).
+    public static event Action MeterChanged;
+
     // Swappable so ApplyNetworkState and AddMeter stay callable from the unit test
     // host: Messaging.Notification reaches into real Gameplay.Chat types that don't
     // exist there, which would otherwise crash any test exercising either path (see
@@ -46,6 +53,7 @@ public static class ForgeMeterController
         Meter = 0f;
         DifficultyScalar = 0;
         LevelChanged?.Invoke(Level);
+        MeterChanged?.Invoke();
     }
 
     // Called by ForgeSectorHook under the same de-dup gate as the meter award, so
@@ -89,6 +97,7 @@ public static class ForgeMeterController
             LevelChanged?.Invoke(Level);
             Notify(LevelUpMessage(Level));
         }
+        MeterChanged?.Invoke();
     }
 
     public static void AddMeter(float amount, string source)
@@ -113,6 +122,7 @@ public static class ForgeMeterController
         }
         if (IsMaxed) Meter = 0f;
         if (leveled) LevelChanged?.Invoke(Level);
+        MeterChanged?.Invoke();
 
         BepinPlugin.Log.LogInfo($"[Forge] Meter +{amount:0.#} from {source} → L{Level}, {Meter:0.#}");
     }

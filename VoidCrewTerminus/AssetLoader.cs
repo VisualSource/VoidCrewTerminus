@@ -15,6 +15,7 @@ using Photon.Pun;
 using ResourceAssets;
 using RuntimeAssets;
 using UnityEngine;
+using UnityEngine.UIElements;
 using VC.Common;
 using VC.Common.Carryables;
 using VC.Common.PlayerShip;
@@ -43,8 +44,18 @@ public class AssetLoader
     private static string _buildBoxOwnDescription;
     private static Sprite _buildBoxOwnIcon;
 
+    // Unity-authored UI Toolkit assets for ForgeScreenDisplay, captured by name
+    // from the bundle (see UpgradeForgeBehavior.ForgeScreenLayoutName/
+    // ForgeScreenPanelSettingsName). Null until the bundle loads; ForgeScreenDisplay
+    // logs and no-ops if either is still missing when a Forge builds its screen.
+    private static VisualTreeAsset _forgeScreenVisualTree;
+    private static PanelSettings _forgeScreenPanelSettingsTemplate;
+
     public static GameObject GetModulePrefab(string name) =>
         _modulePrefabs.TryGetValue(name, out var prefab) ? prefab : null;
+
+    public static VisualTreeAsset ForgeScreenVisualTree => _forgeScreenVisualTree;
+    public static PanelSettings ForgeScreenPanelSettingsTemplate => _forgeScreenPanelSettingsTemplate;
 
     // Hot-reload teardown. Unload(false) frees the bundle handle only — live assets
     // (modules/materials already in use) keep working.
@@ -122,6 +133,16 @@ public class AssetLoader
 
         foreach (var asset in bundle.LoadAllAssets())
         {
+            if (asset is VisualTreeAsset vta && vta.name == UpgradeForgeBehavior.ForgeScreenLayoutName)
+            {
+                _forgeScreenVisualTree = vta;
+                continue;
+            }
+            if (asset is PanelSettings ps && ps.name == UpgradeForgeBehavior.ForgeScreenPanelSettingsName)
+            {
+                _forgeScreenPanelSettingsTemplate = ps;
+                continue;
+            }
             if (asset is GameObject go &&
                 go.GetComponent<VoidCrewAsset>() is VoidCrewAsset vca &&
                 go.GetComponent<CarryableBaseAsset>() == null &&
