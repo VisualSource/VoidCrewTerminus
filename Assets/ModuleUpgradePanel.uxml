@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ui:UXML xmlns:ui="UnityEngine.UIElements" editor-extension-mode="False">
+    <Style src="project://database/Assets/UI/ModuleUpgradePanel.uss" />
+
+    <!--
+        Document order IS draw order. USS has no z-index, so every "on top of"
+        relationship below is expressed by being later in the file. Do not
+        reorder siblings without checking what that covers.
+
+        Empty containers marked BUILT IN CODE are populated by
+        ModuleUpgradePanel.cs - writing 184 meander bars and 66 grid lines out
+        by hand here would be unreadable.
+    -->
+    <ui:VisualElement name="panel" class="panel accent-white state-filling">
+
+        <!-- ============================================== meander, top ==== -->
+        <ui:VisualElement name="meander-top" class="meander meander--top">
+            <ui:VisualElement class="meander__rail" />
+            <!-- keys: BUILT IN CODE -->
+        </ui:VisualElement>
+
+        <!-- ==================================================== mark ====== -->
+        <!-- Caret over a bright numeral, flanked by five tier pips. -->
+        <ui:VisualElement class="mark">
+
+            <ui:VisualElement class="rnk__box">
+                <ui:VisualElement class="rnk__chev" />
+            </ui:VisualElement>
+
+            <ui:VisualElement class="rnk__row">
+                <ui:VisualElement name="pips-left" class="rnk__pips" />
+                <ui:Label name="level-text" text="1" class="rnk__num mark__num" />
+                <ui:VisualElement name="pips-right" class="rnk__pips" />
+            </ui:VisualElement>
+
+        </ui:VisualElement>
+
+        <!-- ==================================================== ring ====== -->
+        <ui:VisualElement class="stage-ring">
+
+            <!-- triangular grid disc, sits behind everything -->
+            <ui:VisualElement name="grid" class="grid" />
+
+            <!-- faked emissive bleed: concentric hairlines, no box-shadow -->
+            <ui:VisualElement class="halo halo--1" />
+            <ui:VisualElement class="halo halo--2" />
+
+            <ui:VisualElement class="ring">
+
+                <ui:VisualElement class="ring__track" />
+
+                <!-- two clipped half-discs, each rotated by the fill fraction -->
+                <ui:VisualElement class="ring__half ring__half--top">
+                    <ui:VisualElement name="fill-top" class="ring__fill ring__fill--top" />
+                </ui:VisualElement>
+                <ui:VisualElement class="ring__half ring__half--bot">
+                    <ui:VisualElement name="fill-bot" class="ring__fill ring__fill--bot" />
+                </ui:VisualElement>
+
+                <!-- punches the disc into an annulus; must follow the fills -->
+                <ui:VisualElement class="ring__hole" />
+
+                <ui:VisualElement name="ring-value" class="ring__value">
+                    <ui:Label name="cur-text" text="0" class="ring__cur" />
+                    <ui:VisualElement class="ring__rule" />
+                    <ui:Label name="tot-text" text="10" class="ring__tot" />
+                </ui:VisualElement>
+
+                <ui:Label name="max-text" text="MAX" class="ring__max" />
+
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <ui:VisualElement class="spacer" />
+
+        <!-- =========================================== meander, bottom ==== -->
+        <ui:VisualElement name="meander-bot" class="meander meander--bot">
+            <ui:VisualElement class="meander__rail" />
+            <!-- keys: BUILT IN CODE -->
+        </ui:VisualElement>
+
+    </ui:VisualElement>
+</ui:UXML>

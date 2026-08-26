@@ -1,0 +1,406 @@
+/* ============================================================================
+   VOID CREW - MODULE UPGRADE PANEL
+   Unity 2022.3.62f2 UI Toolkit. Ported from src/panel.css in the HTML mock.
+
+   Differences from the mock's CSS, all deliberate:
+     - No @font-face. Fonts are Font Assets via -unity-font-definition.
+     - No font-weight. USS has no numeric weights; weight is baked into the
+       Font Asset, so 800 and 600 are two separate assets.
+     - No box-sizing. UI Toolkit is always border-box.
+     - No border-style. USS borders are always solid.
+     - Text centring is -unity-text-align, not flex centring.
+
+   Two behaviours that differ from CSS and WILL bite if you forget:
+     - flex-direction defaults to COLUMN here, not row. Every row is explicit.
+     - flex-shrink defaults to 0 here, not 1. Fixed heights will overflow
+       rather than squash, so keep .spacer positive (it has ~36px of slack).
+   ========================================================================= */
+
+/* ---------------------------------------------------------------- tokens -- */
+.panel {
+    --ground: #05060A;
+
+    /* One literal per stop, per theme. USS has no color-mix() or alpha maths. */
+    --accent: #F7F1DC;
+    --accent-mid: #97927F;
+    --accent-dim: #2B2A25;
+    --accent-faint: #17171A;
+    --accent-fnt2: #0D0E12;
+    --accent-grid: #16161A;
+}
+
+.panel.accent-green {
+    --accent: #6FEFA6;
+    --accent-mid: #46916A;
+    --accent-dim: #16291F;
+    --accent-faint: #0D1613;
+    --accent-fnt2: #080D0C;
+    --accent-grid: #0E1A14;
+}
+
+/* Unpowered: emission off, everything collapses to dead metal grey. */
+.panel.state-unpowered {
+    --accent: #3A3E45;
+    --accent-mid: #23262B;
+    --accent-dim: #131519;
+    --accent-faint: #0A0B0E;
+    --accent-fnt2: #07080B;
+    --accent-grid: #0A0B0E;
+}
+
+/* ------------------------------------------------------------------ root -- */
+.panel {
+    width: 1152px;
+    height: 1536px;
+    background-color: var(--ground);
+    overflow: hidden;
+
+    flex-direction: column;
+    align-items: center;
+
+    -unity-font-definition: url("project://database/Assets/UI/Fonts/Oxanium-Bold SDF.asset");
+    color: var(--accent);
+}
+
+/* The default runtime theme puts margin on Label. Zero it so the layout
+   numbers below mean what they say. */
+.panel Label {
+    margin: 0;
+    padding: 0;
+    white-space: nowrap;
+    -unity-text-align: middle-center;
+}
+
+.spacer {
+    flex-grow: 1;
+}
+
+/* ============================================================ MEANDER ==== */
+.meander {
+    width: 1000px;
+    height: 36px;
+    flex-direction: row;
+    justify-content: center;
+    align-items: flex-start;
+}
+
+.meander--top {
+    margin-top: 40px;
+    scale: 1 -1;
+}
+
+.meander--bot {
+    margin-bottom: 40px;
+}
+
+.meander__rail {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 1000px;
+    height: 5px;
+    background-color: var(--accent-mid);
+}
+
+.key {
+    width: 36px;
+    height: 36px;
+    margin-left: 3px;
+    margin-right: 3px;
+}
+
+/* USS has no :nth-child, so alternation is a class applied in code. */
+.key--flip {
+    scale: -1 1;
+}
+
+.key__bar {
+    position: absolute;
+    background-color: var(--accent-mid);
+}
+
+.key__bar--a { left: 0;   top: 0;   width: 6px;  height: 30px; }
+.key__bar--b { left: 0;   top: 0;   width: 34px; height: 6px;  }
+.key__bar--c { left: 12px; top: 12px; width: 22px; height: 6px;  }
+.key__bar--d { left: 28px; top: 12px; width: 6px;  height: 18px; }
+
+/* =============================================================== MARK ==== */
+.mark {
+    margin-top: 48px;
+    width: 320px;
+    height: 300px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.mark__num {
+    color: var(--accent);
+}
+
+/* A square with only its top and left borders, rotated 45deg, is a chevron.
+   One element, no clipping, no sprite. */
+.rnk__box {
+    width: 230px;
+    height: 96px;
+    overflow: hidden;
+}
+
+.rnk__chev {
+    position: absolute;
+    left: 35px;
+    top: 36px;
+    width: 160px;
+    height: 160px;
+    background-color: rgba(0, 0, 0, 0);
+    border-top-width: 32px;
+    border-left-width: 32px;
+    border-right-width: 0;
+    border-bottom-width: 0;
+    border-color: var(--accent);
+    rotate: 45deg;
+}
+
+/* Without this gap the pip columns land exactly under the caret's arm tips
+   and the three parts fuse into one boxed glyph. */
+.rnk__row {
+    margin-top: 16px;
+    flex-direction: row;
+    align-items: center;
+}
+
+.rnk__pips {
+    flex-direction: column;
+    align-items: center;
+}
+
+.rnk__pip {
+    width: 24px;
+    height: 12px;
+    margin-top: 6px;
+    margin-bottom: 6px;
+    background-color: var(--accent-dim);
+}
+
+.rnk__pip.is-on {
+    background-color: var(--accent);
+}
+
+/* The explicit height is load-bearing. USS has no line-height, and a 175px
+   font sits in a ~200px line box; that leading is what wedges the caret away
+   from the numeral. Height + middle-center pins it. */
+.rnk__num {
+    font-size: 175px;
+    height: 132px;
+    margin-left: 24px;
+    margin-right: 24px;
+    letter-spacing: -4px;
+}
+
+/* Level-up flash. USS has no @keyframes, so a *looping* pulse would need a
+   scheduled class toggle in C#. This one-shot is pure transition.
+   Gated behind .anim, which C# adds one frame after the first render, so the
+   panel never animates itself in from empty when it first becomes visible. */
+.panel.anim .mark__num {
+    transition-property: color;
+    transition-duration: 520ms;
+    transition-timing-function: ease-out;
+}
+
+.panel.is-levelup .mark__num {
+    color: #FFFFFF;
+    transition-duration: 90ms;
+}
+
+/* =============================================================== RING ==== */
+.stage-ring {
+    margin-top: 50px;
+    width: 950px;
+    height: 950px;
+}
+
+.grid {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 950px;
+    height: 950px;
+    border-radius: 475px;
+    overflow: hidden;
+}
+
+.grid__group {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 950px;
+    height: 950px;
+}
+
+.grid__line {
+    position: absolute;
+    left: -270px;
+    width: 1490px;
+    height: 2px;
+    background-color: var(--accent-grid);
+}
+
+/* Faked emissive bleed. There is no box-shadow in 2022.3, so the glow is
+   concentric hairline borders at low alpha. */
+.halo {
+    position: absolute;
+    background-color: rgba(0, 0, 0, 0);
+}
+
+.halo--1 {
+    left: 28px;
+    top: 28px;
+    width: 894px;
+    height: 894px;
+    border-radius: 447px;
+    border-width: 2px;
+    border-color: var(--accent-faint);
+}
+
+.halo--2 {
+    left: 4px;
+    top: 4px;
+    width: 942px;
+    height: 942px;
+    border-radius: 471px;
+    border-width: 1px;
+    border-color: var(--accent-fnt2);
+}
+
+.ring {
+    position: absolute;
+    left: 50px;
+    top: 50px;
+    width: 850px;
+    height: 850px;
+}
+
+.ring__track {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 850px;
+    height: 850px;
+    border-radius: 425px;
+    border-width: 48px;
+    border-color: var(--accent-dim);
+    background-color: rgba(0, 0, 0, 0);
+}
+
+.ring__half {
+    position: absolute;
+    left: 0;
+    width: 850px;
+    height: 425px;
+    overflow: hidden;
+}
+
+.ring__half--top { top: 0; }
+.ring__half--bot { top: 425px; }
+
+.ring__fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 850px;
+    height: 425px;
+    background-color: var(--accent);
+}
+
+.panel.anim .ring__fill {
+    transition-property: rotate;
+    transition-duration: 320ms;
+    transition-timing-function: ease-out;
+}
+
+.ring__fill--top {
+    border-top-left-radius: 425px;
+    border-top-right-radius: 425px;
+    transform-origin: 50% 100%;
+    rotate: -180deg;
+}
+
+.ring__fill--bot {
+    border-bottom-left-radius: 425px;
+    border-bottom-right-radius: 425px;
+    transform-origin: 50% 0%;
+    rotate: -180deg;
+}
+
+/* At 100% the two half-discs meet tangentially at 9 and 3 o'clock and their
+   antialiased edges let the dim track show through as notches. Lighting the
+   track kills the artifact - cheaper than overlapping the halves, which just
+   moves the seam into the empty state. */
+.panel.is-full .ring__track {
+    border-color: var(--accent);
+}
+
+/* Opaque ground colour, drawn after the fills because document order is the
+   only layering mechanism there is. */
+.ring__hole {
+    position: absolute;
+    left: 48px;
+    top: 48px;
+    width: 754px;
+    height: 754px;
+    border-radius: 377px;
+    background-color: var(--ground);
+}
+
+.ring__value {
+    position: absolute;
+    left: 48px;
+    top: 48px;
+    width: 754px;
+    height: 754px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Same explicit-height trick as .rnk__num: a 210px font carries ~45px of dead
+   leading below the digits that no margin can reach. */
+.ring__cur {
+    font-size: 210px;
+    height: 158px;
+    color: var(--accent);
+    letter-spacing: -5px;
+    /* Verify on your build - remove if the importer rejects it. */
+    text-shadow: 0 0 24px var(--accent-faint);
+}
+
+.ring__rule {
+    width: 215px;
+    height: 5px;
+    margin-top: 30px;
+    margin-bottom: 20px;
+    background-color: var(--accent-mid);
+}
+
+.ring__tot {
+    font-size: 96px;
+    height: 74px;
+    color: var(--accent-mid);
+    letter-spacing: -2px;
+    -unity-font-definition: url("project://database/Assets/UI/Fonts/Oxanium-SemiBold SDF.asset");
+}
+
+.ring__max {
+    position: absolute;
+    left: 48px;
+    top: 48px;
+    width: 754px;
+    height: 754px;
+    display: none;
+    font-size: 168px;
+    letter-spacing: 9px;
+    color: var(--accent);
+}
+
+.panel.state-max .ring__value { display: none; }
+.panel.state-max .ring__max   { display: flex; }
