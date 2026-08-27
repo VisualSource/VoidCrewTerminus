@@ -1,4 +1,6 @@
+using System.Collections;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UIElements;
 using VoidCrewTerminus.UI;
 
@@ -79,6 +81,19 @@ public class ForgeScreenDisplay : MonoBehaviour
         _document.panelSettings = _panelSettings;
         _document.visualTreeAsset = visualTree;
 
+        // Unity auto-spawns a PanelEventHandler+PanelRaycaster for every runtime
+        // panel, texture-targeted or not, and that raycaster plugs straight into
+        // the shared EventSystem used by every other menu (fabricator included).
+        // This screen never forwards pointer events anywhere, so left enabled it
+        // just silently eats clicks meant for other UI. Vanilla's WorldSpaceUI
+        // disables its own panel's raycaster the same way, but does it as a single
+        // synchronous check right here — that's safe for them only because their
+        // terminal input comes through a separate manual 3D-raycast path, so a
+        // missed match is invisible. We have no fallback, and the handler isn't
+        // guaranteed to exist the same frame the UIDocument is added, so retry
+        // across a few frames instead of checking once.
+        StartCoroutine(DisableInputRaycaster());
+
         // Added after the UIDocument is fully configured — Unity runs Awake+
         // OnEnable synchronously for a component added to an already-active
         // GameObject, so ModuleUpgradePanel.OnEnable (which reads
@@ -98,6 +113,23 @@ public class ForgeScreenDisplay : MonoBehaviour
         _material = meshRenderer.material;
         _material.SetTexture("_EmissiveColorMap", _renderTexture);
         meshRenderer.material = _material;
+    }
+
+    private IEnumerator DisableInputRaycaster()
+    {
+        var panel = _document.rootVisualElement.panel;
+        for (int frame = 0; frame < 30; frame++)
+        {
+            foreach (var handler in FindObjectsOfType<PanelEventHandler>())
+            {
+                if (handler.panel != panel) continue;
+                var raycaster = handler.GetComponent<PanelRaycaster>();
+                if (raycaster != null) raycaster.enabled = false;
+                yield break;
+            }
+            yield return null;
+        }
+        BepinPlugin.Log.LogWarning("[Forge] Could not find this screen's PanelEventHandler after 30 frames — it may keep intercepting clicks meant for other UI.");
     }
 
     private void Refresh()

@@ -1,15 +1,15 @@
 ManifestFileVersion: 0
-CRC: 2268749264
+CRC: 335491949
 Hashes:
   AssetFileHash:
     serializedVersion: 2
-    Hash: f87c44343082ae216fe8681922da2a8f
+    Hash: 4ec97df41cc85cb9bcfb24c3a716c7e1
   TypeTreeHash:
     serializedVersion: 2
     Hash: 447cd252b3a33584b50d42e7e00adafa
   IncrementalBuildHash:
     serializedVersion: 2
-    Hash: f87c44343082ae216fe8681922da2a8f
+    Hash: 4ec97df41cc85cb9bcfb24c3a716c7e1
 HashAppended: 0
 ClassTypes:
 - Class: 1
@@ -90,7 +90,7 @@ Assets:
 - Assets/Mods/VoidCrewTerminus/Materials/ModuleDetails_Normal.png
 - Assets/Mods/VoidCrewTerminus/Modals/UpgradeModuleExteior.prefab
 - Assets/Mods/VoidCrewTerminus/Materials/Grid.png
-- Assets/Mods/VoidCrewTerminus/UI/UpgradeForgeAlloyTerminal.uxml
+- Assets/Mods/VoidCrewTerminus/UI/ForgeScreenLayout.uxml
 - Assets/Mods/VoidCrewTerminus/Materials/ModuleManchine.mat
 - Assets/Mods/VoidCrewTerminus/Modals/UpgradeModuleInterior.fbx
 - Assets/Mods/VoidCrewTerminus/Materials/AlloyScreenRenderTexture-Preview.renderTexture
@@ -108,7 +108,7 @@ Assets:
 - Assets/Mods/VoidCrewTerminus/Materials/ModuleSwitch.mat
 - Assets/Mods/VoidCrewTerminus/UI/alloyTerminal.uss
 - Assets/Mods/VoidCrewTerminus/Materials/ModuleExteriorBlinds_Mask.png
-- Assets/Mods/VoidCrewTerminus/UI/PanelSettings.asset
+- Assets/Mods/VoidCrewTerminus/UI/ForgeScreenPanelSettings.asset
 - Assets/Mods/VoidCrewTerminus/Materials/ModuleExterior_Mask.png
 - Assets/Mods/VoidCrewTerminus/Materials/UpgradeForgeInterior_Mask.png
 - Assets/Mods/VoidCrewTerminus/Materials/ModuleExterior_normal.png

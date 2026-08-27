@@ -184,7 +184,16 @@ public class AssetLoader
             foreach (var mat in rend.sharedMaterials)
             {
                 if (mat == null || mat.shader == null) continue;
-                mat.shader = Shader.Find(mat.shader.name);
+                var shader = Shader.Find(mat.shader.name);
+                if (shader == null) continue;
+
+                // Reassigning .shader resets renderQueue to the new shader's default
+                // (opaque range) even though it leaves _SurfaceType/_SrcBlend/_DstBlend
+                // untouched — HDRP sorts opaque-vs-transparent off renderQueue alone, so
+                // a transparent material (e.g. Glass) silently draws fully opaque here.
+                var queue = mat.renderQueue;
+                mat.shader = shader;
+                mat.renderQueue = queue;
             }
         }
     }
