@@ -81,17 +81,27 @@ public class ForgeScreenDisplay : MonoBehaviour
         _document.panelSettings = _panelSettings;
         _document.visualTreeAsset = visualTree;
 
-        // Unity auto-spawns a PanelEventHandler+PanelRaycaster for every runtime
-        // panel, texture-targeted or not, and that raycaster plugs straight into
-        // the shared EventSystem used by every other menu (fabricator included).
-        // This screen never forwards pointer events anywhere, so left enabled it
-        // just silently eats clicks meant for other UI. Vanilla's WorldSpaceUI
-        // disables its own panel's raycaster the same way, but does it as a single
-        // synchronous check right here — that's safe for them only because their
-        // terminal input comes through a separate manual 3D-raycast path, so a
-        // missed match is invisible. We have no fallback, and the handler isn't
-        // guaranteed to exist the same frame the UIDocument is added, so retry
-        // across a few frames instead of checking once.
+        // UIDocument's root VisualElement is focusable=true by default — so a
+        // freshly opened menu is immediately keyboard-navigable. This screen is a
+        // passive readout, never meant to take focus, but that default lets it
+        // grab focus anyway the moment it's created: PanelEventHandler.OnElementFocus
+        // calls EventSystem.SetSelectedGameObject on the panel's first FocusEvent,
+        // and EventSystem.currentSelectedGameObject is ONE piece of global state
+        // shared by every panel in the scene, UI Toolkit or uGUI — including other
+        // menus like the fabricator. Once our root claims it, nothing hands it
+        // back, so every other menu's isCurrentFocusedPanel reads false forever.
+        _document.rootVisualElement.focusable = false;
+
+        // Unity also auto-spawns a PanelEventHandler+PanelRaycaster for every
+        // runtime panel, texture-targeted or not, wired into that same shared
+        // EventSystem. This screen never forwards pointer events anywhere, so
+        // left enabled it's still a redundant hit-test target for other UI's
+        // clicks. Vanilla's WorldSpaceUI disables its own panel's raycaster the
+        // same way, but does it as a single synchronous check right here — safe
+        // for them only because their terminal input comes through a separate
+        // manual 3D-raycast path, so a missed match is invisible. We have no
+        // fallback, and the handler isn't guaranteed to exist the same frame the
+        // UIDocument is added, so retry across a few frames instead of checking once.
         StartCoroutine(DisableInputRaycaster());
 
         // Added after the UIDocument is fully configured — Unity runs Awake+
