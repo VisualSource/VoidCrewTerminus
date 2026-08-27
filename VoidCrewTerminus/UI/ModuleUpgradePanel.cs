@@ -1,8 +1,9 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
+using VoidCrewTerminus.Forge;
 
-namespace VoidCrewTerminus;
+namespace VoidCrewTerminus.UI;
 
 /// <summary>
 /// Drives the module upgrade panel. Ported from src/panel.ts in the HTML mock.
@@ -19,10 +20,10 @@ public sealed class ModuleUpgradePanel : MonoBehaviour
 {
     public enum PanelState { Filling, Max, Unpowered }
 
-    public const int MaxLevel = 5;
-
-    // Cost of level (i+1) -> (i+2). PLACEHOLDER - swap in the real curve.
-    static readonly int[] CostCurve = { 10, 25, 50, 85 };
+    // Real ceiling, not the placeholder 5 this file shipped with — the pip
+    // count (BuildPips) and level clamp both need to match ForgeMeterController's
+    // actual MaxLevel or a real L6 Forge would render as if capped at 5.
+    public const int MaxLevel = ForgeMeterController.MaxLevel;
 
     const int MeanderKeys = 23;
     const int GridLinesPerGroup = 22;
@@ -64,7 +65,9 @@ public sealed class ModuleUpgradePanel : MonoBehaviour
         BuildPips(root.Q<VisualElement>("pips-left"));
         BuildPips(root.Q<VisualElement>("pips-right"));
 
-        _total = CostForLevel(_level);
+        // ApplyState (called by whatever drives this panel with real data,
+        // e.g. ForgeScreenDisplay) overwrites these before anything is ever
+        // actually visible — this first Render() just needs to not crash.
         Render();
 
         // First paint lands on the final values; transitions come on a frame
@@ -125,39 +128,28 @@ public sealed class ModuleUpgradePanel : MonoBehaviour
 
     // ----------------------------------------------------------------- api --
 
-    public static int CostForLevel(int level)
+    // Sets level/current/total straight from an external source of truth
+    // (ForgeMeterController) and re-renders — replaces this panel's own
+    // Deposit/CostForLevel simulation, which computed its own (placeholder)
+    // progression instead of reflecting the real one. Leaves PanelState alone
+    // when unpowered, since a power cut isn't something meter/level data implies.
+    public void ApplyState(int level, float current, float total, bool maxed)
     {
-        int i = Mathf.Clamp(level, 1, MaxLevel) - 1;
-        return i < CostCurve.Length ? CostCurve[i] : CostCurve[CostCurve.Length - 1];
-    }
+        _level = Mathf.Clamp(level, 1, MaxLevel);
 
-    /// <summary>Add alloys, levelling up as many times as the deposit covers.</summary>
-    public void Deposit(int amount)
-    {
-        if (_state == PanelState.Unpowered) return;
-
-        _current += amount;
-        while (_current >= _total && _level < MaxLevel)
+        if (maxed)
         {
-            _current -= _total;
-            _level++;
-            _total = CostForLevel(_level);
-            FlashLevelUp();
-        }
-
-        if (_level >= MaxLevel)
-        {
-            _state = PanelState.Max;
+            _total = Mathf.Max(1, Mathf.RoundToInt(total));
             _current = _total;
+            if (_state != PanelState.Unpowered) _state = PanelState.Max;
+        }
+        else
+        {
+            _total = Mathf.Max(1, Mathf.RoundToInt(total));
+            _current = Mathf.Clamp(Mathf.RoundToInt(current), 0, _total);
+            if (_state != PanelState.Unpowered) _state = PanelState.Filling;
         }
 
-        Render();
-    }
-
-    public void SetProgress(int current, int total)
-    {
-        _total = Mathf.Max(1, total);
-        _current = Mathf.Clamp(current, 0, _total);
         Render();
     }
 
@@ -169,7 +161,10 @@ public sealed class ModuleUpgradePanel : MonoBehaviour
         Render();
     }
 
-    void FlashLevelUp()
+    // Public so a real level-up event (ForgeMeterController.LevelChanged) can
+    // trigger it directly — this panel no longer detects level-ups itself
+    // (that lived in the removed Deposit loop).
+    public void FlashLevelUp()
     {
         _panel.AddToClassList("is-levelup");
         _panel.schedule.Execute(() => _panel.RemoveFromClassList("is-levelup")).StartingIn(110);
