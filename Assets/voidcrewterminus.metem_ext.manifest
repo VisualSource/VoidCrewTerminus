@@ -1,15 +1,15 @@
 ManifestFileVersion: 0
-CRC: 2614385468
+CRC: 2268749264
 Hashes:
   AssetFileHash:
     serializedVersion: 2
-    Hash: a7ab08485c52c768fc8d493ddb18f0d5
+    Hash: f87c44343082ae216fe8681922da2a8f
   TypeTreeHash:
     serializedVersion: 2
-    Hash: b0670209ab2cddf80312e4ad03c09f49
+    Hash: 447cd252b3a33584b50d42e7e00adafa
   IncrementalBuildHash:
     serializedVersion: 2
-    Hash: a7ab08485c52c768fc8d493ddb18f0d5
+    Hash: f87c44343082ae216fe8681922da2a8f
 HashAppended: 0
 ClassTypes:
 - Class: 1
@@ -30,8 +30,20 @@ ClassTypes:
   Script: {instanceID: 0}
 - Class: 65
   Script: {instanceID: 0}
+- Class: 84
+  Script: {instanceID: 0}
 - Class: 108
   Script: {instanceID: 0}
+- Class: 114
+  Script: {fileID: 11995, guid: 0000000000000000e000000000000000, type: 0}
+- Class: 114
+  Script: {fileID: 11998, guid: 0000000000000000e000000000000000, type: 0}
+- Class: 114
+  Script: {fileID: 19202, guid: 0000000000000000e000000000000000, type: 0}
+- Class: 114
+  Script: {fileID: 19101, guid: 0000000000000000e000000000000000, type: 0}
+- Class: 114
+  Script: {fileID: 19102, guid: 0000000000000000e000000000000000, type: 0}
 - Class: 114
   Script: {fileID: 11500000, guid: 7a68c43fe1f2a47cfa234b5eeaa98012, type: 3}
 - Class: 114
@@ -40,6 +52,8 @@ ClassTypes:
   Script: {fileID: 11500000, guid: 2c1366d1ab7cf3c40a4c8294e15a07ce, type: 3}
 - Class: 115
   Script: {instanceID: 0}
+- Class: 128
+  Script: {instanceID: 0}
 - Class: 135
   Script: {instanceID: 0}
 SerializeReferenceClassIdentifiers:
@@ -47,6 +61,28 @@ SerializeReferenceClassIdentifiers:
   ClassName: UnityEngine.Rendering.HighDefinition.BoolScalableSettingValue
 - AssemblyName: Unity.RenderPipelines.HighDefinition.Runtime
   ClassName: UnityEngine.Rendering.HighDefinition.IntScalableSettingValue
+- AssemblyName: UnityEngine.UIElementsModule
+  ClassName: UnityEngine.UIElements.DynamicAtlasSettings
+- AssemblyName: UnityEngine.UIElementsModule
+  ClassName: UnityEngine.UIElements.StyleComplexSelector
+- AssemblyName: UnityEngine.UIElementsModule
+  ClassName: UnityEngine.UIElements.StyleProperty
+- AssemblyName: UnityEngine.UIElementsModule
+  ClassName: UnityEngine.UIElements.StyleRule
+- AssemblyName: UnityEngine.UIElementsModule
+  ClassName: UnityEngine.UIElements.StyleSelector
+- AssemblyName: UnityEngine.UIElementsModule
+  ClassName: UnityEngine.UIElements.StyleSelectorPart
+- AssemblyName: UnityEngine.UIElementsModule
+  ClassName: UnityEngine.UIElements.StyleSheet/ImportStruct
+- AssemblyName: UnityEngine.UIElementsModule
+  ClassName: UnityEngine.UIElements.StyleSheets.Dimension
+- AssemblyName: UnityEngine.UIElementsModule
+  ClassName: UnityEngine.UIElements.StyleSheets.ScalableImage
+- AssemblyName: UnityEngine.UIElementsModule
+  ClassName: UnityEngine.UIElements.StyleValueHandle
+- AssemblyName: UnityEngine.UIElementsModule
+  ClassName: UnityEngine.UIElements.VisualElementAsset
 Assets:
 - Assets/Mods/VoidCrewTerminus/UpgradeForgeBuildBox.prefab
 - Assets/Mods/VoidCrewTerminus/Materials/ModuleScreen.mat
@@ -54,9 +90,12 @@ Assets:
 - Assets/Mods/VoidCrewTerminus/Materials/ModuleDetails_Normal.png
 - Assets/Mods/VoidCrewTerminus/Modals/UpgradeModuleExteior.prefab
 - Assets/Mods/VoidCrewTerminus/Materials/Grid.png
+- Assets/Mods/VoidCrewTerminus/UI/UpgradeForgeAlloyTerminal.uxml
 - Assets/Mods/VoidCrewTerminus/Materials/ModuleManchine.mat
 - Assets/Mods/VoidCrewTerminus/Modals/UpgradeModuleInterior.fbx
+- Assets/Mods/VoidCrewTerminus/Materials/AlloyScreenRenderTexture-Preview.renderTexture
 - Assets/Mods/VoidCrewTerminus/Materials/ModuleSwitch_Normal.png
+- Assets/Mods/VoidCrewTerminus/UI/Oxanium-Bold.ttf
 - Assets/Mods/VoidCrewTerminus/Materials/ModuleDetails.mat
 - Assets/Mods/VoidCrewTerminus/Materials/UpgradeForgeMachine_Normal.png
 - Assets/Mods/VoidCrewTerminus/Materials/ForgeExterior.mat
@@ -67,7 +106,9 @@ Assets:
 - Assets/Mods/VoidCrewTerminus/Materials/ModuleExteriorBlinds_Normal.png
 - Assets/Mods/VoidCrewTerminus/Materials/ModuleTerminal_Mask.png
 - Assets/Mods/VoidCrewTerminus/Materials/ModuleSwitch.mat
+- Assets/Mods/VoidCrewTerminus/UI/alloyTerminal.uss
 - Assets/Mods/VoidCrewTerminus/Materials/ModuleExteriorBlinds_Mask.png
+- Assets/Mods/VoidCrewTerminus/UI/PanelSettings.asset
 - Assets/Mods/VoidCrewTerminus/Materials/ModuleExterior_Mask.png
 - Assets/Mods/VoidCrewTerminus/Materials/UpgradeForgeInterior_Mask.png
 - Assets/Mods/VoidCrewTerminus/Materials/ModuleExterior_normal.png
