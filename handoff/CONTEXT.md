@@ -67,9 +67,15 @@ _Avoid_: "Lech" (used informally in TODO seed — Leech is the canonical English
 
 **Module-Biter** (B-type):
 The default Leech variant. Anchors near a module, applies a non-stacking effectiveness debuff while attached, deals stacking module HP damage on a tick. Self-destructs if its targeted module is destroyed.
+Destroying the target module also destroys its Upgrade Forge overlay — level, perk slots and burdens are lost for the run, because `ForgeStateStore` snapshots only the deliberate deconstruct/reconstruct flow. This is the Leech encounter's primary stake: see [[Hull Floor]] for why ship death is not.
 
 **Hull-Biter** (A-type):
-The rarer Leech variant. Anchors on bare hull, deals damage to the hull section it's on via a visible "chomp" bite cadence. Vanilla breach mechanics handle consequences.
+The rarer Leech variant. Anchors on bare hull and chews the ship's hull HP on a visible "chomp" bite cadence at a ranged interval. Damage routes through the ship's normal damage path, so resistance applies and breaches accrue by vanilla's own accounting — the Leech never promotes a breach itself. Cannot push the ship below the [[Hull Floor]].
+_Avoid_: "hull section" — Void Crew has no per-section hull HP, only one ship-wide pool. Promoting a breach directly is forbidden, not merely unused: repairing one restores 10-20% of max HP, so a Leech that created breaches would be healing the ship.
+
+**Hull Floor**:
+The percentage of ship max HP below which [[Hull-Biter]] damage cannot push the ship. Leeches strip the crew's survival margin but never land the killing blow; ordinary combat damage still kills freely. Config-driven.
+_Note_: the floor is why [[Module-Biter]] module destruction carries the encounter's real stake — with ship death off the table, losing an upgraded module is the lasting cost of ignoring a Leech.
 
 **Containment Failure**:
 The event during EVA removal where the player misses a containment input prompt and the Leech escapes to a new hull location. Capped at one per Leech.
