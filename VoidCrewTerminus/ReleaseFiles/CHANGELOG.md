@@ -1,3 +1,9 @@
+## 0.0.18
+- add forge screen ui (level/alloy readout renders on the AlloyTerminalScreen mesh)
+- hook up screen power state
+- fix screen render texture not displaying (bundle asset naming)
+- fix glass/transparent materials rendering opaque after shader relink
+- fix placing the upgrade forge breaking clicks in other ui menus (fabricator, etc.)
 ## 0.0.17
 - fix leftover coliders after deconstruction of upgrade forge
 - fix placement of buildbox in upgrade forge
