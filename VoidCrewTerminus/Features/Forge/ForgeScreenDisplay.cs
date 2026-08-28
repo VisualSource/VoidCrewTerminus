@@ -1,4 +1,6 @@
 using System.Collections;
+using CG.Ship.Modules;
+using Gameplay.Power;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UIElements;
@@ -18,7 +20,8 @@ namespace VoidCrewTerminus.Forge;
 // UIDocument, material wiring — and hands the actual VisualElement tree to
 // ModuleUpgradePanel (UI/ModuleUpgradePanel.cs), which builds the decorative
 // elements the UXML can't (meander bars, grid lines, pips) and drives the
-// level/ring/pip visuals from ApplyState.
+// level/ring/pip visuals from ApplyState, plus the powered/unpowered look from
+// SetPowered.
 public class ForgeScreenDisplay : MonoBehaviour
 {
     [SerializeField] private int _panelWidth = 1152;
@@ -30,19 +33,62 @@ public class ForgeScreenDisplay : MonoBehaviour
     private Material _material;
     private ModuleUpgradePanel _panel;
 
+    // The Forge's own CellModule.PowerDrain. Resolved from a parent because this
+    // component lives on the screen mesh, several FBX nodes below the module root.
+    private PowerDrain _powerDrain;
+
     private void Awake()
     {
         Build();
         ForgeMeterController.MeterChanged += Refresh;
         ForgeMeterController.LevelChanged += OnLevelChanged;
         Refresh();
+        // After Refresh, so SetPowered picks the Filling-vs-Max variant off a level
+        // that already reflects the real meter rather than the field's initial 1.
+        WirePower();
     }
 
     private void OnDestroy()
     {
         ForgeMeterController.MeterChanged -= Refresh;
         ForgeMeterController.LevelChanged -= OnLevelChanged;
+        if (_powerDrain != null && _powerDrain.IsOn != null)
+            _powerDrain.IsOn.OnChange -= OnPowerChanged;
         DestroyGeneratedAssets();
+    }
+
+    // PowerDrain.IsOn is the single source that covers both ways the Forge can stop
+    // running: a manually switched-off module, and the whole ship going dark —
+    // PowerPropagator pushes an outage down through ParentConnectionStateChanged,
+    // which lands on IsOn. It's also the same drain ForgePowerLights hands
+    // PoweredLightSource for the interior light, so the screen and the light can
+    // never disagree about whether this module has power.
+    private void WirePower()
+    {
+        if (_panel == null) return;
+
+        _powerDrain = GetComponentInParent<CellModule>()?.PowerDrain;
+        if (_powerDrain == null || _powerDrain.IsOn == null)
+        {
+            BepinPlugin.Log.LogDebug(
+                $"[Forge] {name}: no CellModule.PowerDrain in parents — the screen will stay lit through a blackout.");
+            return;
+        }
+
+        _powerDrain.IsOn.OnChange += OnPowerChanged;
+
+        // Seeded from the live value rather than assumed on: a freshly built module
+        // sits at IsOn=false until BuildSocket connects it to the power system and
+        // it finishes booting, and that turn-on arrives as an OnChange we're already
+        // subscribed to. Reading .Value (not assigning it) — the setter is
+        // RequestChange, so writing here would try to switch the module on.
+        _panel.SetPowered(_powerDrain.IsOn.Value);
+    }
+
+    private void OnPowerChanged(bool isOn)
+    {
+        BepinPlugin.Log.LogDebug($"[Forge] Screen power -> {(isOn ? "on" : "off")}");
+        _panel?.SetPowered(isOn);
     }
 
     private void OnLevelChanged(int _)

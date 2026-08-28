@@ -37,7 +37,11 @@ public sealed class ModuleUpgradePanel : MonoBehaviour
     Label _levelText;
     Label _curText;
     Label _totText;
-    readonly List<VisualElement> _pips = new List<VisualElement>();
+    // One list per pip column. The two ladders mirror the same level (the HTML
+    // mock walks each .rnk__pips separately), so a single flat list spanning both
+    // lights the left column and leaves the right one permanently dark: with
+    // MaxLevel=6 the right column's indices are 6..11 and _level never reaches 7.
+    readonly List<List<VisualElement>> _pipColumns = new List<List<VisualElement>>();
 
     int _level = 1;
     int _current;
@@ -59,11 +63,35 @@ public sealed class ModuleUpgradePanel : MonoBehaviour
         _curText = root.Q<Label>("cur-text");
         _totText = root.Q<Label>("tot-text");
 
+        // Every other lookup here is optional; this one is load-bearing. Render()
+        // drives all three state classes off it, so an unguarded miss throws out of
+        // OnEnable, the .anim schedule below never registers, and every later
+        // ApplyState throws as well — leaving the screen drawing the layout's
+        // authored placeholder values forever with nothing in the log to say why.
+        if (_panel == null)
+        {
+            BepinPlugin.Log.LogWarning(
+                "[Forge] ModuleUpgradePanel: no element named \"panel\" in the layout — the screen " +
+                "will show its authored defaults and never update. Re-export the bundle.");
+            return;
+        }
+
+        // OnEnable runs again on every re-enable, and UIDocument recreates its tree
+        // on some of those but keeps it on others. These builders therefore adopt
+        // whatever is already present instead of appending a second copy of
+        // everything — stacking a second pip ladder would strand the live one at
+        // indices the level counter can never reach.
+        _pipColumns.Clear();
         BuildMeander(root.Q<VisualElement>("meander-top"));
         BuildMeander(root.Q<VisualElement>("meander-bot"));
         BuildGrid(root.Q<VisualElement>("grid"));
         BuildPips(root.Q<VisualElement>("pips-left"));
         BuildPips(root.Q<VisualElement>("pips-right"));
+
+        BepinPlugin.Log.LogDebug(
+            $"[Forge] ModuleUpgradePanel bound: pipColumns={_pipColumns.Count}, " +
+            $"fills={_fillTop != null && _fillBot != null}, " +
+            $"labels={_levelText != null && _curText != null && _totText != null}");
 
         // ApplyState (called by whatever drives this panel with real data,
         // e.g. ForgeScreenDisplay) overwrites these before anything is ever
@@ -87,6 +115,7 @@ public sealed class ModuleUpgradePanel : MonoBehaviour
     static void BuildMeander(VisualElement host)
     {
         if (host == null) return;
+        if (host.Q(className: "key") != null) return;
         for (int i = 0; i < MeanderKeys; i++)
         {
             var key = i % 2 == 1 ? Div("key", "key--flip") : Div("key");
@@ -101,6 +130,7 @@ public sealed class ModuleUpgradePanel : MonoBehaviour
     static void BuildGrid(VisualElement host)
     {
         if (host == null) return;
+        if (host.Q(className: "grid__group") != null) return;
         foreach (var angle in GridAngles)
         {
             var group = Div("grid__group");
@@ -118,12 +148,16 @@ public sealed class ModuleUpgradePanel : MonoBehaviour
     void BuildPips(VisualElement host)
     {
         if (host == null) return;
-        for (int i = 0; i < MaxLevel; i++)
+
+        var column = new List<VisualElement>(MaxLevel);
+        host.Query(className: "rnk__pip").ForEach(column.Add);
+        for (int i = column.Count; i < MaxLevel; i++)
         {
             var pip = Div("rnk__pip");
             host.Add(pip);
-            _pips.Add(pip);
+            column.Add(pip);
         }
+        _pipColumns.Add(column);
     }
 
     // ----------------------------------------------------------------- api --
@@ -166,6 +200,7 @@ public sealed class ModuleUpgradePanel : MonoBehaviour
     // (that lived in the removed Deposit loop).
     public void FlashLevelUp()
     {
+        if (_panel == null) return;
         _panel.AddToClassList("is-levelup");
         _panel.schedule.Execute(() => _panel.RemoveFromClassList("is-levelup")).StartingIn(110);
     }
@@ -174,6 +209,8 @@ public sealed class ModuleUpgradePanel : MonoBehaviour
 
     public void Render()
     {
+        if (_panel == null) return;
+
         bool atMax = _state == PanelState.Max || _level >= MaxLevel;
 
         _panel.EnableInClassList("state-filling", _state == PanelState.Filling);
@@ -197,9 +234,12 @@ public sealed class ModuleUpgradePanel : MonoBehaviour
 
         _panel.EnableInClassList("is-full", p >= 0.999f);
 
-        for (int i = 0; i < _pips.Count; i++)
+        // Every column restates the same level — see _pipColumns.
+        for (int c = 0; c < _pipColumns.Count; c++)
         {
-            _pips[i].EnableInClassList("is-on", i < _level);
+            var column = _pipColumns[c];
+            for (int i = 0; i < column.Count; i++)
+                column[i].EnableInClassList("is-on", i < _level);
         }
     }
 
