@@ -10,6 +10,7 @@ using CG.Ship.Object;
 using Gameplay.SpacePlatforms;
 using HarmonyLib;
 using ResourceAssets;
+using UnityEngine;
 using VoidCrewTerminus.Forge;
 using VoidCrewTerminus.Utils;
 
@@ -123,7 +124,36 @@ internal static class ForgeAttachHelper
         // Forge's light had no idea the ship's power system existed.
         ForgePowerLights.Attach(module);
 
-        RegisterShipPlatformCollision(module);
+        bool relayered = RelayerHullColliders(module);
+        RegisterShipPlatformCollision(module, forceRebuild: relayered);
+    }
+
+    // The bundle prefab's solid colliders are all on layer 0 (Default), which the
+    // game's collision matrix doesn't pair with carryables — dropped items fall
+    // through the Forge. Vanilla module hull geometry is on "MovingPlatform".
+    // Forced by name at runtime for the same reason BuildAnchorClickRegion forces
+    // "InteractiveObjects": the SDK's layer table doesn't match the game's. The
+    // interaction colliders are already triggers by this point and are skipped.
+    private static bool RelayerHullColliders(CellModule module)
+    {
+        int mp = LayerMask.NameToLayer("MovingPlatform");
+        if (mp < 0)
+        {
+            BepinPlugin.Log.LogWarning(
+                "[Forge] Layer 'MovingPlatform' not found — hull colliders left as authored; dropped items may fall through.");
+            return false;
+        }
+
+        int changed = 0;
+        foreach (var col in module.GetComponentsInChildren<Collider>(includeInactive: true))
+        {
+            if (col.isTrigger || col.gameObject.layer == mp) continue;
+            col.gameObject.layer = mp;
+            changed++;
+        }
+        if (changed > 0)
+            BepinPlugin.Log.LogDebug($"[Forge] Re-layered {changed} hull collider(s) on {module.name} to MovingPlatform.");
+        return changed > 0;
     }
 
     // A module riding the ship only gets solid-geometry collision through
@@ -132,8 +162,7 @@ internal static class ForgeAttachHelper
     // -> BuildSocket.SetModule). Since a bundle-loaded module has repeatedly turned
     // out not to get things vanilla modules get for free (see GraftModuleComponents),
     // this registers defensively rather than trusting that chain blind.
-    // AddColliderObject is idempotent, so calling it regardless is safe.
-    private static void RegisterShipPlatformCollision(CellModule module)
+    private static void RegisterShipPlatformCollision(CellModule module, bool forceRebuild = false)
     {
         var platform = module.GetComponentInParent<MovingSpacePlatform>();
         if (platform == null)
@@ -145,21 +174,23 @@ internal static class ForgeAttachHelper
         bool alreadyRegistered = _colliderObjectsField?.GetValue(platform) is IDictionary dict
             && dict.Contains(module.gameObject);
 
-        // AddColliderObject is NOT idempotent despite the doc comment above: it
-        // unconditionally clones fresh shadow colliders into the simulation scene
-        // before trying colliderObjects.TryAdd(obj, list), and silently drops the
-        // clones it just made if the key's already present — they stay parented
-        // in the scene but nothing is tracking them for RemoveColliderObject to
-        // destroy on deconstruct. Calling this when vanilla's own path already
-        // registered the module leaks an orphaned, permanently-uncollectable set
-        // of colliders at the module's position every time. Must only call when
-        // truly missing.
+        // AddColliderObject is NOT idempotent: it clones fresh shadow colliders into
+        // the sim scene before colliderObjects.TryAdd(obj, list), and silently drops
+        // the clones it just made if the key's already present — they stay in the
+        // scene untracked, leaking an uncollectable set every call. So Add only when
+        // missing; to relayer, Remove first (which destroys the tracked clones) then
+        // Add so the rebuilt shadows carry the new layer.
         if (!alreadyRegistered)
             platform.AddColliderObject(module.gameObject);
+        else if (forceRebuild)
+        {
+            platform.RemoveColliderObject(module.gameObject);
+            platform.AddColliderObject(module.gameObject);
+        }
         BepinPlugin.Log.LogDebug(
             $"[Forge] Ship-platform collider registration for {module.name}: " +
             (alreadyRegistered
-                ? "was already present (vanilla's own path ran)."
+                ? (forceRebuild ? "rebuilt shadow colliders on the re-layered hull." : "was already present (vanilla's own path ran).")
                 : "was MISSING — registered it now."));
     }
 
