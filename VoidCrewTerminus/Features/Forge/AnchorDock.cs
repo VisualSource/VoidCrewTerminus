@@ -300,10 +300,44 @@ internal sealed class AnchorDock
         // velocity to a still-kinematic body is silently dropped.
         SetDockedKinematic(co, go, false);
 
+        // If the item is no longer in the platform's simulation, it was dropped
+        // from it WHILE docked — not by us. CarryableObject.UpdateAtmosphereData
+        // runs every AttributeCheckInterval (0.15s) for an owned carryable and
+        // calls SetPlatform(null) -> MovingSpacePlatform.RemoveSimulationObject
+        // whenever its RoomPoint fails to resolve a room, which it periodically
+        // does against the frozen proxy. RemoveSimulationObject hands the frozen
+        // proxy's ~0 velocity back to the main body in WORLD space and detaches
+        // it, so the moving ship flies out from under the box — the "BuildBox
+        // floats away" bug. ReleaseFromCarrier re-drives vanilla's own
+        // return-to-world path (resolve room -> SetPlatform(ship) ->
+        // TryRegisterCarryable -> AddSimulationObject), which re-seeds the proxy
+        // from the main body and leaves the box stationary RELATIVE TO THE SHIP.
+        // Carrier is already null here, so this is just the re-attach half.
+        // Skipped when still simulated: that's the healthy hand-back and vanilla
+        // is still managing it — calling ReleaseFromCarrier there would un-puppet
+        // the main body for a frame against a live proxy.
+        bool reattached = false;
+        if (co != null && !co.IsBeingSimulated)
+        {
+            try
+            {
+                co.ReleaseFromCarrier();
+                reattached = true;
+            }
+            catch (System.Exception e)
+            {
+                BepinPlugin.Log.LogWarning(
+                    $"[Forge] undock {go.name}: re-attach via ReleaseFromCarrier failed ({e.GetType().Name}).");
+            }
+        }
+
         if (co != null)
         {
             try
             {
+                // Runs after any re-attach above: if that re-simulated the item
+                // this routes to the proxy in platform-local space (0 = still
+                // relative to the ship); otherwise it zeroes the main body.
                 co.Velocity = Vector3.zero;
                 co.AngularVelocity = Vector3.zero;
             }
@@ -322,8 +356,9 @@ internal sealed class AnchorDock
 
         // The float-away isn't reliably reproducible, so it has to be diagnosed from
         // the one run where it happens. A non-zero `was=` on a simulated item is the
-        // signature of the original bug.
+        // signature of the original bug; `reattached=True` means the item had been
+        // dropped from the platform sim while docked and was put back.
         BepinPlugin.Log.LogDebug(
-            $"[Forge] undock {go.name}: simulated={simulated}, was={before}, zeroed both bodies.");
+            $"[Forge] undock {go.name}: simulated={simulated}, was={before}, reattached={reattached}, zeroed both bodies.");
     }
 }
