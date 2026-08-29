@@ -76,6 +76,20 @@ The key assemblies are `Assembly-CSharp` (main game logic, 3 312 files), `VoidCr
 feedback-logging
 Prefer BepInEx `LogDebug` over `LogInfo` for routine diagnostics in VoidCrewTerminus; reserve `LogInfo` for player-visible or genuinely important events.
 
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs live in GitHub Issues (`VisualSource/VoidCrewTerminus`), managed with the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default canonical labels: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
 ## References
 
 - [Void Crew Modding Docs](https://hutlihutgames.github.io/void_crew_modding_documentation/)
