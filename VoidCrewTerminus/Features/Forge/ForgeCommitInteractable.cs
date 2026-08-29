@@ -44,7 +44,7 @@ public class ForgeCommitInteractable : ClickerInteractable
     public Transform OutlineTarget;
 
     // The lever's cosmetic moving part (UpgradeForgeBehavior.CommitLevelName —
-    // "Level" — buried in the FBX hierarchy same as OutlineTarget). Rotated on X
+    // "Level" — buried in the FBX hierarchy same as OutlineTarget). Rotated on -X
     // around its own pivot, driven by hold progress. Optional — Commit still works
     // with no lever animation if absent.
     public Transform VisualLevel;
@@ -91,7 +91,7 @@ public class ForgeCommitInteractable : ClickerInteractable
             _angle = _gate.IsHolding
                 ? MaxAngle * _gate.Progress
                 : Mathf.MoveTowards(_angle, 0f, SpringBackDegPerSec * Time.deltaTime);
-            VisualLevel.localRotation = Quaternion.Euler(_angle, 0f, 0f);
+            VisualLevel.localRotation = Quaternion.Euler(-_angle, 0f, 0f);
         }
 
         if (fired) OnCommit();
