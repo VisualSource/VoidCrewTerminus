@@ -1,3 +1,9 @@
+## 0.0.19
+- fix buildbox drifting out of hand / away from the moving ship after taking it from the forge
+- fix buildbox and carryables falling through the upgrade forge (collision layer)
+- fix crash when forging a power generator (int stat modifier)
+- fix commit log claiming a burden was applied to a module that can't carry it
+- fix commit lever animating the wrong direction
 ## 0.0.18
 - add forge screen ui (level/alloy readout renders on the AlloyTerminalScreen mesh)
 - hook up screen power state
