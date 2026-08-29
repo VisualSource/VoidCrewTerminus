@@ -264,7 +264,11 @@ public class ForgeModuleState : IModifierSource
                 TagsToAdd = new[] { Utils.CsTagRegistry.ForgeUpgraded },
             };
             foreach (var (stat, perkAmount) in perk.Payload)
+            {
+                // Skip int-backed stats — see AddGroup.
+                if (StatType.IsInt(stat.Id)) continue;
                 mods.Add(new StatMod(new FloatModifier(perkAmount, ModifierType.AdditiveMultiplier, this), stat.Id, tagCfg));
+            }
         }
 
         // TagsToAdd only lands in a collection's runtime tags when a carrying mod
@@ -305,6 +309,12 @@ public class ForgeModuleState : IModifierSource
         };
 
         foreach (var statType in statTypes)
+        {
+            // A FloatModifier on an int-backed stat throws in ModifiableInt.AddModifier
+            // when RegisterChildCollection later replays it onto a child collection
+            // (e.g. PowerProvider.PowerProvided). Truncates to 0 anyway.
+            if (StatType.IsInt(statType.Id)) continue;
             mods.Add(new StatMod(new FloatModifier(amount, ModifierType.AdditiveMultiplier, this), statType.Id, tagCfg));
+        }
     }
 }
