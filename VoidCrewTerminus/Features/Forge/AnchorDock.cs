@@ -300,14 +300,14 @@ internal sealed class AnchorDock
         // velocity to a still-kinematic body is silently dropped.
         SetDockedKinematic(co, go, false);
 
-        // "BuildBox floats away": while docked, CarryableObject.UpdateAtmosphereData
-        // (every 0.15s, owned items) periodically fails to resolve a room off the
-        // frozen proxy and calls SetPlatform(null) -> RemoveSimulationObject, which
-        // detaches the box with ~0 WORLD velocity so the moving ship leaves it
-        // behind. If it's no longer simulated, re-drive vanilla's return-to-world
-        // path; skip it when still simulated (healthy hand-back, vanilla owns it).
+        // "BuildBox floats away": UpdateAtmosphereData (every 0.15s, owned items)
+        // periodically drops a docked item from the platform sim, leaving it with
+        // ~0 WORLD velocity so the moving ship leaves it behind. Re-drive vanilla's
+        // return-to-world path — but only for a genuinely loose item. When a player
+        // grabbed it back out (Reconcile), Carrier is set and ReleaseFromCarrier
+        // would null it and drop the box; their eventual normal drop re-registers it.
         bool reattached = false;
-        if (co != null && !co.IsBeingSimulated)
+        if (co != null && co.Carrier == null && !co.IsBeingSimulated)
         {
             try
             {
