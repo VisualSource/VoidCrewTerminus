@@ -279,16 +279,23 @@ internal sealed class AnchorDock
         if (sim != null) sim.isKinematic = kinematic;
     }
 
-    // The per-frame Pin accumulates an implicit velocity estimate; without zeroing it
-    // the item inherits roughly the ship's velocity the instant kinematic goes false
-    // and drifts through the ship — the "BuildBox floats away" bug. Writing straight
-    // to MainRigidbody is the WRONG body while the item is simulated (velocity
-    // survives on SimulationRigidbody, which is why the bug only reproduced
-    // intermittently); the Velocity properties route to whichever body is live.
+    // "BuildBox floats away": a docked item is frozen kinematic; on undock it has to
+    // return to the regime it belongs in without inheriting stale velocity.
     private static void ReleaseRigidbody(GameObject go)
     {
         if (go == null) return;
         var co = go.GetComponent<CarryableObject>();
+
+        // A player grabbed it back out (Reconcile): Carrier.SetPayload already put
+        // it in the carried regime — kinematic, collisions ignored vs the carrier,
+        // parented. Un-kinematic it here and it becomes a live body that bumps into
+        // modules and drifts under the moving ship; the forge must not touch it.
+        // Vanilla re-homes it when the player releases.
+        if (co != null && co.Carrier != null)
+        {
+            BepinPlugin.Log.LogDebug($"[Forge] undock {go.name}: carried — left to vanilla.");
+            return;
+        }
 
         bool simulated = co != null && co.IsBeingSimulated;
         Vector3 before = Vector3.zero;
@@ -300,14 +307,11 @@ internal sealed class AnchorDock
         // velocity to a still-kinematic body is silently dropped.
         SetDockedKinematic(co, go, false);
 
-        // "BuildBox floats away": UpdateAtmosphereData (every 0.15s, owned items)
-        // periodically drops a docked item from the platform sim, leaving it with
-        // ~0 WORLD velocity so the moving ship leaves it behind. Re-drive vanilla's
-        // return-to-world path — but only for a genuinely loose item. When a player
-        // grabbed it back out (Reconcile), Carrier is set and ReleaseFromCarrier
-        // would null it and drop the box; their eventual normal drop re-registers it.
+        // UpdateAtmosphereData (every 0.15s, owned items) periodically drops a
+        // docked item from the platform sim, leaving it with ~0 WORLD velocity so
+        // the moving ship leaves it behind. Re-drive vanilla's return-to-world path.
         bool reattached = false;
-        if (co != null && co.Carrier == null && !co.IsBeingSimulated)
+        if (co != null && !co.IsBeingSimulated)
         {
             try
             {
