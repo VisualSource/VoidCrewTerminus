@@ -1,3 +1,5 @@
+## 0.0.20
+- add chat fix
 ## 0.0.19
 - fix buildbox drifting out of hand / away from the moving ship after taking it from the forge
 - fix buildbox and carryables falling through the upgrade forge (collision layer)
