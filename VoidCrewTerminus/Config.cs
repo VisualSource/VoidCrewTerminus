@@ -154,9 +154,16 @@ internal static class TerminusConfig
     // Opt-out: unbound must read true, or defaulting off before Init() would
     // reintroduce the vanilla bug this works around (chat eats keyboard input).
     private const bool DefaultEnableChatInputFix = true;
-    [BindConfig("fixes", DefaultEnableChatInputFix, "Work around two vanilla chat bugs: the chat text field is never blurred/deselected when cleared (which makes Unity throw on every later keypress and 'eat' input), and the 'TextChatting' state can latch on so chat never reopens. Turn off if it interferes with anything. See docs/chat-bug-research.md")]
+    [BindConfig("fixes", DefaultEnableChatInputFix, "Work around two vanilla chat bugs: the chat text field is never blurred/deselected when cleared (which makes Unity throw on every later keypress and 'eat' input), and the 'TextChatting' state can latch on so chat never reopens. Turn off if it interferes with anything. See docs/chat-bug-research.html")]
     internal static ConfigEntry<bool> EnableChatInputFix;
     internal static bool ChatInputFixEnabled => EnableChatInputFix?.Value ?? DefaultEnableChatInputFix;
+
+    // Opt-out: unbound must read true — this repairs a vanilla Vivox race that
+    // otherwise silently drops multiplayer text chat between players.
+    private const bool DefaultEnableVivoxTextSendFix = true;
+    [BindConfig("fixes", DefaultEnableVivoxTextSendFix, "Work around a vanilla Vivox channel race that makes typed chat reach no other player (the sender still sees their own line). Routes outgoing chat through the group text channel instead of per-recipient direct messages, so delivery no longer depends on the game's participant list surviving the room-join race. Voice chat is untouched. Turn off to restore vanilla behaviour. See docs/chat-bug-research.html")]
+    internal static ConfigEntry<bool> EnableVivoxTextSendFix;
+    internal static bool VivoxTextSendFixEnabled => EnableVivoxTextSendFix?.Value ?? DefaultEnableVivoxTextSendFix;
 
     private const int DefaultEscalationRareUnlockScalar = 3;
     [BindConfig("forge", DefaultEscalationRareUnlockScalar, "DifficultyScalar at which Rare relics start dropping (below this, Rares in the loot pool are downgraded to Common)")]
