@@ -177,6 +177,60 @@ public class ForgeInteractionPolicyTests
         Assert.Null(d.Message);
     }
 
+    // Retrieval is the Forge's own action, not the player grabbing the docked item
+    // past the machine's hull — an occluding hull collider is what made the module
+    // box unretrievable while the shallower tubes still worked.
+    [Theory]
+    [InlineData(ForgeInteractableKind.ModuleSocket)]
+    [InlineData(ForgeInteractableKind.RelicTube)]
+    public void Empty_handed_on_an_occupied_anchor_hands_the_item_back(ForgeInteractableKind target)
+    {
+        var d = ForgeInteractionPolicy.Decide(
+            Forge(hasModule: true, relics: 1), Click(ForgePayload.None, target, occupied: true));
+
+        Assert.Equal(ForgeAction.RetrieveItem, d.Action);
+        Assert.Null(d.Message);
+    }
+
+    // The retrieve check runs ahead of the per-target matrix, so the kinds that
+    // never hold anything must fall through it rather than being swallowed — an
+    // occupied commit lever still commits, an occupied terminal still feeds.
+    [Theory]
+    [InlineData(ForgeInteractableKind.CommitButton, ForgeAction.Commit)]
+    [InlineData(ForgeInteractableKind.AlloyTerminal, ForgeAction.FeedAlloy)]
+    public void An_occupied_flag_does_not_hijack_the_lever_or_the_terminal(
+        ForgeInteractableKind target, ForgeAction expected)
+    {
+        var d = ForgeInteractionPolicy.Decide(
+            Forge(hasModule: true, relics: 1), Click(ForgePayload.None, target, occupied: true));
+
+        Assert.Equal(expected, d.Action);
+    }
+
+    [Theory]
+    [InlineData(ForgeInteractableKind.ModuleSocket, true)]
+    [InlineData(ForgeInteractableKind.RelicTube, true)]
+    [InlineData(ForgeInteractableKind.CommitButton, false)]
+    [InlineData(ForgeInteractableKind.AlloyTerminal, false)]
+    public void RetrievesWhenOccupied_is_the_single_source_for_the_prompt_and_the_click(
+        ForgeInteractableKind kind, bool expected)
+    {
+        Assert.Equal(expected, ForgeInteractionPolicy.RetrievesWhenOccupied(kind));
+    }
+
+    // Pins which of the two sources decides. HasModule is semantic bookkeeping;
+    // occupancy is what is physically pinned to the anchor, and only the latter can
+    // answer "what do I hand back" — so only the latter may trigger a retrieve.
+    [Fact]
+    public void Empty_handed_on_an_empty_socket_explains_itself_even_when_HasModule_is_set()
+    {
+        var d = ForgeInteractionPolicy.Decide(
+            Forge(hasModule: true), Click(ForgePayload.None, ForgeInteractableKind.ModuleSocket));
+
+        Assert.Equal(ForgeAction.None, d.Action);
+        Assert.Equal("Deconstruct a module and place its build box here to upgrade it.", d.Message);
+    }
+
     [Fact]
     public void Empty_handed_on_a_tube_reads_out_the_loaded_Forge()
     {

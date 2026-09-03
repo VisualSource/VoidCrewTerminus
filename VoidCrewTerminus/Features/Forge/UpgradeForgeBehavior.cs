@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using CG.Client.Ship.Interactions;
 using CG.Game.Player;
 using CG.Network;
 using CG.Objects;
@@ -137,6 +138,14 @@ public class UpgradeForgeBehavior : MonoBehaviour
     // are keyed by that guid. Plain module boxes chain by moduleRef guid.
     private int GetBoxMark(out bool isFinalMark) => GetBoxMark(_moduleBox, out isFinalMark);
 
+    // Guids already reported as unforgeable — see the log line at the end of
+    // GetBoxMark for why it must not repeat. Cleared per run (ADR-0001's rule for
+    // mod-side static state) so the whitelist hint is available once per run rather
+    // than once per process lifetime.
+    private static readonly HashSet<GUIDUnion> _unchainedWarned = new();
+
+    internal static void ResetForRun() => _unchainedWarned.Clear();
+
     private static int GetBoxMark(BuildBox box, out bool isFinalMark)
     {
         isFinalMark = false;
@@ -165,7 +174,13 @@ public class UpgradeForgeBehavior : MonoBehaviour
 
         // If a legitimately single-form module ever needs to forge, this log line
         // names the guid to whitelist.
-        BepinPlugin.Log.LogInfo($"[Forge] Module {guid.AsHex()} not in any upgrade chain — refusing to forge (strict Mark III policy).");
+        //
+        // Once per guid, and Debug not Info: this is not only reached on a commit
+        // attempt — RefreshGhosts calls LevelOfBox at 5 Hz for whatever box the
+        // player is carrying, so an unforgeable box in hand (the Forge's own crate,
+        // most of all) wrote hundreds of Info lines per playtest.
+        if (_unchainedWarned.Add(guid))
+            BepinPlugin.Log.LogDebug($"[Forge] Module {guid.AsHex()} not in any upgrade chain — refusing to forge (strict Mark III policy).");
         return 1;
     }
 
@@ -422,9 +437,10 @@ public class UpgradeForgeBehavior : MonoBehaviour
         foreach (var tube in _tubeAnchors)
             CreateInteractable(tube, ForgeInteractableKind.RelicTube, new Vector3(0.35f, 0.35f, 0.35f), layer);
         if (_inputAnchor != null)
-            // Oversized so loading is forgiving to aim; steps aside via
-            // ForgeInteractable.IsInteractive when occupied and hands are empty, so
-            // the box can be grabbed back out.
+            // Oversized so loading is forgiving to aim. It stays raycast-targetable
+            // while it holds a box — an empty-handed click retrieves the box through
+            // the socket rather than needing a ray to reach the box itself, which the
+            // hull would block (see ForgeInteractionPolicy.Decide).
             CreateInteractable(_inputAnchor, ForgeInteractableKind.ModuleSocket, new Vector3(1.2f, 1.2f, 1.2f), layer);
         if (commitAnchor != null)
         {
@@ -691,7 +707,9 @@ public class UpgradeForgeBehavior : MonoBehaviour
             payload: ClassifyPayload(payload),
             carriedBoxLevel: box != null ? LevelOfBox(box) : 0,
             target: kind,
-            targetOccupied: anchor == null || IsAnchorOccupied(anchor));
+            // Strictly the dock's answer — see ForgeClick.TargetOccupied for why a
+            // null anchor must NOT report as occupied here.
+            targetOccupied: IsAnchorOccupied(anchor));
     }
 
     private static ForgePayload ClassifyPayload(CarryableObject payload) =>
@@ -718,6 +736,17 @@ public class UpgradeForgeBehavior : MonoBehaviour
                 break;
 
             case ForgeAction.InsertRelic:
+                // The anchor is guarded here rather than folded into
+                // ForgeClick.TargetOccupied: without it TryInsertRelic would claim the
+                // relic and ReleaseCarryable would take it out of the player's hands,
+                // then AnchorDock.Dock would no-op on the null anchor and leave the
+                // relic listed but unpinned.
+                if (anchor == null)
+                {
+                    BepinPlugin.Log.LogWarning("[Forge] Insert on a missing anchor — ignored.");
+                    break;
+                }
+
                 // The policy already cleared capacity and the tube, so a refusal here
                 // means the two disagree. Drop it rather than reprint a message the
                 // policy owns.
@@ -730,6 +759,10 @@ public class UpgradeForgeBehavior : MonoBehaviour
                 player.Carrier.ReleaseCarryable();
                 _dock.Dock(payload.gameObject, anchor);
                 BroadcastDock(payload.gameObject, anchor, docked: true);
+                break;
+
+            case ForgeAction.RetrieveItem:
+                RetrieveFrom(anchor, player);
                 break;
 
             case ForgeAction.Commit:
@@ -757,6 +790,55 @@ public class UpgradeForgeBehavior : MonoBehaviour
         }
     }
 
+    // Hand the item docked on `anchor` back to the player.
+    //
+    // Deliberately does NOT undock here. Vanilla's own pickup is invoked and the
+    // dock is left to notice on the next Update: CarryableInteract.StartInteraction
+    // sets the item's Carrier, _dock.Reconcile() sees that and runs the single
+    // grab-back-out path that already existed — one undock, one broadcast, one log
+    // line — instead of a second, parallel release that would have to keep itself
+    // in step with it.
+    //
+    // Routing through StartInteraction rather than Carrier.TryInsertCarryable
+    // directly is what buys the rest of the vanilla grab: the interaction lock, the
+    // fetch lerp that flies the item to the hand, hand IK, and the grab SFX all live
+    // in that method's private half. Our CarryableInteract prefix re-entry is not a
+    // concern — it only claims ForgeInteractable targets, and this passes a Grabbable.
+    private void RetrieveFrom(Transform anchor, LocalPlayer player)
+    {
+        if (!_dock.TryGetDockedAt(anchor, out var item))
+        {
+            // Policy said occupied, the dock disagrees — the two are read one after
+            // the other from the same object, so this is a state bug, not a race.
+            BepinPlugin.Log.LogWarning(
+                "[Forge] Retrieve approved by policy but the anchor holds nothing — state disagreement, ignored.");
+            return;
+        }
+
+        var grabbable = item.GetComponent<Grabbable>();
+        if (grabbable == null)
+        {
+            BepinPlugin.Log.LogWarning($"[Forge] {item.name} has no Grabbable — cannot hand it back.");
+            return;
+        }
+
+        var interact = player.Locomotion != null
+            ? player.Locomotion.GetAbility<CarryableInteract>()
+            : null;
+        if (interact == null)
+        {
+            BepinPlugin.Log.LogWarning("[Forge] CarryableInteract ability not found on the local player — cannot hand the item back.");
+            return;
+        }
+
+        // ignorePlacingObjects has no effect on this path and no default to omit —
+        // vanilla reads it only inside its IsHoldingCarryable branch, and the policy
+        // only reaches RetrieveItem for ForgePayload.None. Passed true because that is
+        // what the branch would want if our hands ever turned out not to be empty: a
+        // swap to the docked item, rather than an interact with the held one.
+        interact.StartInteraction(grabbable, ignorePlacingObjects: true);
+    }
+
     // Hot-reload teardown (ScriptEngine): a reloaded assembly brings its OWN
     // UpgradeForgeBehavior type, so this instance must leave cleanly — restoring
     // held items' physics so nothing is left frozen mid-air. The reloaded assembly
@@ -770,7 +852,8 @@ public class UpgradeForgeBehavior : MonoBehaviour
         Destroy(this);
     }
 
-    // Read by ForgeInteractable so it can step aside and let a docked item be grabbed.
+    // Drives the insert-vs-retrieve arm of the policy, and the matching HUD prompt
+    // on ForgeInteractable.
     public bool IsAnchorOccupied(Transform anchor) => _dock.IsOccupied(anchor);
 
     // Reconcile with the world: players grab docked items back out via the vanilla

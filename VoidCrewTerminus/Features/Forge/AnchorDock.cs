@@ -58,12 +58,27 @@ internal sealed class AnchorDock
 
     internal bool IsDocked(GameObject item) => item != null && _docked.ContainsKey(item);
 
-    // Read by ForgeInteractable so it can step aside and let a docked item be grabbed.
-    internal bool IsOccupied(Transform anchor)
+    // Read by the policy (via UpgradeForgeBehavior.IsAnchorOccupied) to decide
+    // whether a click inserts or retrieves.
+    //
+    // Defined as "TryGetDockedAt found something" rather than as its own loop, so
+    // the two can't answer differently: they did, briefly — this one ignored a
+    // destroyed item (kv.Key == null, e.g. a relic a commit just consumed, before
+    // Reconcile reaps the entry) while TryGetDockedAt skipped it, which reported an
+    // anchor as occupied that had nothing to hand back.
+    internal bool IsOccupied(Transform anchor) => TryGetDockedAt(anchor, out _);
+
+    // The item to hand back when a player clicks an occupied anchor empty-handed.
+    internal bool TryGetDockedAt(Transform anchor, out GameObject item)
     {
+        item = null;
         if (anchor == null) return false;
         foreach (var kv in _docked)
-            if (kv.Value.Anchor == anchor) return true;
+        {
+            if (kv.Value.Anchor != anchor || kv.Key == null) continue;
+            item = kv.Key;
+            return true;
+        }
         return false;
     }
 

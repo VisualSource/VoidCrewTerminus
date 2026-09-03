@@ -53,6 +53,7 @@ namespace VoidCrewTerminus
             {
                 VoidCrewTerminus.Forge.ForgeStateStore.ClearAll();
                 VoidCrewTerminus.Forge.ForgeMeterController.ResetForRun();
+                VoidCrewTerminus.Forge.UpgradeForgeBehavior.ResetForRun();
                 VoidCrewTerminus.Escalation.SectorEscalation.ResetForRun();
                 Patches.BossDefeatHook.OnSessionStart();
                 // Host owns the reset — push the cleared state so clients drop last

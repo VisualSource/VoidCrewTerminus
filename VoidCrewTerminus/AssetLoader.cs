@@ -272,6 +272,35 @@ public class AssetLoader
         {
             view.ObservedComponents = new List<Component> { cell };
         }
+
+        // PowerDrain is its own IPunObservable and is the ONLY carrier of IsOn over
+        // the wire (CellModule.OnPhotonSerializeView writes IsBeingDeconstructed and
+        // nothing else). Unobserved, a non-owner can never learn the module is
+        // powered: PowerPropagator does call ParentConnectionStateChanged locally on
+        // every client, but PowerDrain.ChangePowerState refuses a non-owner's change,
+        // RPCs RequestSetPowerState to the owner, and returns the OLD value — so the
+        // owner turns on and the client's copy stays false forever. Observed live as
+        // the Forge's status screen rendering black for everyone but the host (its
+        // panel sits in the unpowered "dead metal grey" state), the interior light
+        // staying dark, and RandomShutoff burdens being invisible to clients.
+        //
+        // Vanilla module prefabs list their drain in the editor; a grafted one has to
+        // be added here. Appended, not assigned, so an authored list survives.
+        //
+        // Covers every client in the room when the state flips. A client that joins
+        // AFTER the flip is a separate gap: the grafted view syncs UnreliableOnChange,
+        // which stops transmitting once values settle, so there is nothing in flight
+        // to catch up on. That belongs with the rest of the late-joiner catch-up work
+        // (ForgeNetSync's SendOverlaySnapshotTo path), not here.
+        if (drain != null)
+        {
+            view.ObservedComponents ??= new List<Component>();
+            if (!view.ObservedComponents.Contains(drain))
+            {
+                view.ObservedComponents.Add(drain);
+                BepinPlugin.Log.LogDebug($"[AssetLoader] PhotonView on {prefab.name} now observes PowerDrain (IsOn replication).");
+            }
+        }
     }
 
     // Sets CellModule.BuildBoxRef, read by vanilla Deconstruct.CreateBuildBox. The reverse
@@ -399,52 +428,127 @@ public class AssetLoader
         // BuildBoxRuntimeRefPatch.cs re-stamps it per-instance before Awake reads it.
         box.moduleRef.IsRuntime = true;
 
+        // The box's OWN identity, distinct from moduleRef (what it builds).
+        // AbstractCloneStarObject.assetGuid is a plain serialized field, so the clone
+        // inherited the DONOR's guid — and that is the guid every self-lookup keys
+        // off: AbstractCloneStarObject.ContextInfo resolves hover text through
+        // CloneStarObjectContainer.GetContext(assetGuid), and the runtime-asset
+        // registration below resolves the def (and therefore the instance's name)
+        // the same way. Left unstamped, the Forge's crate showed the donor's tooltip
+        // and spawned named after the donor prefab (observed live as
+        // "BuildBox_GravityScoop_01"), while the ContextInfo registered for boxGuid
+        // was never consulted. Assigned BEFORE the registrations that read it.
+        box.ContainerGuid = _buildBoxGuid.Value;
+
         template.name = UpgradeForgeBehavior.BuildBoxPrefabName;
         _modulePrefabs[UpgradeForgeBehavior.BuildBoxPrefabName] = template;
 
         var boxGuid = _buildBoxGuid.Value;
-        if (!RuntimeAssetsRegister.Instance.HasAsset(boxGuid))
+        var register = RuntimeAssetsRegister.Instance;
+        if (!register.HasAsset(boxGuid))
         {
-            RuntimeAssetsRegister.Instance.RegisterAsset(
+            register.RegisterAsset(
                 boxGuid, template, SessionModificationEffect.IsNetworkSpawned,
                 new RuntimeAssetInfo { Name = template.name, DisplayName = "Upgrade Forge BuildBox" });
         }
-
-        var container = ResourceAssetContainer<CloneStarObjectContainer, AbstractCloneStarObject, CloneStarObjectDef>.Instance;
-        if (!container.HasItem(boxGuid))
+        else if (register.GetAsset(boxGuid) != template)
         {
-            var def = new CloneStarObjectDef(boxGuid, template.name) { Ref = { IsRuntime = true } };
-            // A null ContextInfo falls back to "missing description" hover text — prefer
-            // the crate's own authored Name/Description over the donor's, falling back to
-            // the donor's for whatever wasn't authored (Icon, in particular).
-            var donorDef = container.GetAssetDefById(donorGuid, verbose: false);
-            var header = !string.IsNullOrEmpty(_buildBoxOwnName) ? _buildBoxOwnName : donorDef?.ContextInfo?.HeaderText;
-            var body = !string.IsNullOrEmpty(_buildBoxOwnDescription) ? _buildBoxOwnDescription : donorDef?.ContextInfo?.BodyText;
-            var icon = _buildBoxOwnIcon != null ? _buildBoxOwnIcon : donorDef?.ContextInfo?.Icon;
-            def.ContextInfo = ContextInfo.Create(icon, header, body);
-            container.RegisterRuntimeAsset(boxGuid, def);
+            // Corrected rather than skipped, same as the def below — and the stakes are
+            // higher here. This register is a vanilla static that outlives the assembly,
+            // so after a ScriptEngine reload it still holds the PREVIOUS load's template,
+            // which UnloadBundles has since destroyed. Skipping left every runtime-ref
+            // lookup resolving that destroyed object (ResourceAssetRef.AssetInstance
+            // returns it verbatim) and !forgespawn's name scan stepping over it, so the
+            // box reported as "not ready" for the rest of the process.
+            if (!TryReplaceRuntimeAsset(boxGuid, template))
+                BepinPlugin.Log.LogWarning(
+                    $"[AssetLoader] Forge BuildBox {boxGuid.AsHex()} is registered to a different object and could not be corrected — " +
+                    "spawns will resolve the stale one. Restart the game rather than hot-reloading.");
         }
 
-        // Unclear whether the box's hover subtitle resolves off boxGuid or moduleGuid —
-        // register both (moduleGuid via EnsureRuntimeAssetsRegisteredInVanillaContainers above).
+        var container = ResourceAssetContainer<CloneStarObjectContainer, AbstractCloneStarObject, CloneStarObjectDef>.Instance;
+
+        // A null ContextInfo falls back to "missing description" hover text — prefer
+        // the crate's own authored Name/Description over the donor's, falling back to
+        // the donor's for whatever wasn't authored (Icon, in particular).
+        var donorDef = container.GetAssetDefById(donorGuid, verbose: false);
+        var header = !string.IsNullOrEmpty(_buildBoxOwnName) ? _buildBoxOwnName : donorDef?.ContextInfo?.HeaderText;
+        var body = !string.IsNullOrEmpty(_buildBoxOwnDescription) ? _buildBoxOwnDescription : donorDef?.ContextInfo?.BodyText;
+        var icon = _buildBoxOwnIcon != null ? _buildBoxOwnIcon : donorDef?.ContextInfo?.Icon;
+
+        // Corrected in place rather than skipped when an entry already exists.
+        // boxGuid can be registered before we get here — the game's own runtime-asset
+        // import scans this bundle too, and RegisterAsset above resolves through the
+        // same container — and whatever registered it first may have resolved the path
+        // off the donor clone. Any entry under boxGuid is ours by construction, so
+        // overwriting is safe, and skipping is what left the donor's tooltip in place.
+        // Path is fixed too: ObjectFactory.InstantiateSpaceObjectByGUID names every
+        // spawned instance from it.
+        var boxDef = container.GetAssetDefById(boxGuid, verbose: false);
+        bool freshDef = boxDef == null;
+        if (freshDef) boxDef = new CloneStarObjectDef(boxGuid, template.name);
+
+        // IsRuntime on the correction path too, not just the fresh one: whatever
+        // registered the entry first may have marked it non-runtime, and the Path we
+        // just wrote is a RuntimeAssetsRegister key, not a Resources path — resolvable
+        // through neither if the flag says to look in the wrong place.
+        boxDef.Path = template.name;
+        boxDef.Ref.IsRuntime = true;
+        boxDef.ContextInfo = ContextInfo.Create(icon, header, body);
+
+        if (freshDef) container.RegisterRuntimeAsset(boxGuid, boxDef);
+
+        BepinPlugin.Log.LogDebug(
+            $"[AssetLoader] Forge BuildBox def: path='{boxDef.Path}', header='{header}', " +
+            $"self guid stamped {box.ContainerGuid.AsHex()} (donor was {donorGuid.AsHex()}); " +
+            $"runtime asset {(register.GetAsset(boxGuid) == template ? "is this template" : "IS NOT this template")}.");
+
+        // The hover HEADER/BODY come from the CloneStarObject def above, keyed by the
+        // box's own assetGuid. The subtitle's category band is a separate
+        // ModuleContainer lookup, and BuildBoxActor.Awake reads it too (for the crate's
+        // category material) — off moduleRef there, registered by
+        // EnsureRuntimeAssetsRegisteredInVanillaContainers. Registered under boxGuid as
+        // well so a lookup on either identity resolves.
         var moduleContainer = ResourceAssetContainer<ModuleContainer, CellModule, ModuleDef>.Instance;
-        if (!moduleContainer.HasItem(boxGuid))
+        try
         {
-            try
-            {
-                var boxModuleDef = new ModuleDef(boxGuid, template.name) { Category = ECategory.Support };
-                moduleContainer.RegisterRuntimeAsset(boxGuid, boxModuleDef);
-                BepinPlugin.Log.LogInfo($"[AssetLoader] Registered BuildBox {boxGuid.AsHex()} into vanilla ModuleContainer as {ECategory.Support}.");
-            }
-            catch (System.Exception ex)
-            {
-                BepinPlugin.Log.LogError($"[AssetLoader] Failed to register BuildBox {boxGuid.AsHex()} into vanilla ModuleContainer: {ex}");
-            }
+            // Register-or-correct like the two above. A pre-existing entry here can only
+            // be an earlier load's, whose fields already match — corrected anyway so all
+            // three registries answer for boxGuid under one rule rather than three.
+            var boxModuleDef = moduleContainer.GetAssetDefById(boxGuid, verbose: false);
+            bool freshModuleDef = boxModuleDef == null;
+            if (freshModuleDef) boxModuleDef = new ModuleDef(boxGuid, template.name);
+
+            boxModuleDef.Category = ECategory.Support;
+            boxModuleDef.Path = template.name;
+            boxModuleDef.Ref.IsRuntime = true;
+
+            if (freshModuleDef) moduleContainer.RegisterRuntimeAsset(boxGuid, boxModuleDef);
+            BepinPlugin.Log.LogInfo(
+                $"[AssetLoader] BuildBox {boxGuid.AsHex()} {(freshModuleDef ? "registered into" : "corrected in")} vanilla ModuleContainer as {ECategory.Support}.");
+        }
+        catch (System.Exception ex)
+        {
+            BepinPlugin.Log.LogError($"[AssetLoader] Failed to register BuildBox {boxGuid.AsHex()} into vanilla ModuleContainer: {ex}");
         }
 
         RegisterCommonRarity(boxGuid, template.name);
 
         BepinPlugin.Log.LogInfo($"[AssetLoader] Forge BuildBox template ready — cloned from donor {donorGuid.AsHex()}, moduleRef -> {moduleGuid.AsHex()}, registered as {boxGuid.AsHex()}.");
+    }
+
+    // RuntimeAssetsRegister exposes no update or remove: RegisterAsset's TryAdd keeps the
+    // existing value (logging an error), and its info dictionary uses Add, which throws
+    // outright on a duplicate key. The backing dictionary's type arguments are both
+    // public, so an existing entry is corrected through it directly.
+    private static bool TryReplaceRuntimeAsset(GUIDUnion guid, UnityEngine.Object asset)
+    {
+        var assets = AccessTools.Field(typeof(RuntimeAssetsRegister), "_assets")
+            ?.GetValue(RuntimeAssetsRegister.Instance) as Dictionary<GUIDUnion, UnityEngine.Object>;
+        if (assets == null) return false;
+
+        assets[guid] = asset;
+        return true;
     }
 
     private static bool _runtimeAssetsRegisteredInVanillaContainers;

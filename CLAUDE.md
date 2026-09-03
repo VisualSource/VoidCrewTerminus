@@ -95,4 +95,7 @@ Single-context: `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/do
 - [Void Crew Modding Docs](https://hutlihutgames.github.io/void_crew_modding_documentation/)
 - [VoidManager source / examples](https://github.com/Nihility-Shift/VoidManager)
 - [Example mod with similar structure](https://github.com/Maverik/VoidCrewMods/tree/main/HigherDifficulty)
-                
+
+
+### Comments — keep them sparse
+Comments must earn their place. Write one only for an **explicit workaround**, a **required/non-obvious anti-pattern**, a subtle constraint, or a "why" the code genuinely can't express. Do **not** narrate *what* the code does, restate a name, label obvious sections, or annotate self-evident lines — fix the name instead. Default to no comment; when in doubt, leave it out. This codebase (and AI-assisted edits in particular) has trended comment-heavy — dial it back hard, and don't add a doc-comment block just because a `const`/function is exported.
