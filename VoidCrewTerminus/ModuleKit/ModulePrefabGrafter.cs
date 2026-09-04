@@ -51,7 +51,7 @@ internal static class ModulePrefabGrafter
             cell.BuildingConstraints = BuildingConstraints.Default;
             cell.BuildingConstraints.AllowDeconstruction = false;
             cell.TimeToBoot = 1f;
-            BepinPlugin.Log?.LogDebug($"[ModuleKit] Grafted CellModule onto {prefab.name}");
+            BepinPlugin.Log.LogDebug($"[ModuleKit] Grafted CellModule onto {prefab.name}");
         }
         cell.MaxHitPoints ??= new ModifiableFloat { BaseValue = 750f };
         cell.Invulnerability ??= new ModifiableInt();
@@ -65,7 +65,7 @@ internal static class ModulePrefabGrafter
             drain.PowerWanted = new ModifiableInt();
             drain.IsOn = false;
             drain.AutoPowerOn = true;
-            BepinPlugin.Log?.LogDebug($"[ModuleKit] Grafted PowerDrain onto {prefab.name}");
+            BepinPlugin.Log.LogDebug($"[ModuleKit] Grafted PowerDrain onto {prefab.name}");
         }
         if (cell.PowerDrain == null) cell.PowerDrain = drain;
 
@@ -79,7 +79,7 @@ internal static class ModulePrefabGrafter
             if (interior == null && exterior == null)
             {
                 prefab.AddComponent<OcclusionNode>();
-                BepinPlugin.Log?.LogDebug($"[ModuleKit] Grafted root OcclusionNode onto {prefab.name} (no Interior/Exterior split)");
+                BepinPlugin.Log.LogDebug($"[ModuleKit] Grafted root OcclusionNode onto {prefab.name} (no Interior/Exterior split)");
             }
             else
             {
@@ -92,7 +92,7 @@ internal static class ModulePrefabGrafter
                     AccessTools.Field(typeof(OcclusionNode), "hideOnLocalPlayerIsInSpace").SetValue(node, false);
                     AccessTools.Field(typeof(OcclusionNode), "hideOnLocalPlayerIsInTurret").SetValue(node, false);
                 }
-                BepinPlugin.Log?.LogDebug($"[ModuleKit] Grafted OcclusionNodes onto {prefab.name} (interior={(interior != null)}, exterior={(exterior != null)})");
+                BepinPlugin.Log.LogDebug($"[ModuleKit] Grafted OcclusionNodes onto {prefab.name} (interior={(interior != null)}, exterior={(exterior != null)})");
             }
         }
 
@@ -102,7 +102,7 @@ internal static class ModulePrefabGrafter
             view = prefab.AddComponent<PhotonView>();
             view.OwnershipTransfer = OwnershipOption.Takeover;
             view.Synchronization = ViewSynchronization.UnreliableOnChange;
-            BepinPlugin.Log?.LogDebug($"[ModuleKit] Grafted PhotonView onto {prefab.name}");
+            BepinPlugin.Log.LogDebug($"[ModuleKit] Grafted PhotonView onto {prefab.name}");
         }
         // A Manual-search view with an empty ObservedComponents list syncs nothing —
         // ensure it observes the module even when authored in the editor.
@@ -112,31 +112,18 @@ internal static class ModulePrefabGrafter
             view.ObservedComponents = new List<Component> { cell };
         }
 
-        // PowerDrain is its own IPunObservable and is the ONLY carrier of IsOn over
-        // the wire (CellModule.OnPhotonSerializeView writes IsBeingDeconstructed and
-        // nothing else). Unobserved, a non-owner can never learn the module is
-        // powered: PowerPropagator does call ParentConnectionStateChanged locally on
-        // every client, but PowerDrain.ChangePowerState refuses a non-owner's change,
-        // RPCs RequestSetPowerState to the owner, and returns the OLD value — so the
-        // owner turns on and the client's copy stays false forever. Observed live as
-        // the Forge's status screen rendering black for everyone but the host (its
-        // panel sits in the unpowered "dead metal grey" state), the interior light
-        // staying dark, and RandomShutoff burdens being invisible to clients.
-        //
-        // Vanilla module prefabs list their drain in the editor; a grafted one has to
-        // be added here. Appended, not assigned, so an authored list survives.
-        //
-        // Covers every client in the room when the state flips. A client that joins
-        // AFTER the flip is a separate gap: the grafted view syncs UnreliableOnChange,
-        // which stops transmitting once values settle, so there is nothing in flight
-        // to catch up on. That belongs with the mod's own late-joiner catch-up, not here.
+        // PowerDrain is the only carrier of IsOn over the wire (CellModule's
+        // OnPhotonSerializeView writes IsBeingDeconstructed and nothing else), so an
+        // unobserved drain leaves every non-owner stuck at IsOn == false forever.
+        // Vanilla prefabs list their drain in the editor; a grafted one is added here.
+        // Appended, not assigned, so an authored list survives.
         if (drain != null)
         {
             view.ObservedComponents ??= new List<Component>();
             if (!view.ObservedComponents.Contains(drain))
             {
                 view.ObservedComponents.Add(drain);
-                BepinPlugin.Log?.LogDebug($"[ModuleKit] PhotonView on {prefab.name} now observes PowerDrain (IsOn replication).");
+                BepinPlugin.Log.LogDebug($"[ModuleKit] PhotonView on {prefab.name} now observes PowerDrain (IsOn replication).");
             }
         }
     }

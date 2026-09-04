@@ -1,0 +1,33 @@
+
+ ✔ FIX #33: module power state invisible to non-host clients @done(26-09-04)
+   (the grafted PhotonView observed only CellModule, and CellModule's
+   OnPhotonSerializeView writes IsBeingDeconstructed and nothing else —
+   PowerDrain is its own IPunObservable and the ONLY carrier of IsOn over the
+   wire. Unobserved, a non-owner could never learn the module was powered:
+   PowerPropagator does call ParentConnectionStateChanged locally on every
+   client, but PowerDrain.ChangePowerState refuses a non-owner's change, RPCs
+   RequestSetPowerState to the owner, and returns the OLD value — so the owner
+   turned on and the client's copy stayed false forever. Observed live as the
+   Forge's status screen rendering black for everyone but the host (its panel
+   sitting in the unpowered "dead metal grey" state), the interior light
+   staying dark, and RandomShutoff burdens being invisible to clients. Fix:
+   ModulePrefabGrafter.Graft appends the drain to view.ObservedComponents —
+   appended, not assigned, so an editor-authored list survives. Covers every
+   client in the room when the state flips. REMAINING GAP: a client that joins
+   AFTER the flip still sees stale state — the grafted view syncs
+   UnreliableOnChange, which stops transmitting once values settle, so there is
+   nothing in flight to catch up on. That belongs with the mod's own
+   late-joiner catch-up, not with the graft.)
+
+ ✔ FIX #34: custom BuildBox wore the donor's identity @done(26-09-04)
+   (AbstractCloneStarObject.assetGuid is a plain serialized field, so cloning a
+   live vanilla donor crate inherited the DONOR's guid — and that is the guid
+   every self-lookup keys off: AbstractCloneStarObject.ContextInfo resolves
+   hover text through CloneStarObjectContainer.GetContext(assetGuid), and the
+   runtime-asset registration resolves the def, and therefore the spawned
+   instance's name, the same way. Left unstamped, the crate showed the donor's
+   tooltip and spawned named after the donor prefab — observed live as
+   "BuildBox_GravityScoop_01". Fix: RegisteredModule.TryBuildBuildBoxTemplate
+   sets box.ContainerGuid = boxGuid BEFORE the registrations that read it, and
+   prefers the crate's own authored Name/Description over the donor's, falling
+   back to the donor's for whatever wasn't authored — Icon, in particular.)

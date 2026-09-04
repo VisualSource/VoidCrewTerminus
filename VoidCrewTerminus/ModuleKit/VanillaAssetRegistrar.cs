@@ -37,7 +37,7 @@ internal static class VanillaAssetRegistrar
         RuntimeAssetsRegister.Instance.RegisterAsset(
             guid, asset, SessionModificationEffect.IsNetworkSpawned,
             new RuntimeAssetInfo { Name = asset.name, DisplayName = displayName });
-        BepinPlugin.Log?.LogDebug($"[ModuleKit] Registered asset {asset.name} ({guid.AsHex()}).");
+        BepinPlugin.Log.LogDebug($"[ModuleKit] Registered asset {asset.name} ({guid.AsHex()}).");
     }
 
     // RuntimeAssetsRegister exposes no update or remove: RegisterAsset's TryAdd keeps the
@@ -73,7 +73,7 @@ internal static class VanillaAssetRegistrar
         def.ContextInfo = context;
 
         if (fresh) Objects.RegisterRuntimeAsset(guid, def);
-        BepinPlugin.Log?.LogDebug($"[ModuleKit] CloneStarObject def for {path} ({guid.AsHex()}) {(fresh ? "registered" : "corrected")}.");
+        BepinPlugin.Log.LogDebug($"[ModuleKit] CloneStarObject def for {path} ({guid.AsHex()}) {(fresh ? "registered" : "corrected")}.");
     }
 
     // The hover subtitle's category band is this lookup, not ContextInfo — and
@@ -92,11 +92,11 @@ internal static class VanillaAssetRegistrar
             def.Ref.IsRuntime = true;
 
             if (fresh) Modules.RegisterRuntimeAsset(guid, def);
-            BepinPlugin.Log?.LogDebug($"[ModuleKit] Module def for {path} ({guid.AsHex()}) {(fresh ? "registered" : "corrected")} as {category}.");
+            BepinPlugin.Log.LogDebug($"[ModuleKit] Module def for {path} ({guid.AsHex()}) {(fresh ? "registered" : "corrected")} as {category}.");
         }
         catch (Exception ex)
         {
-            BepinPlugin.Log?.LogError($"[ModuleKit] Failed to register {path} ({guid.AsHex()}) into vanilla ModuleContainer: {ex}");
+            BepinPlugin.Log.LogError($"[ModuleKit] Failed to register {path} ({guid.AsHex()}) into vanilla ModuleContainer: {ex}");
         }
     }
 
@@ -109,11 +109,11 @@ internal static class VanillaAssetRegistrar
         try
         {
             Unlocks.RegisterRuntimeAsset(guid, new UnlockItemDef { AssetGuid = guid, Path = path, rarity = rarity });
-            BepinPlugin.Log?.LogDebug($"[ModuleKit] Registered {path} ({guid.AsHex()}) into vanilla UnlockContainer as {rarity}.");
+            BepinPlugin.Log.LogDebug($"[ModuleKit] Registered {path} ({guid.AsHex()}) into vanilla UnlockContainer as {rarity}.");
         }
         catch (Exception ex)
         {
-            BepinPlugin.Log?.LogError($"[ModuleKit] Failed to register {path} ({guid.AsHex()}) into vanilla UnlockContainer: {ex}");
+            BepinPlugin.Log.LogError($"[ModuleKit] Failed to register {path} ({guid.AsHex()}) into vanilla UnlockContainer: {ex}");
         }
     }
 

@@ -13,17 +13,16 @@ public static class CustomModuleRegistry
     private static readonly List<RegisteredModule> _modules = new();
 
     // Module prefabs the game's RuntimeAssetConverter can't handle (it only covers
-    // carryables/cosmetics), plus each cloned BuildBox template once built.
-    private static readonly Dictionary<string, GameObject> _prefabs = new();
+    // carryables/cosmetics).
+    private static readonly Dictionary<string, GameObject> _modulePrefabs = new();
+
+    private static readonly Dictionary<string, GameObject> _boxTemplates = new();
 
     private static bool _containersPopulated;
 
     public static void Define(CustomModuleDefinition definition)
     {
-        foreach (var existing in _modules)
-        {
-            if (existing.Definition.ModulePrefabName == definition.ModulePrefabName) return;
-        }
+        if (FindByPrefabName(definition.ModulePrefabName) != null) return;
         _modules.Add(new RegisteredModule(definition));
     }
 
@@ -38,23 +37,23 @@ public static class CustomModuleRegistry
 
         ModulePrefabGrafter.RelinkShaders(prefab);
         ModulePrefabGrafter.Graft(prefab);
-        _prefabs[prefab.name] = prefab;
+        _modulePrefabs[prefab.name] = prefab;
 
         if (string.IsNullOrEmpty(vca.AssetGuid))
         {
-            BepinPlugin.Log?.LogError($"[ModuleKit] Module prefab '{prefab.name}' has no AssetGuid — re-export the bundle (the export tool stamps it).");
+            BepinPlugin.Log.LogError($"[ModuleKit] Module prefab '{prefab.name}' has no AssetGuid — re-export the bundle (the export tool stamps it).");
             return;
         }
         VanillaAssetRegistrar.RegisterAssetIfAbsent(new GUIDUnion(vca.AssetGuid), prefab, vca.Name);
     }
 
-    // A post-pass because the module prefab and its BuildBox marker can arrive from the
-    // bundle in either order.
+    // A post-pass: a module prefab and its BuildBox marker arrive from the bundle in
+    // either order.
     public static void LinkBuildBoxRefs()
     {
         foreach (var module in _modules)
         {
-            if (_prefabs.TryGetValue(module.Definition.ModulePrefabName, out var modulePrefab))
+            if (_modulePrefabs.TryGetValue(module.Definition.ModulePrefabName, out var modulePrefab))
                 module.LinkBuildBoxRef(modulePrefab);
         }
     }
@@ -69,11 +68,11 @@ public static class CustomModuleRegistry
         foreach (var module in _modules)
         {
             var boxName = module.Definition.BuildBoxPrefabName;
-            if (string.IsNullOrEmpty(boxName) || _prefabs.ContainsKey(boxName)) continue;
-            if (!_prefabs.TryGetValue(module.Definition.ModulePrefabName, out var modulePrefab)) continue;
+            if (string.IsNullOrEmpty(boxName) || _boxTemplates.ContainsKey(boxName)) continue;
+            if (!_modulePrefabs.TryGetValue(module.Definition.ModulePrefabName, out var modulePrefab)) continue;
 
             var template = module.TryBuildBuildBoxTemplate(modulePrefab);
-            if (template != null) _prefabs[boxName] = template;
+            if (template != null) _boxTemplates[boxName] = template;
         }
     }
 
@@ -81,13 +80,12 @@ public static class CustomModuleRegistry
     {
         // A BuildBox template is a live clone, not a bundle asset — bundle.Unload won't
         // touch it, so it leaks across hot-reloads unless destroyed here.
-        foreach (var module in _modules)
+        foreach (var template in _boxTemplates.Values)
         {
-            var boxName = module.Definition.BuildBoxPrefabName;
-            if (!string.IsNullOrEmpty(boxName) && _prefabs.TryGetValue(boxName, out var template) && template != null)
-                Object.Destroy(template);
+            if (template != null) Object.Destroy(template);
         }
-        _prefabs.Clear();
+        _boxTemplates.Clear();
+        _modulePrefabs.Clear();
         _modules.Clear();
         _containersPopulated = false;
     }
@@ -99,13 +97,13 @@ public static class CustomModuleRegistry
     {
         if (_containersPopulated) return;
 
-        foreach (var prefab in _prefabs.Values)
+        foreach (var prefab in _modulePrefabs.Values)
         {
             var vca = prefab.GetComponent<VoidCrewAsset>();
             if (vca == null || string.IsNullOrEmpty(vca.AssetGuid)) continue;
 
             var guid = new GUIDUnion(vca.AssetGuid);
-            var definition = FindDefinitionFor(prefab.name);
+            var definition = FindByPrefabName(prefab.name)?.Definition;
 
             VanillaAssetRegistrar.RegisterObjectDef(guid, prefab.name, ContextInfo.Create(vca.Icon, vca.Name, vca.Description));
 
@@ -118,11 +116,11 @@ public static class CustomModuleRegistry
         _containersPopulated = true;
     }
 
-    private static CustomModuleDefinition FindDefinitionFor(string prefabName)
+    private static RegisteredModule FindByPrefabName(string prefabName)
     {
         foreach (var module in _modules)
         {
-            if (module.Definition.ModulePrefabName == prefabName) return module.Definition;
+            if (module.Definition.ModulePrefabName == prefabName) return module;
         }
         return null;
     }
