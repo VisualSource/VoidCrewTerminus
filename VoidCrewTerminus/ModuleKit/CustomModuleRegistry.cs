@@ -27,9 +27,6 @@ public static class CustomModuleRegistry
         _modules.Add(new RegisteredModule(definition));
     }
 
-    public static GameObject GetPrefab(string name) =>
-        _prefabs.TryGetValue(name, out var prefab) ? prefab : null;
-
     public static void SubmitPrefab(GameObject prefab, VoidCrewAsset vca)
     {
         foreach (var module in _modules)
@@ -45,7 +42,7 @@ public static class CustomModuleRegistry
 
         if (string.IsNullOrEmpty(vca.AssetGuid))
         {
-            KitLog.Log?.LogError($"[ModuleKit] Module prefab '{prefab.name}' has no AssetGuid — re-export the bundle (the export tool stamps it).");
+            BepinPlugin.Log?.LogError($"[ModuleKit] Module prefab '{prefab.name}' has no AssetGuid — re-export the bundle (the export tool stamps it).");
             return;
         }
         VanillaAssetRegistrar.RegisterAssetIfAbsent(new GUIDUnion(vca.AssetGuid), prefab, vca.Name);

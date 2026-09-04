@@ -51,7 +51,7 @@ internal static class ModulePrefabGrafter
             cell.BuildingConstraints = BuildingConstraints.Default;
             cell.BuildingConstraints.AllowDeconstruction = false;
             cell.TimeToBoot = 1f;
-            KitLog.Log?.LogDebug($"[ModuleKit] Grafted CellModule onto {prefab.name}");
+            BepinPlugin.Log?.LogDebug($"[ModuleKit] Grafted CellModule onto {prefab.name}");
         }
         cell.MaxHitPoints ??= new ModifiableFloat { BaseValue = 750f };
         cell.Invulnerability ??= new ModifiableInt();
@@ -65,7 +65,7 @@ internal static class ModulePrefabGrafter
             drain.PowerWanted = new ModifiableInt();
             drain.IsOn = false;
             drain.AutoPowerOn = true;
-            KitLog.Log?.LogDebug($"[ModuleKit] Grafted PowerDrain onto {prefab.name}");
+            BepinPlugin.Log?.LogDebug($"[ModuleKit] Grafted PowerDrain onto {prefab.name}");
         }
         if (cell.PowerDrain == null) cell.PowerDrain = drain;
 
@@ -79,7 +79,7 @@ internal static class ModulePrefabGrafter
             if (interior == null && exterior == null)
             {
                 prefab.AddComponent<OcclusionNode>();
-                KitLog.Log?.LogDebug($"[ModuleKit] Grafted root OcclusionNode onto {prefab.name} (no Interior/Exterior split)");
+                BepinPlugin.Log?.LogDebug($"[ModuleKit] Grafted root OcclusionNode onto {prefab.name} (no Interior/Exterior split)");
             }
             else
             {
@@ -92,7 +92,7 @@ internal static class ModulePrefabGrafter
                     AccessTools.Field(typeof(OcclusionNode), "hideOnLocalPlayerIsInSpace").SetValue(node, false);
                     AccessTools.Field(typeof(OcclusionNode), "hideOnLocalPlayerIsInTurret").SetValue(node, false);
                 }
-                KitLog.Log?.LogDebug($"[ModuleKit] Grafted OcclusionNodes onto {prefab.name} (interior={(interior != null)}, exterior={(exterior != null)})");
+                BepinPlugin.Log?.LogDebug($"[ModuleKit] Grafted OcclusionNodes onto {prefab.name} (interior={(interior != null)}, exterior={(exterior != null)})");
             }
         }
 
@@ -102,7 +102,7 @@ internal static class ModulePrefabGrafter
             view = prefab.AddComponent<PhotonView>();
             view.OwnershipTransfer = OwnershipOption.Takeover;
             view.Synchronization = ViewSynchronization.UnreliableOnChange;
-            KitLog.Log?.LogDebug($"[ModuleKit] Grafted PhotonView onto {prefab.name}");
+            BepinPlugin.Log?.LogDebug($"[ModuleKit] Grafted PhotonView onto {prefab.name}");
         }
         // A Manual-search view with an empty ObservedComponents list syncs nothing —
         // ensure it observes the module even when authored in the editor.
@@ -136,7 +136,7 @@ internal static class ModulePrefabGrafter
             if (!view.ObservedComponents.Contains(drain))
             {
                 view.ObservedComponents.Add(drain);
-                KitLog.Log?.LogDebug($"[ModuleKit] PhotonView on {prefab.name} now observes PowerDrain (IsOn replication).");
+                BepinPlugin.Log?.LogDebug($"[ModuleKit] PhotonView on {prefab.name} now observes PowerDrain (IsOn replication).");
             }
         }
     }

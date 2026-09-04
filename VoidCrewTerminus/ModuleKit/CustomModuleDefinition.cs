@@ -5,8 +5,7 @@ using ResourceAssets;
 
 namespace VoidCrewTerminus.ModuleKit;
 
-// Everything mod-specific about one custom ship module. Nothing else in ModuleKit/
-// knows what a Forge is.
+// Nothing else in ModuleKit/ knows what a Forge is.
 public sealed class CustomModuleDefinition
 {
     // Both bundle prefabs are bare VoidCrewAsset-marked objects with no surviving script

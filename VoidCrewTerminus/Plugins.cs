@@ -43,7 +43,6 @@ namespace VoidCrewTerminus
         private void LoadResources()
         {
             Log = Logger;
-            ModuleKit.KitLog.Log = Logger;
             TerminusConfig.Init(Config);
 
             AssetLoader.TryLoadAssetBundlesNextToDLL();

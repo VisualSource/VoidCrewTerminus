@@ -20,14 +20,12 @@ internal sealed class RegisteredModule
 
     internal RegisteredModule(CustomModuleDefinition definition) => Definition = definition;
 
-    // The marker is never instantiated — only its GUID and authored flavor text are
-    // kept, the GameObject dropped.
     internal void CaptureBuildBoxMarker(GameObject marker, VoidCrewAsset vca)
     {
         if (!string.IsNullOrEmpty(vca.AssetGuid))
             _buildBoxGuid = new GUIDUnion(vca.AssetGuid);
         else
-            KitLog.Log?.LogError($"[ModuleKit] BuildBox prefab '{marker.name}' has no AssetGuid — re-export the bundle (the export tool stamps it).");
+            BepinPlugin.Log?.LogError($"[ModuleKit] BuildBox prefab '{marker.name}' has no AssetGuid — re-export the bundle (the export tool stamps it).");
 
         _buildBoxName = vca.Name;
         _buildBoxDescription = vca.Description;
@@ -47,7 +45,7 @@ internal sealed class RegisteredModule
         cell.BuildBoxRef.AssetGuid = _buildBoxGuid.Value;
         cell.BuildBoxRef.IsRuntime = true;
 
-        KitLog.Log?.LogDebug($"[ModuleKit] Linked {modulePrefab.name} -> BuildBox ref {_buildBoxGuid.Value.AsHex()}");
+        BepinPlugin.Log?.LogDebug($"[ModuleKit] Linked {modulePrefab.name} -> BuildBox ref {_buildBoxGuid.Value.AsHex()}");
     }
 
     // A live vanilla BuildBox to clone instead of instantiating a grafted prefab — whose
@@ -105,7 +103,7 @@ internal sealed class RegisteredModule
     {
         if (!_buildBoxGuid.HasValue)
         {
-            KitLog.Log?.LogError($"[ModuleKit] {Definition.BuildBoxPrefabName} has no stamped AssetGuid — re-export the bundle.");
+            BepinPlugin.Log?.LogError($"[ModuleKit] {Definition.BuildBoxPrefabName} has no stamped AssetGuid — re-export the bundle.");
             return null;
         }
 
@@ -115,7 +113,7 @@ internal sealed class RegisteredModule
 
         if (!TryFindDonorGuid(out var donorGuid))
         {
-            KitLog.Log?.LogWarning($"[ModuleKit] No vanilla BuildBox donor found yet — {Definition.BuildBoxPrefabName} unavailable until one exists (is a module installed on the ship?).");
+            BepinPlugin.Log?.LogWarning($"[ModuleKit] No vanilla BuildBox donor found yet — {Definition.BuildBoxPrefabName} unavailable until one exists (is a module installed on the ship?).");
             return null;
         }
 
@@ -123,7 +121,7 @@ internal sealed class RegisteredModule
         var donorPrefab = string.IsNullOrEmpty(path) ? null : Resources.Load<GameObject>(path);
         if (donorPrefab == null)
         {
-            KitLog.Log?.LogWarning($"[ModuleKit] Could not load the donor BuildBox prefab asset — {Definition.BuildBoxPrefabName} unavailable.");
+            BepinPlugin.Log?.LogWarning($"[ModuleKit] Could not load the donor BuildBox prefab asset — {Definition.BuildBoxPrefabName} unavailable.");
             return null;
         }
 
@@ -138,7 +136,7 @@ internal sealed class RegisteredModule
         var box = template.GetComponent<BuildBox>();
         if (box == null)
         {
-            KitLog.Log?.LogError("[ModuleKit] Donor BuildBox clone has no BuildBox component — cannot use as a template.");
+            BepinPlugin.Log?.LogError("[ModuleKit] Donor BuildBox clone has no BuildBox component — cannot use as a template.");
             UnityEngine.Object.Destroy(template);
             return null;
         }
@@ -163,11 +161,9 @@ internal sealed class RegisteredModule
 
         template.name = Definition.BuildBoxPrefabName;
 
-        if (!VanillaAssetRegistrar.IsAssetRegistered(boxGuid))
-        {
-            VanillaAssetRegistrar.RegisterAssetIfAbsent(boxGuid, template, Definition.BuildBoxDisplayName);
-        }
-        else if (VanillaAssetRegistrar.GetAsset(boxGuid) != template)
+        VanillaAssetRegistrar.RegisterAssetIfAbsent(boxGuid, template, Definition.BuildBoxDisplayName);
+
+        if (VanillaAssetRegistrar.GetAsset(boxGuid) != template)
         {
             // Corrected rather than skipped. RuntimeAssetsRegister is a vanilla static that
             // outlives the assembly, so after a ScriptEngine reload it still holds the
@@ -176,7 +172,7 @@ internal sealed class RegisteredModule
             // (ResourceAssetRef.AssetInstance returns it verbatim), so the box reported as
             // "not ready" for the rest of the process.
             if (!VanillaAssetRegistrar.TryReplaceAsset(boxGuid, template))
-                KitLog.Log?.LogWarning(
+                BepinPlugin.Log?.LogWarning(
                     $"[ModuleKit] {template.name} {boxGuid.AsHex()} is registered to a different object and could not be corrected — " +
                     "spawns will resolve the stale one. Restart the game rather than hot-reloading.");
         }
@@ -193,9 +189,10 @@ internal sealed class RegisteredModule
         VanillaAssetRegistrar.RegisterModuleDef(boxGuid, template.name, Definition.Category);
         VanillaAssetRegistrar.RegisterRarity(boxGuid, template.name, Definition.Rarity);
 
-        KitLog.Log?.LogDebug(
+        BepinPlugin.Log?.LogDebug(
             $"[ModuleKit] {template.name} template ready — cloned from donor {donorGuid.AsHex()}, " +
-            $"moduleRef -> {moduleGuid.AsHex()}, registered as {boxGuid.AsHex()}.");
+            $"moduleRef -> {moduleGuid.AsHex()}, registered as {boxGuid.AsHex()}; " +
+            $"runtime asset {(VanillaAssetRegistrar.GetAsset(boxGuid) == template ? "is this template" : "IS NOT this template")}.");
         return template;
     }
 }
