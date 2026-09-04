@@ -92,7 +92,7 @@ internal static class ForgeCommit
 
         ForgeStateStore.SaveSnapshot(viewId, updated);
 
-        BepinPlugin.Log.LogDebug(
+        BepinPlugin.Log.LogInfo(
             $"[Forge] Committed L{currentLevel}→L{outcome.NewLevel} on ViewID={viewId} " +
             $"(consumed {ForgeLabels.Plural(outcome.RelicsConsumed, "relic")}, " +
             $"tier={outcome.BestTier}, perk={ForgeLabels.DescribePerkResult(outcome)})");
@@ -225,7 +225,7 @@ internal static class ForgeCommit
         string result = applied != BurdenType.None ? $"APPLIED {applied}"
             : rolled != BurdenType.None ? $"rolled {rolled}, but target can't carry it (AutoPowerOn) — no effect"
             : "none (roll failed)";
-        BepinPlugin.Log.LogDebug($"[Forge] Burden: cursed x{cursedCount} consumed, roll {chance:P0} → {result}.");
+        BepinPlugin.Log.LogInfo($"[Forge] Burden: cursed x{cursedCount} consumed, roll {chance:P0} → {result}.");
     }
 
     private static string NamesOf(IReadOnlyList<RelicFacts> relics)

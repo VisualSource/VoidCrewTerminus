@@ -119,4 +119,7 @@ internal static class VanillaAssetRegistrar
 
     internal static IResourceAssetContextInfo GetContextInfo(GUIDUnion guid) =>
         Objects.GetAssetDefById(guid, verbose: false)?.ContextInfo;
+
+    internal static string GetObjectDefPath(GUIDUnion guid) =>
+        Objects.GetAssetDefById(guid, verbose: false)?.Path;
 }

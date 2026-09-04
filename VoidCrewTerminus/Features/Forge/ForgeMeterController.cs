@@ -124,7 +124,7 @@ public static class ForgeMeterController
         if (leveled) LevelChanged?.Invoke(Level);
         MeterChanged?.Invoke();
 
-        BepinPlugin.Log.LogDebug($"[Forge] Meter +{amount:0.#} from {source} → L{Level}, {Meter:0.#}");
+        BepinPlugin.Log.LogInfo($"[Forge] Meter +{amount:0.#} from {source} → L{Level}, {Meter:0.#}");
     }
 
     // Shared with ApplyNetworkState so the host's own level-up line and the

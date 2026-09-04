@@ -876,11 +876,11 @@ public class UpgradeForgeBehavior : MonoBehaviour
             if (box != null && box == _moduleBox)
             {
                 TryReleaseModule(out _);
-                BepinPlugin.Log.LogDebug($"[Forge] Module box {go.name} retrieved from socket.");
+                BepinPlugin.Log.LogInfo($"[Forge] Module box {go.name} retrieved from socket.");
             }
             else if (_relics.Remove(go))
             {
-                BepinPlugin.Log.LogDebug($"[Forge] Relic {go.name} retrieved ({RelicCount}/{Capacity} remain).");
+                BepinPlugin.Log.LogInfo($"[Forge] Relic {go.name} retrieved ({RelicCount}/{Capacity} remain).");
             }
         }
         _grabbedScratch.Clear();

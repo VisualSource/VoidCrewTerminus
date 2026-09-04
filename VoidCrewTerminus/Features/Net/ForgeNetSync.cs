@@ -588,7 +588,7 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         // silently freezes after a host leaves.
         if (IsAuthority)
         {
-            BepinPlugin.Log?.LogDebug("[Net] Became master client — asserting forge-state authority.");
+            BepinPlugin.Log?.LogInfo("[Net] Became master client — asserting forge-state authority.");
             BroadcastState();
         }
     }

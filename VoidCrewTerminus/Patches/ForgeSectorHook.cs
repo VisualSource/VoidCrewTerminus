@@ -28,7 +28,7 @@ internal static class ForgeSectorHook
         _initialized = true;
         GameSessionSectorManager.OnSectorExited += OnSectorExited;
         GameSessionSectorManager.OnSectorEntered += OnSectorEnteredDiagnostic;
-        BepinPlugin.Log.LogDebug("[Forge] Sector hook armed (award on sector exit).");
+        BepinPlugin.Log.LogInfo("[Forge] Sector hook armed (award on sector exit).");
     }
 
     // Hot-reload teardown: the game events are static, so a leaked subscription
@@ -51,7 +51,7 @@ internal static class ForgeSectorHook
         {
             var session = GameSessionManager.ActiveSession;
             var destination = GameSessionSectorManager.Instance?.DestinationSector;
-            BepinPlugin.Log.LogDebug(
+            BepinPlugin.Log.LogInfo(
                 $"[Forge] SectorExited: id={(departed == null ? "null" : departed.Id.ToString())}, " +
                 $"objective={(departed == null ? "-" : departed.ObjectiveState.ToString())}, " +
                 $"session={(session == null ? "null" : session.IsHub ? "hub" : "run")}, " +
@@ -76,7 +76,7 @@ internal static class ForgeSectorHook
                 _lastSession = session;
                 _awardedSectorIds.Clear();
                 _awardedSectorIds.Add(departed.Id);
-                BepinPlugin.Log.LogDebug($"[Forge] Leaving the run's starting sector {departed.Id} — no meter award.");
+                BepinPlugin.Log.LogInfo($"[Forge] Leaving the run's starting sector {departed.Id} — no meter award.");
                 return;
             }
 
@@ -85,7 +85,7 @@ internal static class ForgeSectorHook
             // legitimately unset (-1) at spin-up — gating on it ate every award.
             if (!_awardedSectorIds.Add(departed.Id))
             {
-                BepinPlugin.Log.LogDebug($"[Forge] Sector {departed.Id} already paid out — no meter award.");
+                BepinPlugin.Log.LogInfo($"[Forge] Sector {departed.Id} already paid out — no meter award.");
                 return;
             }
 
@@ -94,14 +94,14 @@ internal static class ForgeSectorHook
             if (UnityEngine.Object.FindObjectOfType<UpgradeForgeBehavior>() == null)
             {
                 Messaging.Notification("The Forge Meter is idle — no Upgrade Forge is installed.");
-                BepinPlugin.Log.LogDebug($"[Forge] Sector {departed.Id} exited with no Forge installed — meter award withheld.");
+                BepinPlugin.Log.LogInfo($"[Forge] Sector {departed.Id} exited with no Forge installed — meter award withheld.");
                 return;
             }
 
             if (departed.ObjectiveState != ObjectiveState.Completed)
             {
                 Messaging.Notification("The Forge gains nothing from an unfinished sector.");
-                BepinPlugin.Log.LogDebug(
+                BepinPlugin.Log.LogInfo(
                     $"[Forge] Sector {departed.Id} objective {departed.ObjectiveState} (not Completed) — meter award withheld.");
                 return;
             }

@@ -178,9 +178,14 @@ internal sealed class RegisteredModule
         VanillaAssetRegistrar.RegisterModuleDef(boxGuid, template.name, Definition.Category);
         VanillaAssetRegistrar.RegisterRarity(boxGuid, template.name, Definition.Rarity);
 
-        BepinPlugin.Log.LogDebug(
+        // Path and header are read BACK out of the container rather than echoed from the
+        // locals above: the bug this line exists to catch is another registrar winning the
+        // race and leaving the donor's name/hover text in place (#34).
+        BepinPlugin.Log.LogInfo(
             $"[ModuleKit] {template.name} template ready — cloned from donor {donorGuid.AsHex()}, " +
             $"moduleRef -> {moduleGuid.AsHex()}, registered as {boxGuid.AsHex()}; " +
+            $"def path='{VanillaAssetRegistrar.GetObjectDefPath(boxGuid)}', " +
+            $"header='{VanillaAssetRegistrar.GetContextInfo(boxGuid)?.HeaderText}'; " +
             $"runtime asset {(VanillaAssetRegistrar.GetAsset(boxGuid) == template ? "is this template" : "IS NOT this template")}.");
         return template;
     }
