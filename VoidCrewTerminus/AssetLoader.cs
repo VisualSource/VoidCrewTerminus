@@ -16,9 +16,6 @@ namespace VoidCrewTerminus;
 
 // ".metem_ext" avoids the game's own *.metem auto-loader (RuntimeAssetLoadingService),
 // which would race this loader and choke on our custom prefab.
-//
-// Bundle discovery and routing only — what it takes to make a bundle prefab work as a
-// ship module lives in ModuleKit/, configured by ForgeModule below.
 public class AssetLoader
 {
     // Bundles this assembly loaded, for hot-reload teardown.
@@ -93,6 +90,8 @@ public class AssetLoader
 
     // Routes bundle content to the game's RuntimeAssets pipeline or to ModuleKit,
     // depending on what the game's converter can handle (only carryables/cosmetics).
+    // The two UI Toolkit assets match by name — neither is a VoidCrewAsset-tagged
+    // GameObject, so the usual VCA lookup can't see them.
     private static void LoadBundle(string filepath)
     {
         var bundle = AssetBundle.LoadFromFile(filepath);
@@ -115,8 +114,6 @@ public class AssetLoader
 
         foreach (var asset in bundle.LoadAllAssets())
         {
-            // A VisualTreeAsset/PanelSettings isn't a VoidCrewAsset-tagged GameObject,
-            // so these two are matched by asset name instead of the usual VCA lookup.
             if (asset is VisualTreeAsset vta && vta.name == UpgradeForgeBehavior.ForgeScreenLayoutName)
             {
                 _forgeScreenVisualTree = vta;
