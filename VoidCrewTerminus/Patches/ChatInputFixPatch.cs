@@ -111,7 +111,7 @@ internal static class ChatInputFix
                 return; // flag isn't set: this is an ordinary chat open
 
             _removeInput.Invoke(chat, null);
-            BepinPlugin.Log.LogInfo(
+            BepinPlugin.Log.LogDebug(
                 "[ChatFix] cleared a stale 'TextChatting' state — chat had latched shut and would " +
                 "otherwise have stayed unusable for the rest of the session.");
         }

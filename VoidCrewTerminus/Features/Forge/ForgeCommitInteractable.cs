@@ -99,7 +99,7 @@ public class ForgeCommitInteractable : ClickerInteractable
 
     private void OnCommit()
     {
-        BepinPlugin.Log.LogInfo($"[Forge] Commit hold completed (GetInstanceID={GetInstanceID()}).");
+        BepinPlugin.Log.LogDebug($"[Forge] Commit hold completed (GetInstanceID={GetInstanceID()}).");
         if (Forge == null) return;
         var player = LocalPlayer.Instance;
         if (player == null) return;

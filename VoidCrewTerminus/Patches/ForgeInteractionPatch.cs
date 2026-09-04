@@ -116,7 +116,7 @@ internal static class ForgeAttachHelper
         if (behavior == null)
         {
             behavior = module.gameObject.AddComponent<UpgradeForgeBehavior>();
-            BepinPlugin.Log.LogInfo($"[Forge] Attached UpgradeForgeBehavior to {module.name}");
+            BepinPlugin.Log.LogDebug($"[Forge] Attached UpgradeForgeBehavior to {module.name}");
         }
         behavior.BuildInteractables();
 
@@ -160,7 +160,7 @@ internal static class ForgeAttachHelper
     // MovingSpacePlatform's own PhysicsScene, which mirrors in only the colliders
     // explicitly handed to AddColliderObject (normally done by CellModule.OnPhotonInstantiate
     // -> BuildSocket.SetModule). Since a bundle-loaded module has repeatedly turned
-    // out not to get things vanilla modules get for free (see GraftModuleComponents),
+    // out not to get things vanilla modules get for free (see ModulePrefabGrafter),
     // this registers defensively rather than trusting that chain blind.
     private static void RegisterShipPlatformCollision(CellModule module, bool forceRebuild = false)
     {

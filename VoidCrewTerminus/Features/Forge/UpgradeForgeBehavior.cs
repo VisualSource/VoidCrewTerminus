@@ -446,24 +446,24 @@ public class UpgradeForgeBehavior : MonoBehaviour
         {
             CreateCommitInteractable(commitAnchor, commitLeverBox, commitLevel, new Vector3(0.3f, 0.3f, 0.3f), layer);
             if (commitLeverBox == null)
-                BepinPlugin.Log.LogInfo("[Forge] Prefab has no LeverBox — Commit will outline the whole module instead of just the lever.");
+                BepinPlugin.Log.LogDebug("[Forge] Prefab has no LeverBox — Commit will outline the whole module instead of just the lever.");
             if (commitLevel == null)
-                BepinPlugin.Log.LogInfo("[Forge] Prefab has no Level — Commit works but the lever won't animate.");
+                BepinPlugin.Log.LogDebug("[Forge] Prefab has no Level — Commit works but the lever won't animate.");
         }
         else
             BepinPlugin.Log.LogWarning("[Forge] Prefab has no CommitTarget anchor — in-world commits unavailable (use !forgecommit).");
         if (alloyAnchor != null)
             CreateInteractable(alloyAnchor, ForgeInteractableKind.AlloyTerminal, new Vector3(0.3f, 0.3f, 0.3f), layer);
         else
-            BepinPlugin.Log.LogInfo("[Forge] Prefab has no AlloyTarget anchor — alloy feeding unavailable in-world (use !setmeter for testing).");
+            BepinPlugin.Log.LogDebug("[Forge] Prefab has no AlloyTarget anchor — alloy feeding unavailable in-world (use !setmeter for testing).");
         if (deconstructTrigger != null)
         {
             CreateDeconstructInteractable(deconstructTrigger, deconstructHandle, layer);
             if (deconstructHandle == null)
-                BepinPlugin.Log.LogInfo("[Forge] Prefab has no Handle — deconstruct works but the lever won't animate.");
+                BepinPlugin.Log.LogDebug("[Forge] Prefab has no Handle — deconstruct works but the lever won't animate.");
         }
         else
-            BepinPlugin.Log.LogInfo("[Forge] Prefab has no DeconstructTrigger — in-world deconstruct unavailable.");
+            BepinPlugin.Log.LogDebug("[Forge] Prefab has no DeconstructTrigger — in-world deconstruct unavailable.");
 
         if (alloyScreen != null)
         {
@@ -471,14 +471,14 @@ public class UpgradeForgeBehavior : MonoBehaviour
                 alloyScreen.gameObject.AddComponent<ForgeScreenDisplay>();
         }
         else
-            BepinPlugin.Log.LogInfo("[Forge] Prefab has no AlloyTerminalScreen — level/alloy readout unavailable.");
+            BepinPlugin.Log.LogDebug("[Forge] Prefab has no AlloyTerminalScreen — level/alloy readout unavailable.");
 
         if (_tubeAnchors.Length == 0 || _inputAnchor == null)
             BepinPlugin.Log.LogWarning(
                 $"[Forge] Prefab anchors incomplete (tubes={_tubeAnchors.Length}, input={(_inputAnchor != null ? "ok" : "missing")}) — " +
                 "check the metem bundle matches UpgradeForgeModuleCell.prefab.");
         else
-            BepinPlugin.Log.LogInfo($"[Forge] Built interactables: {_tubeAnchors.Length} relic tubes, module socket{(commitAnchor != null ? ", commit button" : "")}.");
+            BepinPlugin.Log.LogDebug($"[Forge] Built interactables: {_tubeAnchors.Length} relic tubes, module socket{(commitAnchor != null ? ", commit button" : "")}.");
 
         RefreshTubeVisibility();
     }
@@ -876,11 +876,11 @@ public class UpgradeForgeBehavior : MonoBehaviour
             if (box != null && box == _moduleBox)
             {
                 TryReleaseModule(out _);
-                BepinPlugin.Log.LogInfo($"[Forge] Module box {go.name} retrieved from socket.");
+                BepinPlugin.Log.LogDebug($"[Forge] Module box {go.name} retrieved from socket.");
             }
             else if (_relics.Remove(go))
             {
-                BepinPlugin.Log.LogInfo($"[Forge] Relic {go.name} retrieved ({RelicCount}/{Capacity} remain).");
+                BepinPlugin.Log.LogDebug($"[Forge] Relic {go.name} retrieved ({RelicCount}/{Capacity} remain).");
             }
         }
         _grabbedScratch.Clear();

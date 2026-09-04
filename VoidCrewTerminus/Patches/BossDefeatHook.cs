@@ -37,7 +37,7 @@ internal static class BossDefeatHook
         bus.OnObjectiveStateChanged.Unsubscribe(OnObjectiveStateChanged);
         bus.OnObjectiveStateChanged.Subscribe(OnObjectiveStateChanged);
         _subscribed = true;
-        BepinPlugin.Log.LogInfo("[Forge] BossDefeatHook armed for this session.");
+        BepinPlugin.Log.LogDebug("[Forge] BossDefeatHook armed for this session.");
     }
 
     // Hot-reload teardown: a leaked subscription from the old assembly would
@@ -95,7 +95,7 @@ internal static class BossDefeatHook
 
             if (unlockMessage != null)
                 Messaging.Notification(unlockMessage);
-            BepinPlugin.Log.LogInfo(
+            BepinPlugin.Log.LogDebug(
                 $"[Escalation] Boss defeated ({objective.Asset}) — scalar {(wasActive ? "+" + bump : "gated")}, " +
                 $"bosses → {SectorEscalation.BossesDefeated}.");
 
@@ -123,7 +123,7 @@ internal static class BossDefeatHook
         // RuntimeAssetsRegister (what TryFindForgeAssetGuid searches), so a fresh
         // !forgeboxdrop with no prior !forgespawn this session would otherwise
         // find no guid and bail before the template ever gets built.
-        AssetLoader.EnsureBuildBoxTemplateReady();
+        ModuleKit.CustomModuleRegistry.EnsureTemplatesReady();
 
         if (!ForgeSpawnCommand.TryFindForgeAssetGuid(UpgradeForgeBehavior.BuildBoxPrefabName, out var boxGuid))
         {
@@ -136,7 +136,7 @@ internal static class BossDefeatHook
 
         var position = ValidPositionNearPlayerShip(playerShip.transform.position);
         SpawnUtils.SpawnCarePackage(boxGuid, 1, position);
-        BepinPlugin.Log.LogInfo("[Forge] 2nd boss defeated — Forge BuildBox care package incoming.");
+        BepinPlugin.Log.LogDebug("[Forge] 2nd boss defeated — Forge BuildBox care package incoming.");
     }
 
     // Reimplements Objective.GetValidDonutPositionAroundPlayerShip (private, not
