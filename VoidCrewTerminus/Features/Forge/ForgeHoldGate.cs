@@ -106,7 +106,7 @@ internal sealed class ForgeHoldGate
             if (lever != null && TryMeasure(lever, out float seconds))
             {
                 _vanillaDeconstructSeconds = seconds;
-                BepinPlugin.Log.LogInfo(
+                BepinPlugin.Log.LogDebug(
                     $"[Forge] Vanilla deconstruct hold measured at {seconds:0.00}s from {lever.name} — matching it.");
                 return _vanillaDeconstructSeconds;
             }

@@ -473,7 +473,7 @@ private void OnTrackedDestroyableDestroyed(DestroyableComponent destroyed)
   Weak-point <em>placement</em> is inherited. The authored mesh must be modelled so that its readable features &mdash; sacs, vents, launcher clusters &mdash; land on top of the skeleton's existing <code>DestroyableComponent</code> transforms. Otherwise a player shoots a glowing sac and nothing happens, or shoots flat plating and kills a critical. <strong>The skeleton choice is therefore a prerequisite for the art work, not parallel to it.</strong>
 </div>
 
-<p>Bundle-loaded materials need the same shader relink the Forge already performs &mdash; <code>AssetLoader.RelinkBundleShaders</code> re-resolves each material's shader by name against the live build, without which bundle materials render solid black under any light.</p>
+<p>Bundle-loaded materials need the same shader relink the Forge already performs &mdash; <code>ModulePrefabGrafter.RelinkShaders</code> re-resolves each material's shader by name against the live build, without which bundle materials render solid black under any light.</p>
 
 <h2 id="abilities">Ability Composition</h2>
 
