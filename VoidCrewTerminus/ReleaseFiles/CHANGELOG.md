@@ -1,3 +1,11 @@
+## 0.0.21
+- fix module box not being retrievable from the forge socket
+- fix forge status screen rendering black for every non-host player
+- fix forge buildbox showing the donor crate's name and hover text
+- fix spawn command and spawn tab crashing when the game refuses a spawn
+- fix "not in any upgrade chain" flooding the log
+- refactor custom module and buildbox setup into a reusable module kit
+- quieter logs (routine diagnostics moved to debug level)
 ## 0.0.20
 - add chat fix
 ## 0.0.19
