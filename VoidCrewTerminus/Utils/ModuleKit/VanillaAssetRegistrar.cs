@@ -68,7 +68,7 @@ internal static class VanillaAssetRegistrar
         bool fresh = def == null;
         if (fresh) def = new CloneStarObjectDef(guid, path);
 
-        def.Path = path;
+        AssignPath(def.Ref, path);
         def.Ref.IsRuntime = true;
         def.ContextInfo = context;
 
@@ -88,7 +88,7 @@ internal static class VanillaAssetRegistrar
             if (fresh) def = new ModuleDef(guid, path);
 
             def.Category = category;
-            def.Path = path;
+            AssignPath(def.Ref, path);
             def.Ref.IsRuntime = true;
 
             if (fresh) Modules.RegisterRuntimeAsset(guid, def);
@@ -115,6 +115,19 @@ internal static class VanillaAssetRegistrar
         {
             BepinPlugin.Log.LogError($"[ModuleKit] Failed to register {path} ({guid.AsHex()}) into vanilla UnlockContainer: {ex}");
         }
+    }
+
+    // A plain `def.Path = path` does not stick. The setter writes ResourceAssetRef's
+    // _pathCache but leaves _cachedPathGuid at its constructed Empty, so the next getter
+    // sees them disagree, re-resolves through ResourcePaths — which knows nothing about a
+    // runtime guid — and overwrites the assignment with "". Reading once first makes the
+    // getter reconcile the two, after which the assignment survives. Observed twice as
+    // `def path=''` in the template-ready line, leaving spawned instances to fall back on
+    // vanilla naming (#34).
+    private static void AssignPath(ResourceAssetRef reference, string path)
+    {
+        _ = reference.Path;
+        reference.Path = path;
     }
 
     internal static IResourceAssetContextInfo GetContextInfo(GUIDUnion guid) =>

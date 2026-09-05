@@ -1,3 +1,6 @@
+## 0.0.22
+- remove the 0.0.20 chat fixes — they could stop chat from starting and never fixed messages not reaching other players
+- fix forge buildbox instances falling back to vanilla naming (the registered asset path was silently discarded)
 ## 0.0.21
 - fix module box not being retrievable from the forge socket
 - fix forge status screen rendering black for every non-host player
