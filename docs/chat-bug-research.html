@@ -317,8 +317,13 @@
 
   <div class="section-label">Symptom 1 &mdash; nothing sends</div>
   <ul>
-    <li><a href="#s1-vivox">The Vivox channel race</a></li>
+    <li><a href="#s1-send">The send path</a></li>
+    <li><a href="#s1-vivox">The un-awaited race</a></li>
+    <li><a href="#s1-interleave">The interleave</a></li>
+    <li><a href="#s1-entrypoints">Every way in</a></li>
+    <li><a href="#s1-capability">The capability red herring</a></li>
     <li><a href="#s1-arm">A second way to fail</a></li>
+    <li><a href="#s1-fix">Fix shipped</a></li>
   </ul>
 
   <div class="section-label">Attribution</div>
@@ -344,27 +349,29 @@
   <span class="pill">Void Crew 1.3.0</span>
   <span class="pill">Unity 2022.3.62</span>
   <span class="pill">VoidManager 1.2.11</span>
-  <span class="pill">2026-07-19</span>
+  <span class="pill">2026-07-19 &middot; extended 2026-08-30</span>
   <br /><br />
   Written after the 26-07-19 two-client test, where chat problems blocked client-side command testing entirely: the non-host could not run <code>!difficulty</code>, which in turn made it <em>look</em> like escalation state wasn't syncing. It was &mdash; the logs show <code>&rarr; sent</code> / <code>&larr; applied</code> pairs matching on non-default values (see <code>TODO</code>, 8-E).
+  <br /><br />
+  <strong>2026-08-30:</strong> Symptom&nbsp;1 re-investigated against the Unity Vivox SDK and the decompiled adapter after the first fix attempt (the input patch) didn't stop messages going missing. The race is confirmed, the end-state corrected, the &ldquo;inverted channel capability&rdquo; suspicion refuted against <code>VoidCrew.GameLibs&nbsp;1.3.0</code>, and a mod-side workaround shipped. This section absorbs what had been a separate <code>vivox-channel-race-research.md</code>.
 </div>
 
 <h2 id="summary">Summary</h2>
 
-<p class="lead">Two chat symptoms were reported during multiplayer testing. Both are <strong>vanilla game bugs</strong>. Neither is caused by VoidCrewTerminus, and neither is fixed by VoidManager. One has a mod-side workaround, which is shipped; the other does not, and is documented here only.</p>
+<p class="lead">Two chat symptoms were reported during multiplayer testing. Both are <strong>vanilla game bugs</strong>. Neither is caused by VoidCrewTerminus, and neither is fixed by VoidManager. Both now have a mod-side workaround, and both are shipped.</p>
 
 <div class="callout ok">
   <span class="label">Bottom line</span>
-  The chat failures are not a mod regression. Symptom 2 is fixed by <code>ChatInputFixPatch</code>; symptom 1 is an un-awaited async race in the game's Vivox lifecycle that a Harmony patch cannot safely reorder.
+  The chat failures are not a mod regression. Symptom&nbsp;2 is worked around by <code>ChatInputFixPatch</code>; symptom&nbsp;1 by <code>ChatVivoxSendFixPatch</code>, which sidesteps the race <em>at the point of use</em> &mdash; it routes outgoing chat through the group text channel instead of the race-fragile per-recipient direct-message loop, and adds the matching <code>ChannelMessageReceived</code> subscription. Voice chat is untouched. The underlying un-awaited async race in the game's Vivox lifecycle is still worth an upstream report &mdash; the game devs can fix it in three lines with an <code>await</code>.
 </div>
 
 <h2 id="symptoms">The two symptoms</h2>
 
 <div class="verdict">
-  <div class="card open">
-    <span class="tag">Symptom 1 &middot; not fixed</span>
+  <div class="card fixed">
+    <span class="tag">Symptom 1 &middot; fixed</span>
     <span class="title">Chat sends nothing</span>
-    <p>Messages appear to send &mdash; the sender sees their own line &mdash; but the other player sees nothing. Caused by an empty Vivox text channel; documented, deliberately not patched.</p>
+    <p>Messages appear to send &mdash; the sender sees their own line &mdash; but no other player receives it. An un-awaited channel-lifecycle race leaves the adapter's participant list empty, so its per-recipient send loop reaches nobody. Worked around by <code>ChatVivoxSendFixPatch</code>.</p>
   </div>
   <div class="card fixed">
     <span class="tag">Symptom 2 &middot; fixed</span>
@@ -480,37 +487,108 @@ Parameter name: startIndex</span>
 
 <hr />
 
-<h2 id="s1-vivox">Symptom 1 &mdash; The Vivox channel race</h2>
+<h2 id="s1-send">Symptom 1 &mdash; the send path</h2>
 
-<p><code>VivoxAdapter.SendTextMessage</code> returns silently when the channel isn't in the dictionary:</p>
+<p>Ground truth is the decompiled adapter under <code>.voidcrew/decompiled/Assembly-CSharp/</code>; SDK behaviour is cited to <code>docs.unity.com</code> / <code>docs.unity3d.com</code>. The game ships <code>Unity.Services.Vivox</code> (the modern <code>com.unity.services.vivox</code> package), verified against <code>VoidCrew.GameLibs 1.3.0</code>.</p>
 
-<div class="patch-label">VivoxAdapter.cs &mdash; decompiled</div>
+<p><code>VivoxAdapter.SendTextMessage</code> does <strong>not</strong> send a channel message. It iterates the adapter's own locally-maintained participant list and sends one <em>directed</em> message per recipient, then locally echoes:</p>
+
+<div class="patch-label">VivoxAdapter.cs:360-374 &mdash; decompiled</div>
 <pre><code><span class="kw">public</span> <span class="kw">void</span> <span class="mth">SendTextMessage</span>(<span class="kw">string</span> message)
 {
     <span class="kw">if</span> (!channelUsers.<span class="mth">TryGetValue</span>(textChannel, <span class="kw">out var</span> value))
     {
-        <span class="kw">return</span>;                       <span class="cm">// silent — no log, no error</span>
+        <span class="kw">return</span>;                       <span class="cm">// (A) hard fail — no echo either</span>
     }
-    <span class="kw">foreach</span> (VivoxParticipant value3 <span class="kw">in</span> value.Forward.Values) { ... }
-    <span class="mth">FireMessageReceivedEvent</span>(VivoxService.Instance.SignedInPlayerId, message);   <span class="cm">// local echo</span>
+    <span class="kw">foreach</span> (VivoxParticipant value3 <span class="kw">in</span> value.Forward.Values)
+    {
+        <span class="kw">if</span> (!value3.IsSelf &amp;&amp; !blocked)
+            VivoxService.Instance.<span class="mth">SendDirectTextMessageAsync</span>(value3.PlayerId, message, <span class="kw">null</span>);
+    }
+    <span class="mth">FireMessageReceivedEvent</span>(VivoxService.Instance.SignedInPlayerId, message);   <span class="cm">// (B) local echo — always runs past (A)</span>
 }</code></pre>
 
-<p>Two consequences: messages are sent as <strong>per-recipient direct messages</strong> rather than to the group channel, so an empty participant list transmits nothing; and the sender still gets a <strong>local echo</strong>, so chat looks like it works from their side.</p>
+<p><code>FireMessageReceivedEvent</code> raises <code>OnMessageReceived</code>, which <code>TextChat</code> turns into a chat-log line (<code>TextChat.cs:83-93</code>, <code>238-244</code>). It is the <strong>only</strong> local-echo path &mdash; <code>TextChat.SendMsg()</code> adds nothing to the UI itself, and VoidManager's chat patches are additive.</p>
 
-<p><code>textChannel</code> goes empty because of an un-awaited race in <code>VoipBoostrap.OnJoinedRoom</code>:</p>
+<p>So the reported symptom &mdash; <em>sender sees their own line, nobody else receives it</em> &mdash; pins the failure to one specific state:</p>
 
-<div class="patch-label">VoipBoostrap.cs &mdash; decompiled</div>
+<table class="data">
+  <tr><th>State at send time</th><th>Guard (A)</th><th>Loop (B) sends</th><th>Local echo</th><th>Matches report?</th></tr>
+  <tr><td class="k"><code>textChannel == ""</code></td><td>fails</td><td class="muted">&mdash;</td><td class="muted"><strong>no</strong></td><td class="muted">✗ (no echo)</td></tr>
+  <tr><td class="k"><code>textChannel</code> set, not a key in <code>channelUsers</code></td><td>fails</td><td class="muted">&mdash;</td><td class="muted"><strong>no</strong></td><td class="muted">✗ (no echo)</td></tr>
+  <tr><td class="k"><code>textChannel</code> set, key present, dict <strong>empty / self-only</strong></td><td>passes</td><td><strong>nothing</strong></td><td><strong>yes</strong></td><td>✔</td></tr>
+  <tr><td class="k"><code>textChannel</code> set, key present, remote participant present</td><td>passes</td><td>1+ DMs</td><td>yes</td><td class="muted">✗ (works)</td></tr>
+</table>
+
+<div class="callout note">
+  <span class="label">Correction to the original note</span>
+  The earlier draft said the race leaves <code>textChannel</code> <em>empty</em> (row 1). If that were the real state, <code>SendTextMessage</code> returns at guard&nbsp;(A) <strong>before</strong> the echo &mdash; the sender would see nothing either. The observed &ldquo;my line shows, theirs don't&rdquo; is <strong>row&nbsp;3</strong>: a <code>_chat</code> entry that exists in <code>channelUsers</code> but never received the remote player's <code>ParticipantAddedToChannel</code>. Rows&nbsp;1&ndash;2 are a stricter, distinct failure (chat looks completely dead). All three are reachable from the same race.
+</div>
+
+<p><strong>Directed vs. channel messages &mdash; the fragility is the local dict, not Vivox.</strong> Unity's docs state a directed message <em>&ldquo;can be sent to any signed-in user independent of being in a channel together&rdquo;</em> (<a href="https://docs.unity.com/en-us/vivox-unity/developer-guide/messaging/directed-messages">Directed messages</a>). The per-recipient calls would themselves succeed &mdash; the failure is purely that the loop has <strong>no <code>PlayerId</code>s to iterate</strong>, because <code>channelUsers[textChannel]</code> is the game's own bookkeeping and the race emptied it. A channel message (<code>SendChannelTextMessageAsync(channelName, &hellip;)</code>) needs only the channel to exist with text capability and carries <strong>no dependency on <code>channelUsers</code></strong> (<a href="https://docs.unity.com/en-us/vivox-unity/developer-guide/messaging/channel-messages">Channel messages</a>). That is the seam the fix uses.</p>
+
+<h2 id="s1-vivox">The un-awaited race</h2>
+
+<p><code>VoipBoostrap.OnJoinedRoom</code> discards the <code>Task</code> from <code>LeaveChannels()</code> and calls <code>JoinChannels()</code> synchronously:</p>
+
+<div class="patch-label">VoipBoostrap.cs:93-101 &mdash; decompiled</div>
 <pre><code><span class="kw">public</span> <span class="kw">void</span> <span class="mth">OnJoinedRoom</span>()
 {
     Debug.<span class="mth">Log</span>((<span class="kw">object</span>)(<span class="str">"[VIVOX] JOINED ROOM: "</span> + PhotonNetwork.CurrentRoom.Name));
     VoipService.Instance?.<span class="mth">LeaveChannels</span>();      <span class="cm">// returns Task — discarded, never awaited</span>
     <span class="kw">if</span> (VoipService.Instance != <span class="kw">null</span>)
     {
-        VoipService.Instance.<span class="mth">JoinChannels</span>();    <span class="cm">// fires immediately</span>
+        VoipService.Instance.<span class="mth">JoinChannels</span>();    <span class="cm">// runs synchronously, immediately</span>
     }
 }</code></pre>
 
-<p><code>LeaveChannels()</code> wraps <code>LeaveAllChannelsAsync()</code> and also does <code>AudioChannel = ""</code>, <code>textChannel = ""</code>, <code>channelUsers.Clear()</code>. If the in-flight leave resolves <em>after</em> the joins are issued, it tears down the channels just joined. The captured log shows exactly that ordering:</p>
+<p><code>LeaveChannels()</code> does its teardown <strong>synchronously</strong> and only then starts the async leave:</p>
+
+<div class="patch-label">VivoxAdapter.cs:439-453 &mdash; decompiled</div>
+<pre><code><span class="kw">public</span> Task <span class="mth">LeaveChannels</span>()
+{
+    AudioChannel = <span class="str">""</span>;
+    textChannel  = <span class="str">""</span>;                                <span class="cm">// synchronous clear</span>
+    channelUsers.<span class="mth">Clear</span>();                            <span class="cm">// synchronous clear</span>
+    Task result = VivoxService.Instance.<span class="mth">LeaveAllChannelsAsync</span>();   <span class="cm">// in flight; caller discards it</span>
+    OnLeaveCahnnels?.<span class="mth">Invoke</span>();
+    <span class="kw">return</span> result;
+}</code></pre>
+
+<p><code>JoinChannels()</code> then fires two more un-awaited <code>Task</code>s (<code>VivoxAdapter.cs:411-429</code>). The <code>ChannelJoined</code> / <code>ChannelLeft</code> / <code>ParticipantAddedToChannel</code> event callbacks that mutate <code>textChannel</code> and <code>channelUsers</code> land on later frames, and there is <strong>no documented ordering</strong> between an in-flight <code>LeaveAllChannelsAsync</code> and a <code>JoinGroupChannelAsync</code> issued before it resolves (<a href="https://docs.unity3d.com/Packages/com.unity.services.vivox@16.6/api/Unity.Services.Vivox.IVivoxService.html">IVivoxService</a>).</p>
+
+<div class="callout danger">
+  <span class="label">A second inconsistency</span>
+  <code>LeaveChannels()</code> clears <code>textChannel</code>; <code>LeftChannel</code> (the <code>ChannelLeft</code> handler, <code>VivoxAdapter.cs:144-148</code>) only does <code>channelUsers.Remove(channel)</code> &mdash; it <strong>never clears <code>textChannel</code></strong>. A <code>ChannelLeft</code> that arrives without a matching <code>LeaveChannels()</code> call (the tail of an earlier async leave, or SDK-initiated teardown during connection churn) removes <code>channelUsers[textChannel]</code> while <code>textChannel</code> keeps pointing at the now-absent key &mdash; <strong>row&nbsp;2</strong> of the send-path table, hard fail, no echo. Distinct from the row-3 symptom, and a session can move between them.
+</div>
+
+<div class="callout warn">
+  <span class="label">The SDK agrees this pattern is unsafe</span>
+  Unity's Vivox changelog: <strong>16.2.0</strong> (2024-03-19) &mdash; <em>&ldquo;Fixed an issue where leaving and immediately rejoining a channel result[ed] in an exception being thrown due to not being completely disconnected from the channel yet.&rdquo;</em> <strong>16.5.4</strong> (2024-12-18) &mdash; <em>&ldquo;a bug where trying to join multiple channels quickly would lead to an exception.&rdquo;</em> Both patterns are present verbatim in <code>OnJoinedRoom</code> &rarr; <code>JoinChannels</code>. (<a href="https://docs.unity3d.com/Packages/com.unity.services.vivox@16.6/changelog/CHANGELOG.html">CHANGELOG</a>)
+</div>
+
+<h2 id="s1-interleave">The interleave</h2>
+
+<p>Timeline from <code>OnJoinedRoom</code>, main thread unless noted. The order of the four event groups is <strong>not</strong> guaranteed.</p>
+
+<div class="patch-label">execution order</div>
+<pre><code>Frame N  (PhotonHandler.Dispatch -&gt; IMatchmakingCallbacks.OnJoinedRoom)
+  L1  LeaveChannels():  AudioChannel="" ; textChannel="" ; channelUsers.Clear()
+                        t_leave = LeaveAllChannelsAsync()      &lt;- in flight, discarded
+  J1  JoinChannels():   JoinGroupChannelAsync("&lt;room&gt;_audio", AudioOnly, MakeActive)   &lt;- in flight
+                        JoinGroupChannelAsync("&lt;room&gt;_chat",  TextOnly,  MakeActive)   &lt;- in flight
+  OnJoinedRoom returns.  channelUsers is EMPTY, textChannel == "".
+
+Frames N+1 ... N+k   (any order)
+  E-JoinC   ChannelJoined("&lt;room&gt;_chat")   -&gt; textChannel = "&lt;room&gt;_chat"
+                                              channelUsers.Add("&lt;room&gt;_chat", {})   &lt;- entry exists, EMPTY
+  E-PartC   ParticipantAddedToChannel(remote in _chat) -&gt; channelUsers["&lt;room&gt;_chat"] gains the peer
+  E-Leave   t_leave resolves -&gt; ChannelLeft("&lt;room&gt;_chat") -&gt; channelUsers.Remove("&lt;room&gt;_chat")
+                                              textChannel NOT touched -&gt; still "&lt;room&gt;_chat"</code></pre>
+
+<p>If <code>E-Leave</code> lands after <code>E-JoinC</code> and the SDK does <strong>not</strong> re-emit <code>E-PartC</code> for the remote player (from its view nothing changed, or the 16.2.0 &ldquo;not completely disconnected yet&rdquo; defect corrupted the join), the resting state is <code>textChannel</code> set but <code>channelUsers</code> has no <code>_chat</code> key &rarr; row&nbsp;2. If <code>E-Leave</code> was effectively a no-op (nothing joined when it ran) and the rapid <code>_audio</code>+<code>_chat</code> join tripped the 16.5.4 defect, <code>E-PartC</code> for the remote player never arrives &rarr; <code>channelUsers["&lt;room&gt;_chat"]</code> stays empty &rarr; row&nbsp;3, <strong>the reported symptom</strong>.</p>
+
+<p>The captured log excerpt is the <code>E-Leave</code>-after-<code>J1</code> ordering &mdash; the two <code>[VIVOX] Joining channel</code> lines are logged synchronously inside <code>JoinChannels</code>, <em>then</em> the discarded <code>t_leave</code> resolves and its <code>ChannelLeft</code> callbacks run:</p>
 
 <div class="patch-label">Player log &mdash; leave resolves after join</div>
 <pre><code>[VIVOX] Joining channel: 677419_chat
@@ -519,7 +597,7 @@ Parameter name: startIndex</span>
 [VIVOX] Left channel: 677419_audio
 [VIVOX] Left channel: 677419_chat</code></pre>
 
-<p>The fingerprint is the follow-on error, with a <strong>blank channel name</strong> and an <strong>empty participant list</strong>:</p>
+<p>The follow-on error carries a <strong>blank channel name</strong> and an <strong>empty participant list</strong> &mdash; <code>GetParticipant</code> printing an emptied <code>AudioChannel</code> (and, secondary bug, ignoring its own <code>channel</code> parameter to always index <code>AudioChannel</code>):</p>
 
 <div class="patch-label">Player log &mdash; the fingerprint</div>
 <pre><code><span class="exc">[Vivox] Player not found.</span>
@@ -527,12 +605,42 @@ Parameter name: startIndex</span>
  channel:
 Players in channel:</code></pre>
 
-<p>That comes from <code>GetParticipant</code>, which prints <code>AudioChannel</code> &mdash; blank because <code>LeaveChannels</code> emptied it. (Secondary bug: <code>GetParticipant</code> ignores its own <code>channel</code> parameter and always indexes <code>AudioChannel</code>.)</p>
-
-<div class="callout warn">
-  <span class="label">Not fixed deliberately</span>
-  A fix means reordering async Vivox lifecycle from a Harmony patch; getting it wrong breaks voice chat as well as text. Worth an upstream report.
+<div class="callout note">
+  <span class="label">Verdict</span>
+  <strong>CONFIRMED</strong> the race exists and can empty or orphan <code>channelUsers[_chat]</code>; <strong>LIKELY</strong> a primary cause of the reported symptom; the precise resting row (1&nbsp;vs&nbsp;2&nbsp;vs&nbsp;3) is <strong>UNKNOWN</strong> without the full player logs, which are not in the repo.
 </div>
+
+<h2 id="s1-entrypoints">Every way in</h2>
+
+<p>Not just first join &mdash; the un-awaited leave&rarr;join shape recurs, and every reconnect re-arms it:</p>
+
+<table class="data">
+  <tr><th>Path</th><th>Code</th><th>Shape</th></tr>
+  <tr><td class="k">Room join / rejoin</td><td class="k">VoipBoostrap.OnJoinedRoom<br /><span class="muted">VoipBoostrap.cs:93-101</span></td><td><code>LeaveChannels()</code> (discarded) &rarr; <code>JoinChannels()</code> synchronously. Fires on <em>every</em> join for the life of the process.</td></tr>
+  <tr><td class="k">Return to main menu</td><td class="k">VoipBoostrap.GameStateChanged<br /><span class="muted">VoipBoostrap.cs:108-114</span></td><td><code>LeaveChannels()</code> only (discarded). A later room join then races its tail.</td></tr>
+  <tr><td class="k">Vivox reconnect helper</td><td class="k">VivoxReconnect.Recovered<br /><span class="muted">VivoxReconnect.cs:22-44</span></td><td><code>if (ActiveChannels.Count &lt; 2) { LeaveChannels(); JoinChannels(); }</code> &mdash; <strong>both Tasks discarded, no await.</strong> Identical defect, fires after connection recovery.</td></tr>
+  <tr><td class="k">Connection recovery</td><td class="k">VivoxAdapter.OnLoggedIn &rarr; CheckRoom<br /><span class="muted">VivoxAdapter.cs:431-437, 589-595</span></td><td><code>JoinChannels()</code> with <strong>no</strong> preceding leave &mdash; relies on prior state being clean.</td></tr>
+  <tr><td class="k">Vivox hard reconnect</td><td class="k">VivoxAdapter.Reconnect<br /><span class="muted">VivoxAdapter.cs:540-587</span></td><td>The one path that gets it right: <code>await LeaveChannels()</code>, <code>await LogoutAsync()</code>, then <code>JoinChannels()</code>.</td></tr>
+</table>
+
+<p>So the bug is reproducible on first join and re-armed by every reconnect, recovery, and menu&rarr;game transition &mdash; consistent with the community reports where a full <strong>restart</strong> is the reliable workaround (<a href="https://steamcommunity.com/app/1063420/discussions/2/603040419439421991/">Steam &mdash; &ldquo;VoIP doesn't work&rdquo;</a>).</p>
+
+<h2 id="s1-capability">The capability red herring</h2>
+
+<p>The decompiled join passes raw enum casts:</p>
+
+<div class="patch-label">VivoxAdapter.cs:426-427 &mdash; decompiled</div>
+<pre><code>VivoxService.Instance.<span class="mth">JoinGroupChannelAsync</span>(&hellip; + <span class="str">"_audio"</span>, (ChatCapability)<span class="num">1</span>, val);
+VivoxService.Instance.<span class="mth">JoinGroupChannelAsync</span>(&hellip; + <span class="str">"_chat"</span>,  (ChatCapability)<span class="num">0</span>, val);</code></pre>
+
+<p>The published online docs for some Vivox versions list <code>AudioOnly = 0, TextOnly = 1</code>, which would mean the game joins its <code>_chat</code> channel with <strong>text disabled</strong> &mdash; a candidate primary cause. <strong>Checked against the shipped SDK and refuted:</strong> reflecting <code>Unity.Services.Vivox.dll</code> from <code>VoidCrew.GameLibs 1.3.0</code> gives</p>
+
+<div class="patch-label">Unity.Services.Vivox 1.3.0 &mdash; reflected</div>
+<pre><code>ChatCapability.TextOnly     = 0
+ChatCapability.AudioOnly    = 1
+ChatCapability.TextAndAudio = 2</code></pre>
+
+<p>So <code>(ChatCapability)0</code> for <code>_chat</code> is <strong><code>TextOnly</code> &mdash; correct</strong>, and <code>(ChatCapability)1</code> for <code>_audio</code> is <code>AudioOnly</code> &mdash; correct. The channel capabilities are not the bug. The race is the sole cause.</p>
 
 <h2 id="s1-arm">A second, independent way chat can fail to arm</h2>
 
@@ -545,6 +653,38 @@ Players in channel:</code></pre>
 });</code></pre>
 
 <p><code>ChatEnabled</code> is a <strong>property that starts a fresh task on every access</strong> (<code>PAL.Privileges.HasCommunicationsPrivilege(false)</code>), so the three call sites get unrelated tasks with no ordering between them. The continuations also run on the ThreadPool &mdash; no <code>TaskScheduler.FromCurrentSynchronizationContext()</code>, which <code>VivoxAdapter</code> itself passes correctly elsewhere &mdash; so <code>InputAction.performed</code> delegate lists get mutated off the main thread. A disable/enable pair landing out of order leaves the component enabled with zero handlers attached, and Enter does nothing.</p>
+
+<p>This one is <strong>not</strong> addressed by the shipped fix &mdash; it is a separate arming race in <code>TextChat</code>, not the send path. Left documented; a targeted patch would need to serialise the <code>ChatEnabled</code> continuations onto the main thread.</p>
+
+<hr />
+
+<h2 id="s1-fix">Fix shipped</h2>
+
+<p>Implemented in <code>VoidCrewTerminus/Patches/ChatVivoxSendFixPatch.cs</code>. It does not try to reorder the game's async lifecycle &mdash; it neutralises every end state of the race <em>at the point of use</em>:</p>
+
+<table class="data">
+  <tr><th>Patch</th><th>Target</th><th>Effect</th></tr>
+  <tr><td class="k">Prefix</td><td class="k">VivoxAdapter.SendTextMessage</td><td>Resolve the live <code>_chat</code> channel &mdash; the private <code>textChannel</code> field, else a scan of <code>VivoxService.ActiveChannels</code> for a key ending <code>_chat</code> &mdash; and send one <code>SendChannelTextMessageAsync</code> to it. No dependency on <code>channelUsers</code>. Keeps the same local echo via the game's own <code>FireMessageReceivedEvent(signedInId, text)</code>. Returns <code>false</code> (falls through to vanilla) on any doubt: disabled, unresolved members, no channel name, or a thrown exception.</td></tr>
+  <tr><td class="k">Postfix</td><td class="k">VivoxAdapter&nbsp;ctor</td><td>Subscribe <code>VivoxService.ChannelMessageReceived</code> and forward every message with <code>FromSelf == false</code> into <code>FireMessageReceivedEvent(msg.SenderPlayerId, msg.MessageText)</code>. The game only wires up <code>DirectedMessageReceived</code>, so without this the receive side would miss channel messages.</td></tr>
+  <tr><td class="k">Postfix</td><td class="k">VivoxAdapter.Dispose</td><td>Unsubscribe that handler. Re-attach on any later adapter re-creation (handlers are never stacked).</td></tr>
+</table>
+
+<p><strong>Why the seam is safe.</strong> A channel message needs only that the channel exists with text capability (<a href="https://docs.unity.com/en-us/vivox-unity/developer-guide/messaging/channel-messages">Channel messages</a>) &mdash; and <em>The capability red herring</em> above confirmed <code>_chat</code> is joined <code>TextOnly</code>. Delivery no longer depends on the adapter's participant bookkeeping, which is exactly what the race corrupts. The <code>ActiveChannels</code> scan also covers rows&nbsp;1&ndash;2 (empty / stale <code>textChannel</code>).</p>
+
+<div class="callout ok">
+  <span class="label">Blast radius on voice: nil</span>
+  Voice is the separate <code>_audio</code> channel, muting, and speech detection &mdash; none of that code is on this path. <code>SendTextMessage</code> is text-only, and the patch never touches the join/leave lifecycle.
+</div>
+
+<div class="callout note">
+  <span class="label">Degradation</span>
+  Config gate: <code>EnableVivoxTextSendFix</code> (section <code>fixes</code>, default on). All private members resolved via <code>AccessTools</code> with one-shot resolve logging, so a game update that moves <code>VivoxAdapter</code> makes the fix inert and <em>says so</em> rather than failing <code>CreateAndPatchAll</code>. A faulted <code>SendChannelTextMessageAsync</code> is logged once with a hint that the channel may lack text capability.
+</div>
+
+<div class="callout warn">
+  <span class="label">Still worth an upstream report</span>
+  The root cause is <code>VoipBoostrap.OnJoinedRoom</code> (and <code>VivoxReconnect.Recovered</code>) discarding the leave <code>Task</code>. The game devs can fix it with an <code>await</code>; the mod-side patch is a workaround over a private field and async lifecycle, brittle across game updates by design.
+</div>
 
 <hr />
 
@@ -587,7 +727,7 @@ CompositeWeaponBuildBox                  ContextInfoProvider     Deconstruct
 DestroyableComponent                     FabricationTab          HubShipManager
 LootManager     OrbitObject              RecycleTab              SpawnerProfile</code></pre>
 
-<p>&mdash; nothing touching chat, input, or focus. (<code>ChatInputFixPatch</code> above is the first, added <em>after</em> this research.)</p>
+<p>&mdash; nothing touching chat, input, or focus. (<code>ChatInputFixPatch</code> and <code>ChatVivoxSendFixPatch</code> are the only chat-context patches, both added <em>after</em> this research and both pure workarounds for the vanilla bugs above.)</p>
 
 <hr />
 
@@ -599,16 +739,23 @@ LootManager     OrbitObject              RecycleTab              SpawnerProfile<
   <li><strong>The chat UXML/USS is not available</strong>, so whether <code>chat-log-input__disabled</code> sets <code>display: none</code> &mdash; which would change the focus semantics &mdash; is unverified.</li>
   <li><strong>VoidManager 1.2.11's binary was not inspected</strong> (only 1.2.7 and 1.2.10 are in the local NuGet cache). Chat strings are identical between those two and the master-branch source is labelled 1.2.11, so drift is unlikely but unconfirmed.</li>
   <li><strong>Upstream issue tracker not fully checked.</strong> <code>Nihility-Shift/VoidManager</code> reports 0 issues, but its README badges point at <code>Void-Crew-Modding-Team/VoidManager</code>, which may hold the real tracker. Not checked.</li>
-  <li><strong>No deterministic repro was found for either symptom.</strong> Both are timing-dependent. The fix for symptom 2 is therefore reasoned from source, not validated against a reproduction.</li>
+  <li><strong>No deterministic repro was found for either symptom.</strong> Both are timing-dependent. The fixes are therefore reasoned from source, not validated against a reproduction.</li>
+  <li><strong>The exact resting state of the Symptom&nbsp;1 race (row&nbsp;1 vs&nbsp;2 vs&nbsp;3 of the send-path table)</strong> needs the full <code>VoidCrewTerminus-LogOutput-2026-07-20_*.log</code> pair, which is <strong>not in the repo</strong>. Decisive evidence: whether a <code>[VIVOX] Joined channel: &lt;room&gt;_chat</code> appears <em>after</em> the last <code>Left channel: &lt;room&gt;_chat</code>, and whether any <code>[VIVOX] Adding participant &hellip; (channel: &lt;room&gt;_chat)</code> ever names a <em>remote</em> PlayerId. The shipped fix does not depend on which row it is &mdash; it covers all three.</li>
+  <li><strong>Thread affinity of Vivox events.</strong> No first-party doc page reached states which thread <code>ChannelJoined</code> / <code>ParticipantAddedToChannel</code> / <code>ChannelMessageReceived</code> fire on. Assumed Unity main thread from the game's own un-locked <code>Dictionary</code> use and its single <code>TaskScheduler.FromCurrentSynchronizationContext()</code> call site; the fix's receive handler makes the same assumption vanilla's <code>DirectedMessageReceived</code> handler already does.</li>
+  <li><strong>Whether the SDK re-emits <code>ParticipantAddedToChannel</code> after a same-name leave/rejoin.</strong> This is the hinge of the &ldquo;participant list never repopulates&rdquo; mechanism. Not documented; not testable without a repro build.</li>
+  <li><strong>Which Unity Vivox package version Void Crew bundles.</strong> The <code>ChatCapability</code> enum was pinned from <code>VoidCrew.GameLibs 1.3.0</code>'s <code>Unity.Services.Vivox.dll</code>; the CHANGELOG defects cited are 16.2.0&ndash;16.5.4 (2024). The game's own un-awaited leave&rarr;join is upstream of any SDK fix regardless.</li>
 </ul>
 
 <h2 id="sources">Sources</h2>
 
 <ul class="bullets">
-  <li>Decompiled game source, <code>.voidcrew/decompiled/Assembly-CSharp/</code>: <code>Gameplay.Chat/TextChat.cs</code>, <code>UI.Chat/TextChatVE.cs</code>, <code>VivoxAdapter.cs</code>, <code>VoipBoostrap.cs</code>, <code>CG.Input/InputActionMapRequests.cs</code>, <code>MenuScreenController.cs</code>, <code>UI/UIToolkitNavigationExtensions.cs</code></li>
+  <li>Decompiled game source, <code>.voidcrew/decompiled/Assembly-CSharp/</code>: <code>Gameplay.Chat/TextChat.cs</code>, <code>UI.Chat/TextChatVE.cs</code>, <code>VivoxAdapter.cs</code> (<code>SendTextMessage</code> 360-374, <code>LeaveChannels</code> 439-453, <code>JoinChannels</code> 411-429, <code>JoinedChannel</code> 150-173, <code>LeftChannel</code> 144-148, <code>Reconnect</code> 540-587), <code>VoipBoostrap.cs</code> (<code>OnJoinedRoom</code> 93-101, <code>GameStateChanged</code> 108-114), <code>VoipService.cs</code>, <code>MockVoiceChat.cs</code>, <code>VivoxReconnect.cs</code>, <code>RuntimeSettings.cs</code>, <code>CG.Input/InputActionMapRequests.cs</code>, <code>MenuScreenController.cs</code>, <code>UI/UIToolkitNavigationExtensions.cs</code>; <code>PhotonUnityNetworking/Photon.Pun/PhotonNetwork.cs</code>, <code>PhotonHandler.cs</code></li>
+  <li>Reflected: <code>Unity.Services.Vivox.dll</code> from <code>VoidCrew.GameLibs 1.3.0</code> (NuGet cache) &mdash; <code>IVivoxService.SendChannelTextMessageAsync</code>, <code>ChannelMessageReceived</code>, <code>SignedInPlayerId</code>, <code>ActiveChannels</code>; <code>VivoxMessage</code> members; <code>ChatCapability</code> enum values</li>
+  <li>Unity Vivox SDK docs: <a href="https://docs.unity3d.com/Packages/com.unity.services.vivox@16.6/api/Unity.Services.Vivox.IVivoxService.html">IVivoxService API</a>, <a href="https://docs.unity.com/en-us/vivox-unity/developer-guide/messaging/channel-messages">Channel messages</a>, <a href="https://docs.unity.com/en-us/vivox-unity/developer-guide/messaging/directed-messages">Directed messages</a>, <a href="https://docs.unity.com/en-us/vivox-unity/developer-guide/channels/participant-events">Participant management</a>, <a href="https://docs.unity3d.com/Packages/com.unity.services.vivox@16.6/changelog/CHANGELOG.html">CHANGELOG</a> (16.2.0, 16.5.0, 16.5.4)</li>
+  <li><a href="https://doc.photonengine.com/pun/current/getting-started/dotnet-callbacks">PUN2 &mdash; callbacks</a> (main-thread dispatch during the service step)</li>
   <li><a href="https://github.com/Nihility-Shift/VoidManager">VoidManager README</a> and <code>VoidManager/Chat/</code> source</li>
-  <li>Unity Issue Tracker entries linked above</li>
-  <li>Player logs <code>VoidCrewTerminus-LogOutput-2026-07-20_00-44-00.log</code> (client) and <code>&hellip;00-44-03.log</code> (host)</li>
+  <li>Unity Issue Tracker entries linked above; community reports: <a href="https://steamcommunity.com/app/1063420/discussions/2/603040419439421991/">Steam &mdash; &ldquo;Neat Game but VoIP doesn't work&rdquo;</a></li>
+  <li>Player logs <code>VoidCrewTerminus-LogOutput-2026-07-20_00-44-00.log</code> (client) and <code>&hellip;00-44-03.log</code> (host) &mdash; referenced in the original write-up, <strong>not present in the repo</strong></li>
 </ul>
 
 <div class="footer">

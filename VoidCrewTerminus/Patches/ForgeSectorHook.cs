@@ -43,7 +43,7 @@ internal static class ForgeSectorHook
 
     // Diagnostic only — confirms enter events flow while we award on exits.
     private static void OnSectorEnteredDiagnostic(GameSessionSector sector) =>
-        BepinPlugin.Log.LogInfo($"[Forge] SectorEntered: id={(sector == null ? "null" : sector.Id.ToString())}");
+        BepinPlugin.Log.LogDebug($"[Forge] SectorEntered: id={(sector == null ? "null" : sector.Id.ToString())}");
 
     private static void OnSectorExited(GameSessionSector departed)
     {

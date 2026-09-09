@@ -4,6 +4,13 @@ Primary-source research feeding the "give the Upgrade Forge its own dedicated
 BuildBox" implementation plan. Ground truth is the decompiled game source under
 `.voidcrew/decompiled/`; repo paths are relative to the repo root.
 
+> **Snapshot, not a living reference.** Mod-side names and line numbers below
+> describe the repo as it stood when the research was written, before the
+> BuildBox work and the `ModuleKit/` extraction landed. Findings about vanilla
+> game code still hold; mod-side references may name methods that have since
+> been renamed or deleted (`ForgeSpawnCommand.TryFindDonorBuildBoxGuid`,
+> `AssetLoader.RegisterModulePrefab`). See `ModuleKit/` for current shape.
+
 ---
 
 ## 1. Custom carryable → loot pool auto-registration
@@ -239,12 +246,12 @@ moves along, driven by player-click threshold events
 (`LeverThresholdTriggerEvent`, `Lever.cs:103`, inherited from
 `ClickerInteractable`). This is unavoidably prefab/hierarchy authoring: a mesh
 + collider + serialized curve, not a value that can be grafted onto a bundle
-asset the way `AssetLoader.GraftModuleComponents` grafts `CellModule`/
+asset the way `ModulePrefabGrafter.Graft` grafts `CellModule`/
 `PowerDrain` fields today.
 
 ### Current Forge state: neither axis is present
 
-`AssetLoader.GraftModuleComponents` (`VoidCrewTerminus/AssetLoader.cs:172-251`)
+`ModulePrefabGrafter.Graft` (`VoidCrewTerminus/ModuleKit/ModulePrefabGrafter.cs`)
 grafts exactly `CellModule`, `PowerDrain`, `OcclusionNode`(s), and `PhotonView`
 onto the bundle-loaded module prefab — **no Mediator, no `ModuleDeconstructButton`,
 no `ExtruderLever`**. `ForgeAttachHelper.TryAttach`

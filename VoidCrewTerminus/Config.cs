@@ -151,13 +151,6 @@ internal static class TerminusConfig
     internal static ConfigEntry<float> BurdenRestoreGraceSeconds;
     internal static float BurdenRestoreGrace => BurdenRestoreGraceSeconds?.Value ?? DefaultBurdenRestoreGraceSeconds;
 
-    // Opt-out: unbound must read true, or defaulting off before Init() would
-    // reintroduce the vanilla bug this works around (chat eats keyboard input).
-    private const bool DefaultEnableChatInputFix = true;
-    [BindConfig("fixes", DefaultEnableChatInputFix, "Work around two vanilla chat bugs: the chat text field is never blurred/deselected when cleared (which makes Unity throw on every later keypress and 'eat' input), and the 'TextChatting' state can latch on so chat never reopens. Turn off if it interferes with anything. See docs/chat-bug-research.md")]
-    internal static ConfigEntry<bool> EnableChatInputFix;
-    internal static bool ChatInputFixEnabled => EnableChatInputFix?.Value ?? DefaultEnableChatInputFix;
-
     private const int DefaultEscalationRareUnlockScalar = 3;
     [BindConfig("forge", DefaultEscalationRareUnlockScalar, "DifficultyScalar at which Rare relics start dropping (below this, Rares in the loot pool are downgraded to Common)")]
     internal static ConfigEntry<int> EscalationRareUnlockScalar;

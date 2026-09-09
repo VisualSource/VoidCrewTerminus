@@ -15,7 +15,7 @@ metem bundle, finds them by name at runtime, and holds items on them with a mod-
 
 This decision was made implicitly during Forge implementation and never recorded. The rationale
 in `ForgeAnchors`' doc comment — game components can't be serialized into a metem bundle — is
-true but **does not justify the choice**: `AssetLoader.GraftModuleComponents` already adds
+true but **does not justify the choice**: `ModulePrefabGrafter.Graft` already adds
 `CellModule`, `PowerDrain` and a `PhotonView` to bundle prefabs at load time, so bundle
 serialization was never the blocker. This ADR records the reason that actually holds.
 

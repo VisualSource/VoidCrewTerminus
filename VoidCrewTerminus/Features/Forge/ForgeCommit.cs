@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using CG.Ship.Modules;
 using CG.Ship.Object;
+using Gameplay.Power;
 using UnityEngine;
 using VoidCrewTerminus.Loot;
 
@@ -80,7 +81,16 @@ internal static class ForgeCommit
         var outcome = resolution.Outcome;
         if (outcome.Status != CommitStatus.Ok) return outcome;
 
-        ForgeStateStore.SaveSnapshot(viewId, resolution.Updated);
+        var rolledBurden = outcome.AppliedBurden;
+        var updated = resolution.Updated;
+        if (rolledBurden != BurdenType.None
+            && !ForgeModuleState.CanCarry(rolledBurden, (box.moduleRef?.Asset as CellModule)?.GetComponent<PowerDrain>()))
+        {
+            outcome = outcome.WithoutBurden();
+            updated = Apply(current, outcome);
+        }
+
+        ForgeStateStore.SaveSnapshot(viewId, updated);
 
         BepinPlugin.Log.LogInfo(
             $"[Forge] Committed L{currentLevel}→L{outcome.NewLevel} on ViewID={viewId} " +
@@ -88,7 +98,7 @@ internal static class ForgeCommit
             $"tier={outcome.BestTier}, perk={ForgeLabels.DescribePerkResult(outcome)})");
 
         LogPerkCausalChain(outcome, facts);
-        LogBurdenCausalChain(outcome, facts);
+        LogBurdenCausalChain(rolledBurden, outcome.AppliedBurden, facts);
 
         // Push the authoritative snapshot to clients (no-ops in solo / no peers).
         Net.ForgeNetSync.BroadcastCommitResult(viewId, resolution.Updated, outcome.RelicsConsumed);
@@ -196,8 +206,9 @@ internal static class ForgeCommit
                 $"→ slot {outcome.TargetSlot + 1}.");
     }
 
-    // A burden roll that never fires must be distinguishable from one that fired and failed.
-    private static void LogBurdenCausalChain(CommitOutcome outcome, IReadOnlyList<RelicFacts> relics)
+    // Three distinct outcomes: no roll (no cursed relics), roll failed, and rolled
+    // but the target module rejected it (AutoPowerOn) so the relic burned for nothing.
+    private static void LogBurdenCausalChain(BurdenType rolled, BurdenType applied, IReadOnlyList<RelicFacts> relics)
     {
         int cursedCount = 0;
         if (relics != null)
@@ -211,10 +222,10 @@ internal static class ForgeCommit
         }
 
         float chance = TerminusConfig.BurdenChance;
-        BepinPlugin.Log.LogInfo(
-            outcome.AppliedBurden != BurdenType.None
-                ? $"[Forge] Burden: cursed x{cursedCount} consumed, roll {chance:P0} → APPLIED {outcome.AppliedBurden}."
-                : $"[Forge] Burden: cursed x{cursedCount} consumed, roll {chance:P0} → none (roll failed).");
+        string result = applied != BurdenType.None ? $"APPLIED {applied}"
+            : rolled != BurdenType.None ? $"rolled {rolled}, but target can't carry it (AutoPowerOn) — no effect"
+            : "none (roll failed)";
+        BepinPlugin.Log.LogInfo($"[Forge] Burden: cursed x{cursedCount} consumed, roll {chance:P0} → {result}.");
     }
 
     private static string NamesOf(IReadOnlyList<RelicFacts> relics)

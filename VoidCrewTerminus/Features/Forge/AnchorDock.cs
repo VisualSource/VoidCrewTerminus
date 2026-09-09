@@ -58,12 +58,27 @@ internal sealed class AnchorDock
 
     internal bool IsDocked(GameObject item) => item != null && _docked.ContainsKey(item);
 
-    // Read by ForgeInteractable so it can step aside and let a docked item be grabbed.
-    internal bool IsOccupied(Transform anchor)
+    // Read by the policy (via UpgradeForgeBehavior.IsAnchorOccupied) to decide
+    // whether a click inserts or retrieves.
+    //
+    // Defined as "TryGetDockedAt found something" rather than as its own loop, so
+    // the two can't answer differently: they did, briefly — this one ignored a
+    // destroyed item (kv.Key == null, e.g. a relic a commit just consumed, before
+    // Reconcile reaps the entry) while TryGetDockedAt skipped it, which reported an
+    // anchor as occupied that had nothing to hand back.
+    internal bool IsOccupied(Transform anchor) => TryGetDockedAt(anchor, out _);
+
+    // The item to hand back when a player clicks an occupied anchor empty-handed.
+    internal bool TryGetDockedAt(Transform anchor, out GameObject item)
     {
+        item = null;
         if (anchor == null) return false;
         foreach (var kv in _docked)
-            if (kv.Value.Anchor == anchor) return true;
+        {
+            if (kv.Value.Anchor != anchor || kv.Key == null) continue;
+            item = kv.Key;
+            return true;
+        }
         return false;
     }
 
@@ -279,16 +294,23 @@ internal sealed class AnchorDock
         if (sim != null) sim.isKinematic = kinematic;
     }
 
-    // The per-frame Pin accumulates an implicit velocity estimate; without zeroing it
-    // the item inherits roughly the ship's velocity the instant kinematic goes false
-    // and drifts through the ship — the "BuildBox floats away" bug. Writing straight
-    // to MainRigidbody is the WRONG body while the item is simulated (velocity
-    // survives on SimulationRigidbody, which is why the bug only reproduced
-    // intermittently); the Velocity properties route to whichever body is live.
+    // "BuildBox floats away": a docked item is frozen kinematic; on undock it has to
+    // return to the regime it belongs in without inheriting stale velocity.
     private static void ReleaseRigidbody(GameObject go)
     {
         if (go == null) return;
         var co = go.GetComponent<CarryableObject>();
+
+        // A player grabbed it back out (Reconcile): Carrier.SetPayload already put
+        // it in the carried regime — kinematic, collisions ignored vs the carrier,
+        // parented. Un-kinematic it here and it becomes a live body that bumps into
+        // modules and drifts under the moving ship; the forge must not touch it.
+        // Vanilla re-homes it when the player releases.
+        if (co != null && co.Carrier != null)
+        {
+            BepinPlugin.Log.LogDebug($"[Forge] undock {go.name}: carried — left to vanilla.");
+            return;
+        }
 
         bool simulated = co != null && co.IsBeingSimulated;
         Vector3 before = Vector3.zero;
@@ -300,10 +322,31 @@ internal sealed class AnchorDock
         // velocity to a still-kinematic body is silently dropped.
         SetDockedKinematic(co, go, false);
 
+        // UpdateAtmosphereData (every 0.15s, owned items) periodically drops a
+        // docked item from the platform sim, leaving it with ~0 WORLD velocity so
+        // the moving ship leaves it behind. Re-drive vanilla's return-to-world path.
+        bool reattached = false;
+        if (co != null && !co.IsBeingSimulated)
+        {
+            try
+            {
+                co.ReleaseFromCarrier();
+                reattached = true;
+            }
+            catch (System.Exception e)
+            {
+                BepinPlugin.Log.LogWarning(
+                    $"[Forge] undock {go.name}: re-attach via ReleaseFromCarrier failed ({e.GetType().Name}).");
+            }
+        }
+
         if (co != null)
         {
             try
             {
+                // Runs after any re-attach above: if that re-simulated the item
+                // this routes to the proxy in platform-local space (0 = still
+                // relative to the ship); otherwise it zeroes the main body.
                 co.Velocity = Vector3.zero;
                 co.AngularVelocity = Vector3.zero;
             }
@@ -322,8 +365,9 @@ internal sealed class AnchorDock
 
         // The float-away isn't reliably reproducible, so it has to be diagnosed from
         // the one run where it happens. A non-zero `was=` on a simulated item is the
-        // signature of the original bug.
+        // signature of the original bug; `reattached=True` means the item had been
+        // dropped from the platform sim while docked and was put back.
         BepinPlugin.Log.LogDebug(
-            $"[Forge] undock {go.name}: simulated={simulated}, was={before}, zeroed both bodies.");
+            $"[Forge] undock {go.name}: simulated={simulated}, was={before}, reattached={reattached}, zeroed both bodies.");
     }
 }

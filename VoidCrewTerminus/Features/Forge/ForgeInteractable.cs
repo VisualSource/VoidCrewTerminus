@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using CG;
 using CG.Client.Player.Interactions;
 using CG.Client.Ship.Interactions;
-using CG.Game.Player;
 using CG.Input;
 using Client.Player.Interactions;
 using HarmonyLib;
@@ -33,30 +32,34 @@ public class ForgeInteractable : AbstractInteractable
     public ForgeInteractableKind Kind;
     public Transform Anchor;
 
-    // Click colliders surround the items docked on their anchors and would swallow
-    // every click aimed at them. When occupied and the player's hands are empty, step
-    // aside so the ray reaches the docked item's own Grabbable for retrieval.
-    public override bool IsInteractive
-    {
-        get
-        {
-            if (!base.IsInteractive) return false;
-            if (Forge == null) return true;
+    // Whether the prompt currently reads "Retrieve" rather than the kind's own
+    // label. Tracked so the assignment below only happens on a flip — the setter
+    // fires InteractionInfoUpdated, which the HUD listens to.
+    private bool _promptShowsRetrieve;
 
-            bool occupied = Kind switch
-            {
-                ForgeInteractableKind.ModuleSocket => Forge.HasModule,
-                ForgeInteractableKind.RelicTube => Forge.IsAnchorOccupied(Anchor),
-                _ => false,
-            };
-            if (occupied)
-            {
-                var player = LocalPlayer.Instance;
-                if (player != null && player.Payload == null) return false;
-            }
-            return true;
-        }
-        set => base.IsInteractive = value;
+    // The prompt has to follow the anchor's occupancy: this interactable stays
+    // targetable while it holds something (that is what makes retrieval work at all
+    // — see the empty-handed section of ForgeInteractionPolicy.Decide), so its label
+    // has to say which of the two things a click will do.
+    //
+    // Polled rather than pushed. AnchorDock does signal dock/undock, but only into
+    // the anchor's "Filled" helper object, so subscribing would mean new plumbing
+    // through the Forge plus teardown to match; the poll is a bool compare against
+    // at most Capacity docked entries. Worth revisiting if the Forge ever grows
+    // enough anchors for it to show up in a profile.
+    //
+    // The retrieval rule itself is the policy's, not restated here: a second copy
+    // could drift and label an anchor "Insert" that a click would in fact empty.
+    private void Update()
+    {
+        if (Forge == null) return;
+
+        bool retrieve = ForgeInteractionPolicy.RetrievesWhenOccupied(Kind)
+                        && Forge.IsAnchorOccupied(Anchor);
+        if (retrieve == _promptShowsRetrieve) return;
+
+        _promptShowsRetrieve = retrieve;
+        InteractionInfo = retrieve ? RetrieveInfo() : InfoFor(Kind);
     }
 
     // No outline yet, deliberately — which mesh RelicTube/ModuleSocket/AlloyTerminal
@@ -76,6 +79,7 @@ public class ForgeInteractable : AbstractInteractable
     private static InteractionInfo _commitInfo;
     private static InteractionInfo _alloyInfo;
     private static InteractionInfo _deconstructInfo;
+    private static InteractionInfo _retrieveInfo;
     private static bool _infosResolved;
 
     public static InteractionInfo InfoFor(ForgeInteractableKind kind)
@@ -100,6 +104,15 @@ public class ForgeInteractable : AbstractInteractable
         return _deconstructInfo;
     }
 
+    // Shown on a tube or socket that currently holds something — the click hands it
+    // back rather than inserting. Not a ForgeInteractableKind: retrieval is decided
+    // by the anchor's occupancy, not by which anchor it is.
+    private static InteractionInfo RetrieveInfo()
+    {
+        EnsureInfos();
+        return _retrieveInfo;
+    }
+
     private static void EnsureInfos()
     {
         if (_infosResolved && _insertInfo != null && _defaultInfo != null) return;
@@ -121,6 +134,7 @@ public class ForgeInteractable : AbstractInteractable
         _commitInfo = ActionInfo("Commit", InteractionDescription.EInteractionType.Hold);
         _alloyInfo = ActionInfo("Feed Alloy");
         _deconstructInfo = ActionInfo("Deconstruct", InteractionDescription.EInteractionType.Hold);
+        _retrieveInfo = ActionInfo("Retrieve");
     }
 
     private static InteractionInfo EmptyInfo()

@@ -16,6 +16,7 @@ public enum ForgeAction
     None,           // message only — a refusal, or an empty-handed status readout
     LoadModule,     // take the carried box into the module socket and dock it
     InsertRelic,    // take the carried relic into the clicked tube and dock it
+    RetrieveItem,   // hand the item docked on the clicked anchor back to the player
     Commit,         // resolve the upgrade here (we are the authority)
     RequestCommit,  // ask the host to resolve it
     FeedAlloy,      // spend alloys into the Forge Meter
@@ -50,8 +51,14 @@ public readonly struct ForgeClick
     public int CarriedBoxLevel { get; }         // Module Level of the carried box; meaningless unless Payload is ModuleBox
     public ForgeInteractableKind Target { get; }
 
-    // The clicked anchor cannot take anything. A MISSING anchor reports as
-    // occupied too: both mean "not this tube", and they share one refusal.
+    // The clicked anchor is physically holding an item (AnchorDock's answer).
+    // Single meaning, because two arms now read it in opposite directions: an
+    // insert is refused, and an empty-handed click retrieves what's there.
+    //
+    // A MISSING anchor is therefore NOT reported here. It used to be folded in as
+    // "occupied", back when occupied only ever meant refuse — once occupied also
+    // meant "hand the item back", that fold made a null anchor decide RetrieveItem
+    // with nothing to retrieve. The insert paths guard the anchor themselves.
     public bool TargetOccupied { get; }
 
     public ForgeClick(ForgePayload payload, int carriedBoxLevel,
@@ -109,10 +116,31 @@ public static class ForgeInteractionPolicy
                 return ForgeDecision.Say("The Forge only accepts relics and module boxes.");
         }
 
-        // Empty-handed. Commit lives on its own button; docked relics and the
-        // docked box are retrieved by grabbing them directly — the module socket's
-        // ForgeInteractable.IsInteractive steps aside while it holds a box, so an
-        // empty-hand click only reaches the socket when the socket is empty.
+        // Empty-handed. Commit lives on its own button; an occupied tube or socket
+        // hands its item back, the way a vanilla CarryablesSocket does.
+        //
+        // Retrieval is the Forge's job rather than the player grabbing the docked
+        // item directly. The earlier design had the anchor's ForgeInteractable step
+        // aside (IsInteractive false) so the interaction ray could continue to the
+        // item's own Grabbable — but a ray that has to reach INTO the machine is at
+        // the mercy of the hull: once the hull colliders moved onto "MovingPlatform"
+        // (which RaycastHandler's mask includes), any solid surface in front of the
+        // item blanked the interactable and the module box became unretrievable,
+        // while the shallower relic tubes still worked. Vanilla never depends on
+        // that ray — CarryableInteract.IsGrabbableTarget retrieves a socketed item
+        // through the SOCKET's own interactable — so neither do we.
+        //
+        // Stated once, ahead of the per-target matrix, because ForgeInteractable
+        // reads the same rule to pick its HUD prompt: two copies would let the
+        // prompt say "Insert" on an anchor the click would empty, or the reverse.
+        //
+        // Keyed on TargetOccupied, not HasModule. Those are separate sources —
+        // semantic bookkeeping (_moduleBox) vs. what is physically pinned to the
+        // anchor (AnchorDock) — and retrieval has to consult the one that owns the
+        // item, since that is the same source the Forge then asks for it.
+        if (click.TargetOccupied && RetrievesWhenOccupied(click.Target))
+            return new ForgeDecision(ForgeAction.RetrieveItem, null);
+
         switch (click.Target)
         {
             case ForgeInteractableKind.CommitButton:
@@ -133,6 +161,15 @@ public static class ForgeInteractionPolicy
                 return ForgeDecision.Nothing;
         }
     }
+
+    // Which anchors hand their item back to an empty-handed click. The commit lever
+    // and the alloy terminal never hold anything, so they are not retrieval targets
+    // even if something contrived ever docked to their anchor.
+    //
+    // Public so ForgeInteractable can label its prompt from the same rule that
+    // decides the click.
+    public static bool RetrievesWhenOccupied(ForgeInteractableKind kind) =>
+        kind is ForgeInteractableKind.ModuleSocket or ForgeInteractableKind.RelicTube;
 
     private static ForgeDecision DecideModuleBox(in ForgeView forge, in ForgeClick click)
     {

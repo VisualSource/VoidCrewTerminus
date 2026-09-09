@@ -79,6 +79,12 @@ public readonly struct CommitOutcome
         AppliedBurden = appliedBurden;
     }
 
+    // The burden roll is module-agnostic; the commit path clears it when the
+    // target module can't carry it (see ForgeModuleState.CanCarry).
+    public CommitOutcome WithoutBurden() =>
+        new(Status, NewLevel, RelicsConsumed, BestTier,
+            RolledPerk, TargetSlot, RollChance, RollAttempted, BurdenType.None);
+
     public static CommitOutcome Failure(CommitStatus status) =>
         new(status, 0, 0, Loot.RelicTier.Common, null, -1, 0f, false, BurdenType.None);
 

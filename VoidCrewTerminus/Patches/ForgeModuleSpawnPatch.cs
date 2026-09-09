@@ -15,7 +15,7 @@ internal static class ForgeModuleSpawnPatch
 
             // No-ops for every non-forge CellModule.
             ForgeAttachHelper.TryAttach(module);
-            AssetLoader.EnsureBuildBoxTemplateReady();
+            ModuleKit.CustomModuleRegistry.EnsureTemplatesReady();
 
             // An overlay broadcast can outrun this instantiation; drain whatever
             // was buffered against this ViewID.

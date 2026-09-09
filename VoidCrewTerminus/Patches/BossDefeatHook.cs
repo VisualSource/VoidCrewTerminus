@@ -123,7 +123,7 @@ internal static class BossDefeatHook
         // RuntimeAssetsRegister (what TryFindForgeAssetGuid searches), so a fresh
         // !forgeboxdrop with no prior !forgespawn this session would otherwise
         // find no guid and bail before the template ever gets built.
-        AssetLoader.EnsureBuildBoxTemplateReady();
+        ModuleKit.CustomModuleRegistry.EnsureTemplatesReady();
 
         if (!ForgeSpawnCommand.TryFindForgeAssetGuid(UpgradeForgeBehavior.BuildBoxPrefabName, out var boxGuid))
         {

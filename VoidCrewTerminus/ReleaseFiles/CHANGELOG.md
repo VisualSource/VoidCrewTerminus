@@ -1,3 +1,28 @@
+## 0.0.22
+- remove the 0.0.20 chat fixes — they could stop chat from starting and never fixed messages not reaching other players
+- fix forge buildbox instances falling back to vanilla naming (the registered asset path was silently discarded)
+## 0.0.21
+- fix module box not being retrievable from the forge socket
+- fix forge status screen rendering black for every non-host player
+- fix forge buildbox showing the donor crate's name and hover text
+- fix spawn command and spawn tab crashing when the game refuses a spawn
+- fix "not in any upgrade chain" flooding the log
+- refactor custom module and buildbox setup into a reusable module kit
+- quieter logs (routine diagnostics moved to debug level)
+## 0.0.20
+- add chat fix
+## 0.0.19
+- fix buildbox drifting out of hand / away from the moving ship after taking it from the forge
+- fix buildbox and carryables falling through the upgrade forge (collision layer)
+- fix crash when forging a power generator (int stat modifier)
+- fix commit log claiming a burden was applied to a module that can't carry it
+- fix commit lever animating the wrong direction
+## 0.0.18
+- add forge screen ui (level/alloy readout renders on the AlloyTerminalScreen mesh)
+- hook up screen power state
+- fix screen render texture not displaying (bundle asset naming)
+- fix glass/transparent materials rendering opaque after shader relink
+- fix placing the upgrade forge breaking clicks in other ui menus (fabricator, etc.)
 ## 0.0.17
 - fix leftover coliders after deconstruction of upgrade forge
 - fix placement of buildbox in upgrade forge

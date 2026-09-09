@@ -5,6 +5,7 @@ using CG;
 using CG.Game.Player;
 using CG.Game.Scenarios;
 using CG.Objects;
+using CG.Space;
 using Photon.Pun;
 using ResourceAssets;
 using UnityEngine;
@@ -80,10 +81,8 @@ internal class SpawnItemCommand : PublicCommand
 
         if (PhotonNetwork.IsMasterClient)
         {
-            var spawned = SpawnUtils.SpawnCarryable(item.Guid, spawnPos, Quaternion.identity);
-            Messaging.Notification(spawned != null
-             ? $"Spawned: {item.Name}"
-             : $"Failed to spawn: {item.Name}");
+            TrySpawn(item, spawnPos, out var message);
+            Messaging.Notification(message);
         }
     }
 
@@ -118,8 +117,40 @@ internal class SpawnItemCommand : PublicCommand
         }
 
         var spawnPos = player.transform.position + player.transform.forward * 2f;
-        var spawned = SpawnUtils.SpawnCarryable(item.Guid, spawnPos, Quaternion.identity);
-        message = spawned != null ? $"Spawned: {item.Name}" : $"Failed to spawn: {item.Name}";
-        return spawned != null;
+        return TrySpawn(item, spawnPos, out message);
+    }
+
+    private static bool TrySpawn(SpawnableCarryable item, Vector3 position, out string message) =>
+        TrySpawnGuarded(item.Guid, item.Name, position, out message, out _);
+
+    // SpawnUtils.SpawnCarryable throws rather than returning null when the game
+    // isn't in a state to take a spawn — it dereferences both the guid's
+    // CloneStarObjectDef and GameSessionManager.ActiveSector unconditionally, and
+    // the latter is null across a void jump. Seen live as a run of
+    // NullReferenceExceptions from !spawn, and worse from the settings menu's Spawn
+    // tab, where the throw escapes into the OnGUI draw loop.
+    //
+    // Reported as a failed spawn, which is what it is. Logged at Warning, not Debug:
+    // a swallowed exception is not routine diagnostics, and this is the only place
+    // it's recorded at all.
+    //
+    // Shared with !forgespawn (ForgeCommitCommand), which spawns by raw guid and hit
+    // the identical crash from the same helper.
+    internal static bool TrySpawnGuarded(
+        GUIDUnion guid, string label, Vector3 position, out string message, out OrbitObject spawned)
+    {
+        spawned = null;
+        try
+        {
+            spawned = SpawnUtils.SpawnCarryable(guid, position, Quaternion.identity);
+            message = spawned != null ? $"Spawned: {label}" : $"Failed to spawn: {label}";
+            return spawned != null;
+        }
+        catch (Exception e)
+        {
+            BepinPlugin.Log.LogWarning($"[Spawn] {label} ({guid.AsHex()}) failed: {e.GetType().Name}: {e.Message}");
+            message = $"Failed to spawn: {label} — the game is not accepting spawns right now (mid-jump?).";
+            return false;
+        }
     }
 }

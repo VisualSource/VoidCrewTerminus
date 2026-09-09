@@ -109,7 +109,7 @@ public class ForgeDeconstructInteractable : ClickerInteractable
 
     private void OnDeconstruct()
     {
-        BepinPlugin.Log.LogInfo(
+        BepinPlugin.Log.LogDebug(
             $"[Forge] Deconstruct hold completed on {(_module != null ? _module.name : "?")} (GetInstanceID={GetInstanceID()}).");
         if (_module == null) return;
         var result = Deconstruct.CanRemoveModule(_module);

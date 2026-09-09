@@ -151,7 +151,7 @@ class TerminusModMenu : ModSettingsMenu
             if (Button(item.Name, Height(30)))
             {
                 SpawnItemCommand.TrySpawnAtPlayer(item, out var message);
-                BepinPlugin.Log.LogInfo($"[Spawn] {message}");
+                BepinPlugin.Log.LogDebug($"[Spawn] {message}");
             }
         }
         EndScrollView();

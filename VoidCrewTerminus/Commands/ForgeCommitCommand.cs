@@ -217,7 +217,7 @@ internal class ForgeMarkCommand : PublicCommand
 
         var dump = forge.DescribeBoxMark();
         Messaging.Notification(dump);
-        BepinPlugin.Log.LogInfo($"[Forge] {dump}");
+        BepinPlugin.Log.LogDebug($"[Forge] {dump}");
     }
 }
 
@@ -244,14 +244,14 @@ internal class ForgeCommitCommand : PublicCommand
     }
 }
 
-// Spawns the Forge's BuildBox via AssetLoader.EnsureBuildBoxTemplateReady, which
+// Spawns the Forge's BuildBox via CustomModuleRegistry.EnsureTemplatesReady, which
 // clones a live vanilla donor and presets moduleRef on the template before any
 // instance's Awake runs. A custom-grafted prefab was tried first, but its
 // Rigidbody never connected into MovingSpacePlatform's simulated PhysicsScene
 // (root cause never pinned down), so it fell through the ship floor forever;
 // cloning a real donor — which already has correct physics/rendering — sidesteps
 // that entirely. The donor guid is found once and cached
-// (AssetLoader.TryFindDonorBuildBoxGuid); a per-spawn scan of the whole module
+// (RegisteredModule.TryFindDonorGuid); a per-spawn scan of the whole module
 // registry previously caused a !forgespawn lag spike.
 internal class ForgeSpawnCommand : PublicCommand
 {
@@ -267,17 +267,26 @@ internal class ForgeSpawnCommand : PublicCommand
         var player = LocalPlayer.Instance;
         if (player == null) { Messaging.Notification("Not in an active session."); return; }
 
-        AssetLoader.EnsureBuildBoxTemplateReady();
+        ModuleKit.CustomModuleRegistry.EnsureTemplatesReady();
 
         if (!TryFindForgeAssetGuid(UpgradeForgeBehavior.BuildBoxPrefabName, out var boxGuid))
         { Messaging.Notification("Forge BuildBox not ready yet — no vanilla BuildBox donor found (is a module installed on the ship?)."); return; }
 
         var spawnPos = player.transform.position + player.transform.forward * 2f + Vector3.up * 0.5f;
-        var spawned = SpawnUtils.SpawnCarryable(boxGuid, spawnPos, Quaternion.identity);
-        var box = spawned != null ? spawned.GetComponent<BuildBox>() : null;
-        if (box == null) { Messaging.Notification("Failed to instantiate Forge BuildBox."); return; }
+        // Guarded like !spawn: SpawnUtils.SpawnCarryable throws, not returns null,
+        // when the game won't take a spawn (mid-jump). See TrySpawnGuarded.
+        //
+        // The guard owns both "refused" outcomes — the throw and a null return — so what
+        // is left below is the third one: something spawned, but it isn't a BuildBox,
+        // which means boxGuid resolves to the wrong prefab in RuntimeAssetsRegister.
+        if (!SpawnItemCommand.TrySpawnGuarded(boxGuid, "Forge BuildBox", spawnPos, out var spawnMessage, out var spawned))
+        { Messaging.Notification(spawnMessage); return; }
 
-        BepinPlugin.Log.LogInfo($"[Forge] Spawned Forge BuildBox ({boxGuid.AsHex()}).");
+        var box = spawned.GetComponent<BuildBox>();
+        if (box == null)
+        { Messaging.Notification($"Spawned '{spawned.name}', which is not a BuildBox — the Forge BuildBox registration is stale. Restart the game."); return; }
+
+        BepinPlugin.Log.LogDebug($"[Forge] Spawned Forge BuildBox ({boxGuid.AsHex()}).");
         Messaging.Notification("Spawned Forge BuildBox. Carry to an empty socket to install.");
     }
 

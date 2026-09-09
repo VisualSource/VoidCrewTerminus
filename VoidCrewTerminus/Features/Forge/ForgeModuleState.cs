@@ -94,15 +94,14 @@ public class ForgeModuleState : IModifierSource
         SyncBurdenBehaviors();
     }
 
-    // RandomShutoff calls CellModule.TurnOff(), but vanilla's own PowerDrain.
-    // ValidatePowerTurnOff vetoes that outright for AutoPowerOn modules (Reactors,
-    // Power Generators, ...). Rolling the burden onto one anyway would consume the
-    // cursed relic while the module is never actually affected — so it's excluded
-    // here, the one place both the fresh-commit and reconstruct/late-joiner paths
-    // meet a live module reference.
-    private bool CanCarry(BurdenType burden) => burden switch
+    private bool CanCarry(BurdenType burden) => CanCarry(burden, _module?.PowerDrain);
+
+    // PowerDrain.ValidatePowerTurnOff vetoes RandomShutoff's TurnOff() on
+    // AutoPowerOn modules, so the burden would consume the relic and never fire.
+    // Shared by the commit path (prefab drain) and snapshot/late-joiner (live drain).
+    internal static bool CanCarry(BurdenType burden, Gameplay.Power.PowerDrain drain) => burden switch
     {
-        BurdenType.RandomShutoff => _module?.PowerDrain == null || !_module.PowerDrain.AutoPowerOn,
+        BurdenType.RandomShutoff => drain == null || !drain.AutoPowerOn,
         _ => true,
     };
 
@@ -264,7 +263,11 @@ public class ForgeModuleState : IModifierSource
                 TagsToAdd = new[] { Utils.CsTagRegistry.ForgeUpgraded },
             };
             foreach (var (stat, perkAmount) in perk.Payload)
+            {
+                // Skip int-backed stats — see AddGroup.
+                if (StatType.IsInt(stat.Id)) continue;
                 mods.Add(new StatMod(new FloatModifier(perkAmount, ModifierType.AdditiveMultiplier, this), stat.Id, tagCfg));
+            }
         }
 
         // TagsToAdd only lands in a collection's runtime tags when a carrying mod
@@ -305,6 +308,12 @@ public class ForgeModuleState : IModifierSource
         };
 
         foreach (var statType in statTypes)
+        {
+            // A FloatModifier on an int-backed stat throws in ModifiableInt.AddModifier
+            // when RegisterChildCollection later replays it onto a child collection
+            // (e.g. PowerProvider.PowerProvided). Truncates to 0 anyway.
+            if (StatType.IsInt(statType.Id)) continue;
             mods.Add(new StatMod(new FloatModifier(amount, ModifierType.AdditiveMultiplier, this), statType.Id, tagCfg));
+        }
     }
 }
