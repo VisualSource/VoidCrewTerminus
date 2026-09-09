@@ -259,6 +259,7 @@
   <div class="subtitle">Modder's Reference · v1.3.0</div>
   <ul>
     <li><a href="#overview">Overview</a></li>
+    <li><a href="#compiling">Compiling against it</a></li>
   </ul>
   <div class="section-label">Enemy System</div>
   <ul>
@@ -325,6 +326,75 @@
       <code>base.SomeMethod()</code> from a Transpiler or calling game methods from your own
       non-patch code will throw at runtime. Patches work because Harmony replaces the body
       before it executes.
+    </div>
+  </section>
+
+  <hr />
+
+  <!-- ─── Compiling ─── -->
+  <section id="compiling-section">
+    <h2 id="compiling">Compiling against GameLibs</h2>
+
+    <p>
+      Two different artifacts describe the same game code, and they disagree.
+      <code>.voidcrew/decompiled/</code> is decompiled from the <em>shipped</em>
+      <code>Assembly-CSharp.dll</code> and is what you read to understand behaviour —
+      it has real method bodies. <code>VoidCrew.GameLibs</code> is the NuGet reference
+      assembly you actually <em>compile</em> against. Where they differ, the compiler
+      follows GameLibs.
+    </p>
+
+    <div class="callout warn">
+      <strong>GameLibs is publicized — <code>protected</code> in the decompile is
+      <code>public</code> in metadata.</strong>
+      Overriding such a member with <code>protected override</code> fails with
+      <strong>CS0507: cannot change access modifiers when overriding</strong>. Write
+      <code>public override</code> instead, even though the decompiled source says
+      <code>protected</code>. The same widening means <code>protected</code> fields are
+      directly assignable from mod code without reflection —
+      <code>SyncedProjectile.IsDestroyedOnImpact</code> is one the Leech Missile relies on.
+    </div>
+
+    <p>
+      Hit while subclassing <code>GuidedProjectile</code>: <code>GetTarget</code>,
+      <code>OnImpact</code> and <code>ImpactEnvironment</code> all read as
+      <code>protected virtual</code> in the decompile and all needed
+      <code>public override</code> to compile.
+    </p>
+
+    <h3 id="compiling-nonvirtual">Intercepting a non-virtual member</h3>
+    <p>
+      Some members you need to intervene on are declared non-virtual, so
+      <code>override</code> will not compile — but they are reached through an interface.
+      <strong>Re-list the interface on your subclass</strong> and declare the member
+      <code>public new</code>; that re-maps the interface slot to your implementation,
+      and every call site dispatching through the interface lands on your method.
+    </p>
+
+    <div class="callout warn">
+      <strong>This fails silently.</strong> Omit the interface from the class declaration
+      and the code still compiles — your <code>new</code> member simply never runs, because
+      the slot still points at the base. Check which interface actually declares the member:
+      <code>InformOfHit</code> is on <code>IDamageReceiver</code>, while
+      <code>IHitReceiver</code> carries only <code>ApplyHitDamage</code>, so re-listing
+      <code>IHitReceiver</code> alone looks right and does nothing. Assert the mapping with
+      <code>Type.GetInterfaceMap</code> in a unit test rather than trusting it.
+    </div>
+
+    <h3 id="compiling-tests">Naming game types from the test project</h3>
+    <p>
+      <code>VoidCrewTerminus.Tests</code> copies the GameLibs DLLs to its output as a
+      <em>runtime</em> dependency but does not compile against them, so a test cannot name
+      a game type in source — <code>using CG.Space;</code> fails with CS0246. Reach them by
+      name through reflection instead (<code>GetInterfaces().Single(i =&gt; i.Name == "…")</code>).
+    </p>
+
+    <div class="callout note">
+      <strong>Unity types are stubs at test time too.</strong> GameLibs ships reference-only
+      bodies, so calls like <code>new Vector3(0, 0, -75)</code> throw a
+      <code>NullReferenceException</code> under the test host even though they are fine in-game.
+      Keep constructor calls on Unity value types out of any code path a test needs to reach —
+      <code>TerminusConfig.BindAttributedFields</code> exists as a seam for exactly this reason.
     </div>
   </section>
 

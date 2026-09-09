@@ -72,6 +72,8 @@ jq '."CG.Ship"' .voidcrew/namespace-index.json
 
 The key assemblies are `Assembly-CSharp` (main game logic, 3 312 files), `VoidCrewCommon`, `Assembly-CSharp-firstpass`, `PhotonUnityNetworking`, and `Opsive.UltimateCharacterController`.
 
+**The decompile is not what you compile against.** `.voidcrew/decompiled/` comes from the shipped DLL; the `VoidCrew.GameLibs` NuGet reference assembly is what the compiler sees, and it is **publicized** — members the decompile shows as `protected` are `public` in metadata, so `protected override` fails with CS0507. Use `public override`. Read `docs/gamelibs-guide.html` § *Compiling against GameLibs* before subclassing a game type; it also covers intercepting non-virtual members via interface re-implementation (a silent-failure trap) and why tests can't name game types in source.
+
 
 feedback-logging
 Prefer BepInEx `LogDebug` over `LogInfo` for routine diagnostics in VoidCrewTerminus; reserve `LogInfo` for player-visible or genuinely important events.
