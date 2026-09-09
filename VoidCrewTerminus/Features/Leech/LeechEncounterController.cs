@@ -39,6 +39,10 @@ internal static class LeechEncounterController
         PlayerControlledShip ship = ClientGame.Current?.PlayerShip;
         if (ship == null) return;
 
+        // Footprints are recovered by walking BuildSockets, so refresh before a
+        // batch in case the crew has built or deconstructed since the last one.
+        LeechVariantAssigner.RebuildCache(ship);
+
         if (AtCapacity)
         {
             // The Concurrency Safety Rail: impact still reads as an impact, it just
@@ -62,12 +66,8 @@ internal static class LeechEncounterController
 
     private static void Spawn(PlayerControlledShip ship, Vector3 anchor, Vector3 normal)
     {
-        CellModule module = NearestModule(ship, anchor);
-        if (module == null)
-        {
-            BepinPlugin.Log.LogDebug("[Leech] no module found to anchor against — skipping.");
-            return;
-        }
+        (LeechVariant variant, CellModule module) = LeechVariantAssigner.Assign(
+            anchor, ship, TerminusConfig.LeechProximityRadius);
 
         GameObject body = GameObject.CreatePrimitive(PrimitiveType.Cube);
         body.name = "Leech";
@@ -77,11 +77,23 @@ internal static class LeechEncounterController
         body.transform.localScale = new Vector3(0.6f, 0.3f, 0.8f);
 
         var leech = body.AddComponent<LeechController>();
-        leech.AttachTo(
-            module,
-            debuffMagnitude: ParseLeadBand(TerminusConfig.LeechDebuffMagnitudeRaw, 0.25f),
-            damagePercentPerTick: TerminusConfig.LeechModuleDamagePerTick,
-            tickInterval: TerminusConfig.LeechModuleTickInterval);
+
+        if (variant == LeechVariant.ModuleBiter)
+        {
+            leech.AttachToModule(
+                module,
+                debuffMagnitude: ParseLeadBand(TerminusConfig.LeechDebuffMagnitudeRaw, 0.25f),
+                damageFraction: TerminusConfig.LeechModuleDamagePerTick,
+                tickInterval: TerminusConfig.LeechModuleTickInterval);
+        }
+        else
+        {
+            leech.AttachToHull(
+                ship,
+                damageFraction: TerminusConfig.LeechHullDamagePerChomp,
+                chompMin: TerminusConfig.LeechChompMinInterval,
+                chompMax: TerminusConfig.LeechChompMaxInterval);
+        }
 
         Attached.Add(leech);
         OnCountChanged();
@@ -141,12 +153,6 @@ internal static class LeechEncounterController
             tags.RemoveAll(t => t == tag);
         }
     }
-
-    private static CellModule NearestModule(PlayerControlledShip ship, Vector3 point)
-        => ship.GetAllModules()
-            .Where(m => m != null)
-            .OrderBy(m => (m.transform.position - point).sqrMagnitude)
-            .FirstOrDefault();
 
     // Phase 6 replaces this with the real DifficultyScalar band lookup; until then
     // every band read takes the first entry, which is the scalar 2-3 value.
