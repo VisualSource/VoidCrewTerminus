@@ -390,12 +390,23 @@
     </p>
 
     <div class="callout note">
-      <strong>Unity types are stubs at test time too.</strong> GameLibs ships reference-only
-      bodies, so calls like <code>new Vector3(0, 0, -75)</code> throw a
-      <code>NullReferenceException</code> under the test host even though they are fine in-game.
-      Keep constructor calls on Unity value types out of any code path a test needs to reach —
-      <code>TerminusConfig.BindAttributedFields</code> exists as a seam for exactly this reason.
+      <strong>Game types cannot be constructed at test time.</strong> GameLibs ships
+      reference-only bodies, so any game constructor throws a
+      <code>NullReferenceException</code> under the test host even though it is fine in-game.
+      That covers <code>new Vector3(0, 0, -75)</code> and, less obviously, <em>your own
+      subclass of a game type</em> — instantiating one runs the stub base constructor and
+      throws before your code sees control. <code>TerminusConfig.BindAttributedFields</code>
+      exists as a seam for exactly this reason.
     </div>
+
+    <p>
+      The practical consequence is that a class deriving from a game type can only be
+      tested for its <strong>contract</strong> — which members it overrides, which sealed
+      members it leaves alone, how its interface map resolves — never its behaviour. Push
+      logic worth asserting into plain static helpers that take primitives:
+      <code>LeechVariantAssigner.DistanceToBox</code> takes six floats instead of two
+      <code>Vector3</code>s purely so the geometry is reachable from a test.
+    </p>
   </section>
 
   <hr />
