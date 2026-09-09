@@ -166,6 +166,143 @@ internal static class TerminusConfig
     internal static ConfigEntry<int> EscalationBossScalarBonus;
     internal static int BossScalarBonus => EscalationBossScalarBonus?.Value ?? DefaultEscalationBossScalarBonus;
 
+    // Leech Carrier encounter. Every value here is a playtest starter, not a
+    // tuned figure. The *Bands entries are three comma-separated steps covering
+    // DifficultyScalar 2-3 / 4-5 / 6+; below LeechGateScalar the encounter is
+    // inert and no band applies.
+
+    private const int DefaultLeechGateScalar = 2;
+    [BindConfig("leech", DefaultLeechGateScalar, "DifficultyScalar at or above which Leech Carriers arm. Below this the host patch stays inert, so lowering it is the supported way to test the encounter early")]
+    internal static ConfigEntry<int> LeechGateScalar;
+    internal static int LeechGate => LeechGateScalar?.Value ?? DefaultLeechGateScalar;
+
+    private const int DefaultLeechConcurrencyCap = 8;
+    [BindConfig("leech", DefaultLeechConcurrencyCap, "Concurrency Safety Rail — hard cap on Leeches attached to the ship at once. A missile impacting a saturated ship still plays VFX but deploys nothing, which keeps a runaway swarm from bricking a run")]
+    internal static ConfigEntry<int> LeechConcurrencyCap;
+    internal static int LeechCap => LeechConcurrencyCap?.Value ?? DefaultLeechConcurrencyCap;
+
+    private const float DefaultLeechHullFloorPercent = 0.25f;
+    [BindConfig("leech", DefaultLeechHullFloorPercent, "Hull Floor — fraction of ship max HP below which Hull-Biter chomps cannot push the ship. Leeches strip survival margin but never land the killing blow; ordinary combat damage still kills freely. Set 0 to let Leeches kill the ship")]
+    internal static ConfigEntry<float> LeechHullFloorPercent;
+    internal static float LeechHullFloor => LeechHullFloorPercent?.Value ?? DefaultLeechHullFloorPercent;
+
+    private const float DefaultLeechVariantProximityRadius = 1.5f;
+    [BindConfig("leech", DefaultLeechVariantProximityRadius, "Distance in world units from a module's authored bounding box within which an anchor classifies as Module-Biter rather than Hull-Biter. TUNE DOWNWARD ONLY — at 2.0 and above Hull-Biters stop occurring entirely, because the grid spacing leaves no bare hull outside the radius")]
+    internal static ConfigEntry<float> LeechVariantProximityRadius;
+    internal static float LeechProximityRadius => LeechVariantProximityRadius?.Value ?? DefaultLeechVariantProximityRadius;
+
+    // Missile baselines. The band multipliers below scale these.
+    private const float DefaultLeechMissileBaseSpeed = 50f;
+    [BindConfig("leech", DefaultLeechMissileBaseSpeed, "Leech Missile speed in m/s before band scaling. Matches the vanilla SyncedProjectile default; point-defense tracks from 525 m with a ~2.25 s engagement cycle, so this value sets how many PD shots a missile eats on approach (~4 at 50 m/s)")]
+    internal static ConfigEntry<float> LeechMissileBaseSpeed;
+    internal static float LeechMissileSpeed => LeechMissileBaseSpeed?.Value ?? DefaultLeechMissileBaseSpeed;
+
+    private const float DefaultLeechMissileArcLength = 500f;
+    [BindConfig("leech", DefaultLeechMissileArcLength, "Leech Missile turn radius in world units, matching the vanilla GuidedProjectile default. This is an INVERSE control: vanilla derives angular velocity as distance/arcLength, so a SMALLER value turns harder. The LeechMissileTurnRateBands multipliers divide into this")]
+    internal static ConfigEntry<float> LeechMissileArcLength;
+    internal static float LeechMissileTurnArc => LeechMissileArcLength?.Value ?? DefaultLeechMissileArcLength;
+
+    private const int DefaultLeechMissileBaseHitPoints = 2;
+    [BindConfig("leech", DefaultLeechMissileBaseHitPoints, "Leech Missile hit points before band scaling. This is a HIT COUNTER, not a damage pool — point-defense hardcodes its damage to float.MaxValue, so each intercept costs exactly one point. Above 3-4 effective HP the missile becomes PD-immune rather than PD-resistant, so this compounds with LeechMissileBaseSpeed and the two cannot be tuned independently")]
+    internal static ConfigEntry<int> LeechMissileBaseHitPoints;
+    internal static int LeechMissileHitPoints => LeechMissileBaseHitPoints?.Value ?? DefaultLeechMissileBaseHitPoints;
+
+    // Damage is expressed as a fraction of the target's max HP because module
+    // hit points are per-prefab asset data — an absolute figure would gut a
+    // Small utility module and barely scratch a Large reactor.
+    private const float DefaultLeechModuleDamagePercentPerTick = 0.02f;
+    [BindConfig("leech", DefaultLeechModuleDamagePercentPerTick, "Module-Biter damage per tick as a fraction of the target module's max HP. Stacks — every Leech on a module ticks independently, unlike the effectiveness debuff which applies once")]
+    internal static ConfigEntry<float> LeechModuleDamagePercentPerTick;
+    internal static float LeechModuleDamagePerTick => LeechModuleDamagePercentPerTick?.Value ?? DefaultLeechModuleDamagePercentPerTick;
+
+    private const float DefaultLeechModuleDamageTickSeconds = 5f;
+    [BindConfig("leech", DefaultLeechModuleDamageTickSeconds, "Seconds between Module-Biter damage ticks")]
+    internal static ConfigEntry<float> LeechModuleDamageTickSeconds;
+    internal static float LeechModuleTickInterval => LeechModuleDamageTickSeconds?.Value ?? DefaultLeechModuleDamageTickSeconds;
+
+    private const float DefaultLeechHullDamagePercentPerChomp = 0.015f;
+    [BindConfig("leech", DefaultLeechHullDamagePercentPerChomp, "Hull-Biter damage per chomp as a fraction of ship max HP. Routes through the ship's normal damage path so resistances apply and breaches accrue by vanilla's own accounting — a Leech never promotes a breach itself, because repairing one restores 10-20% of max HP and would net-heal the ship")]
+    internal static ConfigEntry<float> LeechHullDamagePercentPerChomp;
+    internal static float LeechHullDamagePerChomp => LeechHullDamagePercentPerChomp?.Value ?? DefaultLeechHullDamagePercentPerChomp;
+
+    // Chomp cadence is a range rather than a fixed tick so several Hull-Biters
+    // don't bite in lockstep. Deliberately NOT band-scaled: chomp damage already
+    // scales, and compounding cadence on top inverts the intent.
+    private const float DefaultLeechChompIntervalMinSeconds = 6f;
+    [BindConfig("leech", DefaultLeechChompIntervalMinSeconds, "Hull-Biter — minimum seconds between chomps. Host-scheduled")]
+    internal static ConfigEntry<float> LeechChompIntervalMinSeconds;
+    internal static float LeechChompMinInterval => LeechChompIntervalMinSeconds?.Value ?? DefaultLeechChompIntervalMinSeconds;
+
+    private const float DefaultLeechChompIntervalMaxSeconds = 10f;
+    [BindConfig("leech", DefaultLeechChompIntervalMaxSeconds, "Hull-Biter — maximum seconds between chomps")]
+    internal static ConfigEntry<float> LeechChompIntervalMaxSeconds;
+    internal static float LeechChompMaxInterval => LeechChompIntervalMaxSeconds?.Value ?? DefaultLeechChompIntervalMaxSeconds;
+
+    private const float DefaultLeechFleeLerpSeconds = 2.5f;
+    [BindConfig("leech", DefaultLeechFleeLerpSeconds, "Seconds a Leech takes to crawl to its new anchor after a Containment Failure. v1 is a straight lerp; procedural leg IK is deferred")]
+    internal static ConfigEntry<float> LeechFleeLerpSeconds;
+    internal static float LeechFleeDuration => LeechFleeLerpSeconds?.Value ?? DefaultLeechFleeLerpSeconds;
+
+    private const string DefaultLeechSpawnCountMinBands = "1,1,2";
+    [BindConfig("leech", DefaultLeechSpawnCountMinBands, "Minimum Leeches deployed per missile impact, per band")]
+    internal static ConfigEntry<string> LeechSpawnCountMinBands;
+    internal static string LeechSpawnMinRaw => LeechSpawnCountMinBands?.Value ?? DefaultLeechSpawnCountMinBands;
+
+    private const string DefaultLeechSpawnCountMaxBands = "2,3,3";
+    [BindConfig("leech", DefaultLeechSpawnCountMaxBands, "Maximum Leeches deployed per missile impact, per band")]
+    internal static ConfigEntry<string> LeechSpawnCountMaxBands;
+    internal static string LeechSpawnMaxRaw => LeechSpawnCountMaxBands?.Value ?? DefaultLeechSpawnCountMaxBands;
+
+    private const string DefaultLeechMissileTurnRateBands = "1.0,1.3,1.6";
+    [BindConfig("leech", DefaultLeechMissileTurnRateBands, "Turn-rate multiplier per band. Applied as a divisor on LeechMissileArcLength, so a higher multiplier turns harder")]
+    internal static ConfigEntry<string> LeechMissileTurnRateBands;
+    internal static string LeechTurnRateRaw => LeechMissileTurnRateBands?.Value ?? DefaultLeechMissileTurnRateBands;
+
+    private const string DefaultLeechMissileHitPointBands = "1.0,1.5,2.0";
+    [BindConfig("leech", DefaultLeechMissileHitPointBands, "Hit-point multiplier per band, rounded to a whole intercept count. See LeechMissileBaseHitPoints for why this saturates fast")]
+    internal static ConfigEntry<string> LeechMissileHitPointBands;
+    internal static string LeechMissileHitPointRaw => LeechMissileHitPointBands?.Value ?? DefaultLeechMissileHitPointBands;
+
+    private const string DefaultLeechMissileSpeedBands = "1.0,1.15,1.3";
+    [BindConfig("leech", DefaultLeechMissileSpeedBands, "Speed multiplier per band")]
+    internal static ConfigEntry<string> LeechMissileSpeedBands;
+    internal static string LeechMissileSpeedRaw => LeechMissileSpeedBands?.Value ?? DefaultLeechMissileSpeedBands;
+
+    private const string DefaultLeechHostFireIntervalBands = "30,25,20";
+    [BindConfig("leech", DefaultLeechHostFireIntervalBands, "Seconds between Leech Missile launches from one Leech Carrier, per band")]
+    internal static ConfigEntry<string> LeechHostFireIntervalBands;
+    internal static string LeechFireIntervalRaw => LeechHostFireIntervalBands?.Value ?? DefaultLeechHostFireIntervalBands;
+
+    private const string DefaultLeechContainmentPromptBands = "1,2,3";
+    [BindConfig("leech", DefaultLeechContainmentPromptBands, "Containment Prompts issued during one removal hold, per band")]
+    internal static ConfigEntry<string> LeechContainmentPromptBands;
+    internal static string LeechPromptCountRaw => LeechContainmentPromptBands?.Value ?? DefaultLeechContainmentPromptBands;
+
+    private const string DefaultLeechPromptWindowBands = "1.5,1.2,1.0";
+    [BindConfig("leech", DefaultLeechPromptWindowBands, "Seconds a crewmember has to answer a Containment Prompt, per band. Missing one frees the Leech, capped at one escape each")]
+    internal static ConfigEntry<string> LeechPromptWindowBands;
+    internal static string LeechPromptWindowRaw => LeechPromptWindowBands?.Value ?? DefaultLeechPromptWindowBands;
+
+    private const string DefaultLeechHoldDurationBands = "3,4,5";
+    [BindConfig("leech", DefaultLeechHoldDurationBands, "Seconds of sustained multi-tool hold needed to remove a Leech, per band")]
+    internal static ConfigEntry<string> LeechHoldDurationBands;
+    internal static string LeechHoldDurationRaw => LeechHoldDurationBands?.Value ?? DefaultLeechHoldDurationBands;
+
+    private const string DefaultLeechModuleDebuffMagnitudeBands = "0.25,0.40,0.50";
+    [BindConfig("leech", DefaultLeechModuleDebuffMagnitudeBands, "Fractional effectiveness penalty a Module-Biter inflicts, per band. Non-stacking — several Leeches on one module apply this once")]
+    internal static ConfigEntry<string> LeechModuleDebuffMagnitudeBands;
+    internal static string LeechDebuffMagnitudeRaw => LeechModuleDebuffMagnitudeBands?.Value ?? DefaultLeechModuleDebuffMagnitudeBands;
+
+    private const string DefaultLeechModuleDamageRateBands = "1.0,1.5,2.0";
+    [BindConfig("leech", DefaultLeechModuleDamageRateBands, "Multiplier on LeechModuleDamagePercentPerTick, per band")]
+    internal static ConfigEntry<string> LeechModuleDamageRateBands;
+    internal static string LeechModuleDamageRateRaw => LeechModuleDamageRateBands?.Value ?? DefaultLeechModuleDamageRateBands;
+
+    private const string DefaultLeechHullChompDamageBands = "1.0,1.5,2.0";
+    [BindConfig("leech", DefaultLeechHullChompDamageBands, "Multiplier on LeechHullDamagePercentPerChomp, per band")]
+    internal static ConfigEntry<string> LeechHullChompDamageBands;
+    internal static string LeechChompDamageRateRaw => LeechHullChompDamageBands?.Value ?? DefaultLeechHullChompDamageBands;
+
 #pragma warning restore CS0649
 
     internal static ConfigEntry<Vector3> FrigateLobbyHangerPosition;
@@ -178,6 +315,22 @@ internal static class TerminusConfig
 
 
     internal static void Init(ConfigFile cfg)
+    {
+        BindAttributedFields(cfg);
+
+        FrigateLobbyHangerPosition = cfg.Bind("lobby", "FrigateLobbyHangerPosition", new Vector3(0, 0, -75), "Position of the frigate prefab in the lobby");
+        StrikerLobbyHangerPosition = cfg.Bind("lobby", "StrikerLobbyHangerPosition", new Vector3(0, 0, -75), "Position of the frigate prefab in the lobby");
+        DestroyerLobbyHangerPosition = cfg.Bind("lobby", "FrigateLobbyHangerPosition", new Vector3(0, 0, -75), "Position of the frigate prefab in the lobby");
+
+        FrigateLobbyHangerRot = cfg.Bind("lobby", "FrigateLobbyHangerRot", new Vector3(0, 20, 0), "Position of the frigate prefab in the lobby");
+        StrikerLobbyHangerRot = cfg.Bind("lobby", "StrikerLobbyHangerRot", new Vector3(0, 0, 0), "Position of the frigate prefab in the lobby");
+        DestroyerLobbyHangerRot = cfg.Bind("lobby", "FrigateLobbyHangerRot", new Vector3(0, 20, 0), "Position of the frigate prefab in the lobby");
+    }
+
+    // Split from Init because the lobby binds above construct a UnityEngine.Vector3,
+    // whose GameLibs reference stub throws under the test host. Everything
+    // attribute-driven stays reachable headlessly.
+    internal static void BindAttributedFields(ConfigFile cfg)
     {
         Type type = typeof(TerminusConfig);
 
@@ -215,14 +368,6 @@ internal static class TerminusConfig
 
             field.SetValue(null, entry);
         }
-
-        FrigateLobbyHangerPosition = cfg.Bind("lobby", "FrigateLobbyHangerPosition", new Vector3(0, 0, -75), "Position of the frigate prefab in the lobby");
-        StrikerLobbyHangerPosition = cfg.Bind("lobby", "StrikerLobbyHangerPosition", new Vector3(0, 0, -75), "Position of the frigate prefab in the lobby");
-        DestroyerLobbyHangerPosition = cfg.Bind("lobby", "FrigateLobbyHangerPosition", new Vector3(0, 0, -75), "Position of the frigate prefab in the lobby");
-
-        FrigateLobbyHangerRot = cfg.Bind("lobby", "FrigateLobbyHangerRot", new Vector3(0, 20, 0), "Position of the frigate prefab in the lobby");
-        StrikerLobbyHangerRot = cfg.Bind("lobby", "StrikerLobbyHangerRot", new Vector3(0, 0, 0), "Position of the frigate prefab in the lobby");
-        DestroyerLobbyHangerRot = cfg.Bind("lobby", "FrigateLobbyHangerRot", new Vector3(0, 20, 0), "Position of the frigate prefab in the lobby");
     }
 }
 
