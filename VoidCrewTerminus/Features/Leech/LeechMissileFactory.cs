@@ -67,6 +67,7 @@ internal static class LeechMissileFactory
         missile.SpawnTime = PhotonNetwork.ServerTimestamp;
 
         missile.Arm(target, hitPoints);
+        missile.Deployed += (_, point, normal) => LeechEncounterController.DeployBatch(point, normal);
 
         // Registration is explicit — point-defense finds NPC projectiles through
         // the synchronizer's dictionary, not by scanning colliders.

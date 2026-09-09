@@ -57,6 +57,52 @@ internal class LeechMissileCommand : PublicCommand
     }
 }
 
+internal class LeechStatusCommand : PublicCommand
+{
+    public override string[] CommandAliases() => new[] { "leechstatus" };
+    public override string Description() => "[DevMode] Report attached Leech count, the concurrency rail, and the ship's exposure tags";
+    public override List<Argument> Arguments() => [];
+    public override string[] UsageExamples() => ["!leechstatus"];
+
+    public override void Execute(string arguments, int sender)
+    {
+        if (!TerminusConfig.DevMode) return;
+
+        PlayerControlledShip ship = ClientGame.Current?.PlayerShip;
+        if (ship == null)
+        {
+            Messaging.Notification("No player ship.");
+            return;
+        }
+
+        string tags = string.Join(", ", ship.Stats.LocalTags()
+            .Where(t => t != null && t.name.Contains("Leech"))
+            .Select(t => t.name));
+
+        Messaging.Notification(
+            $"Leeches {LeechEncounterController.AttachedCount}/{TerminusConfig.LeechCap}" +
+            $"{(LeechEncounterController.AtCapacity ? " (AT CAP)" : "")} — " +
+            $"ship tags: {(string.IsNullOrEmpty(tags) ? "none" : tags)}");
+    }
+}
+
+internal class LeechClearCommand : PublicCommand
+{
+    public override string[] CommandAliases() => new[] { "leechclear" };
+    public override string Description() => "[DevMode] Remove every attached Leech and clear its debuffs";
+    public override List<Argument> Arguments() => [];
+    public override string[] UsageExamples() => ["!leechclear"];
+
+    public override void Execute(string arguments, int sender)
+    {
+        if (!TerminusConfig.DevMode) return;
+
+        int removed = LeechEncounterController.AttachedCount;
+        LeechEncounterController.Reset();
+        Messaging.Notification($"Cleared {removed} Leech(es).");
+    }
+}
+
 // The projectile target mask is asset-side data the decompile can't resolve, so
 // this reports what the layer names actually are at runtime.
 internal class LeechLayersCommand : PublicCommand

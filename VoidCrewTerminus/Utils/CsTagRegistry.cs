@@ -59,6 +59,32 @@ public static class CsTagRegistry
         }
     }
 
+    private static CsTag _moduleLeechAttached;
+    private static CsTag _shipHasLeeches;
+    private static CsTag _shipLeechSwarmSmall;
+    private static CsTag _shipLeechSwarmHeavy;
+    private static CsTag _shipLeechSwarmCritical;
+
+    // Stamped on a module while at least one Leech is attached to it.
+    public static CsTag ModuleLeechAttached => Authored(ref _moduleLeechAttached, "Tag_Module_Leech_Attached");
+
+    // Ship-level exposure. Bucketing runs per-client — none of this is networked.
+    public static CsTag ShipHasLeeches => Authored(ref _shipHasLeeches, "Tag_Ship_HasLeeches");
+    public static CsTag ShipLeechSwarmSmall => Authored(ref _shipLeechSwarmSmall, "Tag_Ship_LeechSwarm_Small");
+    public static CsTag ShipLeechSwarmHeavy => Authored(ref _shipLeechSwarmHeavy, "Tag_Ship_LeechSwarm_Heavy");
+    public static CsTag ShipLeechSwarmCritical => Authored(ref _shipLeechSwarmCritical, "Tag_Ship_LeechSwarm_Critical");
+
+    // Bundled CsTag ScriptableObjects cannot resolve through the game's table, so
+    // mod-authored tags are constructed at runtime. The Tag_ prefix matches how the
+    // game names its own.
+    private static CsTag Authored(ref CsTag cache, string name)
+    {
+        if (cache != null) return cache;
+        cache = ScriptableObject.CreateInstance<CsTag>();
+        cache.name = name;
+        return cache;
+    }
+
     // The game's canonical relic tag. This is the same asset RuntimeCarryable stamps
     // onto RuntimeAssets-modded relics (RuntimeAssetTable.RelicTag), and vanilla relic
     // carryables carry it in their serialized CsTags — so a reference-equality check
