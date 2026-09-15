@@ -20,7 +20,11 @@ internal static class LeechMissileFactory
     // Layer numbers are asset-side, so resolve by name and let the mask arbitrate.
     private static readonly string[] PreferredLayers = { "SpaceObjects", "MovingPlatform" };
 
+    private static readonly int BaseColor = Shader.PropertyToID("_BaseColor");
+    private static readonly int EmissiveColor = Shader.PropertyToID("_EmissiveColor");
+
     private static int _cachedLayer = -1;
+    private static Material _bodyMaterial;
 
     internal static LeechMissileBehavior Spawn(
         Vector3 origin,
@@ -87,7 +91,49 @@ internal static class LeechMissileFactory
         go.transform.rotation = Quaternion.LookRotation(heading);
         go.transform.localScale = new Vector3(0.5f, 1.4f, 0.5f);
         go.layer = ResolveTargetLayer();
+
+        Material body = BodyMaterial();
+        if (body != null) go.GetComponent<MeshRenderer>().sharedMaterial = body;
+
         return go;
+    }
+
+    // CreatePrimitive assigns the built-in Default-Material, whose Standard shader
+    // is not in this HDRP build — the capsule then renders as nothing at all, with
+    // no error. Emissive because an unlit placeholder reads as black against space.
+    private static Material BodyMaterial()
+    {
+        if (_bodyMaterial != null) return _bodyMaterial;
+
+        Shader shader = Shader.Find("HDRP/Lit");
+        if (shader == null) shader = Shader.Find("HDRP/Unlit");
+        if (shader == null) shader = BorrowSceneShader();
+
+        if (shader == null)
+        {
+            BepinPlugin.Log.LogWarning("[Leech] no usable shader found; missile will be invisible.");
+            return null;
+        }
+
+        _bodyMaterial = new Material(shader) { name = "LeechMissileBody" };
+        if (_bodyMaterial.HasProperty(BaseColor))
+            _bodyMaterial.SetColor(BaseColor, new Color(0.35f, 0.75f, 0.30f));
+        if (_bodyMaterial.HasProperty(EmissiveColor))
+            _bodyMaterial.SetColor(EmissiveColor, new Color(0.9f, 2.6f, 0.7f));
+
+        BepinPlugin.Log.LogDebug($"[Leech] missile material using shader '{shader.name}'.");
+        return _bodyMaterial;
+    }
+
+    private static Shader BorrowSceneShader()
+    {
+        foreach (MeshRenderer renderer in Object.FindObjectsOfType<MeshRenderer>())
+        {
+            Material candidate = renderer.sharedMaterial;
+            if (candidate != null && candidate.shader != null && candidate.shader.isSupported)
+                return candidate.shader;
+        }
+        return null;
     }
 
     // Picks the named layer inside TARGET_MASK. Falls back to the mask's lowest
