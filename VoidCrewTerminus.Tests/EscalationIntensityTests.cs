@@ -16,8 +16,6 @@ public class EscalationIntensityTests
         float statRate = 0.05f, float densityRate = 0.12f) =>
         new(active: true, rawScalar, cap, statRate, densityRate);
 
-    // ---- the cap ---------------------------------------------------------
-
     // Enemy pressure has to plateau: the raw scalar climbs all run, and an
     // uncapped density multiplier would spawn unbounded networked ships.
     [Theory]
@@ -44,8 +42,6 @@ public class EscalationIntensityTests
         Assert.Equal(10, e.Scalar);
     }
 
-    // ---- the shared gate -------------------------------------------------
-
     [Fact]
     public void AffectsEnemies_FalseWhileDormant() =>
         Assert.False(new EscalationIntensity(active: false, 8, 10, 0.05f, 0.12f).AffectsEnemies);
@@ -70,8 +66,6 @@ public class EscalationIntensityTests
         Assert.False(e.AffectsEnemies);
         Assert.Equal(7, e.Scalar);
     }
-
-    // ---- multipliers -----------------------------------------------------
 
     [Fact]
     public void StatBonus_IsCappedScalarTimesRate() =>
@@ -103,8 +97,6 @@ public class EscalationIntensityTests
         Assert.True(e.AffectsEnemies);   // gate passes...
         Assert.True(e.StatBonus <= 0f);  // ...but there is nothing to apply
     }
-
-    // ---- density scaling -------------------------------------------------
 
     // Callers apply this unconditionally, so a dormant run must pass the
     // scenario's own value straight through.

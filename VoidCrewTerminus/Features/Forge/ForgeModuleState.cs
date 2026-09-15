@@ -26,9 +26,8 @@ public class ForgeModuleState : IModifierSource
     public IReadOnlyList<string> PerkSlots => _perkSlots;
     public IReadOnlyList<BurdenType> Burdens => _burdens;
 
-    // PhotonView ViewID of the module this state is attached to, or 0 when the
-    // module is gone or not networked. Used by the late-joiner overlay push,
-    // which has to key installed modules by something the receiver can resolve.
+    // 0 when the module is gone or not networked. The late-joiner overlay push keys
+    // installed modules by this.
     public int ModuleViewId =>
         _module != null && _module.photonView != null ? _module.photonView.ViewID : 0;
 
@@ -55,8 +54,7 @@ public class ForgeModuleState : IModifierSource
         RefreshMods();
     }
 
-    // Any change to the snapshot shape forces this method (and ApplySnapshot below)
-    // to be updated in lock-step — the compiler is the forcing function.
+    // Snapshot and ApplySnapshot must change in lock-step with the snapshot shape.
     public ForgeSnapshot Snapshot() => ForgeSnapshot.Create(Level, _perkSlots, _burdens);
 
     public void ApplySnapshot(ForgeSnapshot snapshot)
@@ -82,8 +80,7 @@ public class ForgeModuleState : IModifierSource
         SyncBurdenBehaviors();
     }
 
-    // Idempotent — no-op if the type is already present. Reapplies stat mods so
-    // the tag marker for the new burden is stamped.
+    // Idempotent. Reapplies stat mods so the tag marker for the new burden is stamped.
     public void AddBurden(BurdenType burden)
     {
         if (burden == BurdenType.None) return;
@@ -145,9 +142,7 @@ public class ForgeModuleState : IModifierSource
         }
     }
 
-    // Idempotent — checks for an existing component before adding. Also removes
-    // components for burden types no longer in the set; today's "no removal"
-    // invariant makes that branch a no-op in practice, kept defensively.
+    // Idempotent. The removal branch is defensive: burdens are never dropped today.
     private void SyncBurdenBehaviors()
     {
         if (_module == null) return;
@@ -192,11 +187,9 @@ public class ForgeModuleState : IModifierSource
     private static readonly AccessTools.FieldRef<StatTagCollection, List<CsTag>> RuntimeTagsRef =
         AccessTools.FieldRefAccess<StatTagCollection, List<CsTag>>("runtimeTags");
 
-    // The game only rebuilds a collection's runtimeTags inside UpdateMods, which
-    // runs solely on a mod's active↔inactive transition — a plain ApplyModifiers /
-    // RemoveModifier never triggers it, so TagsToAdd alone never surfaces in
-    // LocalTags(). Mirror the Forge tag into runtimeTags directly; the zero-value
-    // marker mod (see BuildMods) keeps it alive if the game does rebuild later.
+    // runtimeTags is rebuilt only inside UpdateMods, which runs on a mod's active/inactive
+    // transition, so TagsToAdd alone never surfaces in LocalTags(). The tag is mirrored in
+    // directly; the zero-value marker mod in BuildMods keeps it alive across a real rebuild.
     private void SyncForgeTag(bool present)
     {
         if (_module == null) return;
@@ -213,17 +206,15 @@ public class ForgeModuleState : IModifierSource
         }
     }
 
-    // Each group is narrowed by module category via ModTagConfiguration.RequiredTags
-    // so mods only activate on modules carrying the matching category CsTag.
-    // TagsToAdd = [Forge_Upgraded] stamps upgraded modules so perk gating can use
-    // RequiredLocalTags = [Forge_Upgraded].
+    // RequiredTags narrows each group to modules carrying the matching category CsTag;
+    // TagsToAdd stamps Forge_Upgraded so perk gating can use RequiredLocalTags.
     private List<StatMod> BuildMods()
     {
         float amount = (Level - 3) * 0.08f;
         var mods = new List<StatMod>();
 
-        // Level groups only contribute above vanilla L3 — a module can still carry
-        // perks at L3 (restored state), in which case only the perk mods apply.
+        // Level groups contribute only above vanilla L3. A module can still carry perks at
+        // L3 (restored state), in which case only the perk mods apply.
         if (Level > 3)
         {
             AddGroup(mods, amount, Utils.CsTagRegistry.Weapon, new[]
@@ -264,26 +255,23 @@ public class ForgeModuleState : IModifierSource
             };
             foreach (var (stat, perkAmount) in perk.Payload)
             {
-                // Skip int-backed stats — see AddGroup.
+                // Skip int-backed stats; see AddGroup.
                 if (StatType.IsInt(stat.Id)) continue;
                 mods.Add(new StatMod(new FloatModifier(perkAmount, ModifierType.AdditiveMultiplier, this), stat.Id, tagCfg));
             }
         }
 
-        // TagsToAdd only lands in a collection's runtime tags when a carrying mod
-        // attaches to a stat registered on that collection, and the category groups
-        // above attach to stats on child collections (weapon parts etc.) — so
-        // without this the module's own LocalTags never gains Forge_Upgraded
-        // (breaking !dumptags and RequiredLocalTags gating). A zero-value addend on
-        // MaxHitPoints — registered by every OrbitObject — carries the tag onto the
-        // module collection itself without touching stats.
+        // TagsToAdd lands in a collection's runtime tags only when a carrying mod attaches to
+        // a stat registered on that collection, and the groups above attach to child
+        // collections. A zero-value addend on MaxHitPoints, registered by every OrbitObject,
+        // carries the tag onto the module's own collection without touching stats.
         mods.Add(new StatMod(
             new FloatModifier(0f, ModifierType.PrimaryAddend, this),
             StatType.MaxHitPoints.Id,
             new ModTagConfiguration { TagsToAdd = new[] { Utils.CsTagRegistry.ForgeUpgraded } }));
 
-        // Same zero-value-addend pattern — one marker per active burden so the
-        // module's LocalTags carry Burden_RandomShutoff etc. for game/mod-side queries.
+        // Same zero-value-addend pattern, one marker per active burden, so the module's
+        // LocalTags carry Burden_RandomShutoff for game and mod-side queries.
         foreach (var burden in _burdens)
         {
             var burdenTag = Utils.CsTagRegistry.BurdenTagFor(burden);
@@ -309,9 +297,8 @@ public class ForgeModuleState : IModifierSource
 
         foreach (var statType in statTypes)
         {
-            // A FloatModifier on an int-backed stat throws in ModifiableInt.AddModifier
-            // when RegisterChildCollection later replays it onto a child collection
-            // (e.g. PowerProvider.PowerProvided). Truncates to 0 anyway.
+            // A FloatModifier on an int-backed stat throws in ModifiableInt.AddModifier when
+            // RegisterChildCollection replays it onto a child collection, and truncates to 0.
             if (StatType.IsInt(statType.Id)) continue;
             mods.Add(new StatMod(new FloatModifier(amount, ModifierType.AdditiveMultiplier, this), statType.Id, tagCfg));
         }

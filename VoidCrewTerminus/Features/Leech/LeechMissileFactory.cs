@@ -98,9 +98,8 @@ internal static class LeechMissileFactory
         return go;
     }
 
-    // CreatePrimitive assigns the built-in Default-Material, whose Standard shader
-    // is not in this HDRP build — the capsule then renders as nothing at all, with
-    // no error. Emissive because an unlit placeholder reads as black against space.
+    // CreatePrimitive's Default-Material uses the Standard shader, absent in this HDRP
+    // build: the capsule renders as nothing, silently. Emissive so it reads against space.
     private static Material BodyMaterial()
     {
         if (_bodyMaterial != null) return _bodyMaterial;

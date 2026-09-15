@@ -12,47 +12,24 @@ using VoidManager.Utilities;
 
 namespace VoidCrewTerminus.Forge;
 
-// MonoBehaviour attached at runtime to the Upgrade Forge prefab
-// (Assets/voidcrewterminus.metem → UpgradeForgeModuleCell.prefab).
-//
-// Responsibilities:
-//   - Hold at most one BuildBox in the module socket (the target being upgraded).
-//   - Hold up to Capacity relics in the relic slots.
-//   - Enforce the cost curve on commit.
-//   - Persist the new level via ForgeStateStore.SaveSnapshot so the level rides
-//     the BuildBox through reconstruction — ForgePersistPatch does the restoration.
-//
-// In-world interaction model (see also ForgeInteractionPatch):
-//   - BuildInteractables() spawns click targets on the prefab's named anchors.
-//     Tubes/socket/alloy terminal are ForgeInteractable (a click, via the
-//     CarryableInteract prefix); CommitTarget is a ForgeCommitInteractable, held
-//     rather than clicked because committing is irreversible.
-//   - Docked relics and the BuildBox stay live in the world — kinematic, pinned to
-//     their anchor by LateUpdate, still grabbable. Update() reconciles when a player
-//     grabs one back out or a commit destroys it.
+// Attached at runtime to the UpgradeForgeModuleCell prefab from voidcrewterminus.metem.
+// Commits persist through ForgeStateStore.SaveSnapshot so the level rides the BuildBox
+// through reconstruction; ForgePersistPatch restores it. See docs/upgrade-forge-design.html.
 public class UpgradeForgeBehavior : MonoBehaviour
 {
-    // Relic capacity is the Forge's progression level. Filling the meter — sector
-    // jumps + alloys — is what unlocks the bigger upgrade steps.
+    // Relic capacity is the Forge's progression level, raised by filling the meter.
     public static int Capacity => ForgeMeterController.Capacity;
 
-    // Name of the shipped prefab inside voidcrewterminus.metem — used by
-    // ForgeInteractionPatch to identify Forge modules as they build.
     public const string PrefabName = "UpgradeForgeModuleCell";
 
-    // AssetLoader dispatches on this name vs. PrefabName to tell the two apart —
-    // both are bare VoidCrewAsset-marked GameObjects with no surviving components,
-    // so the name is the only signal available at load time.
+    // AssetLoader tells the two prefabs apart by name: both are bare VoidCrewAsset GameObjects
+    // with no surviving components, so the name is the only signal at load time.
     public const string BuildBoxPrefabName = "UpgradeForgeBuildBox";
 
-    // Anchor names baked into the shipped prefab. CommitTarget is required for
-    // in-world commits; AlloyTarget is the meter terminal (optional — !setmeter
-    // covers testing until the prefab gains the anchor).
-    //
-    // Handle and DeconstructTrigger are deliberately separate: Handle is cosmetic
-    // mesh, DeconstructTrigger a hand-sized authored Collider. Conflating them fell
-    // back to BuildAnchorClickRegion's generated box, which on odd FBX import scales
-    // balloons past its bounds and steals raycasts aimed at a neighboring module.
+    // Baked into the shipped prefab; renaming one silently unhooks it. Handle and
+    // DeconstructTrigger must stay separate: Handle is cosmetic mesh, DeconstructTrigger an
+    // authored Collider, and conflating them falls back to a generated click box that on odd
+    // FBX import scales steals raycasts from neighboring modules.
     public const string RelicTubeAnchorName = "RelicTubeTarget";
     public const string InputAnchorName = "InputTarget";
     public const string CommitAnchorName = "CommitTarget";
@@ -60,32 +37,23 @@ public class UpgradeForgeBehavior : MonoBehaviour
     public const string DeconstructHandleName = "Handle";
     public const string DeconstructTriggerName = "DeconstructTrigger";
 
-    // Scopes ForgeCommitInteractable's outline to the lever instead of the whole
-    // module. Buried in the FBX hierarchy like Handle, so it has no YAML block of
-    // its own in the .prefab — grep won't find it, GetComponentsInChildren will.
+    // Scopes ForgeCommitInteractable's outline to the lever. Buried in the FBX hierarchy, so it
+    // has no YAML block in the .prefab: grep won't find it, GetComponentsInChildren will.
     public const string CommitLeverBoxName = "LeverBox";
 
-    // The lever's cosmetic moving part, animated on hold the same way Deconstruct's
-    // Handle is — buried in the FBX hierarchy like LeverBox/Handle.
+    // The lever's cosmetic moving part, animated on hold. Also buried in the FBX hierarchy.
     public const string CommitLevelName = "Lever";
 
-    // The screen mesh (its own FBX node, using Materials/ModuleScreen.mat) that
-    // ForgeScreenDisplay renders the level/alloy readout onto.
     public const string AlloyTerminalScreenName = "AlloyTerminalScreen";
 
-    // Names of the two Unity-authored assets ForgeScreenDisplay needs, captured
-    // by AssetLoader.LoadBundle from the exported bundle (a VisualTreeAsset and a
-    // PanelSettings ScriptableObject aren't VoidCrewAsset-tagged GameObjects, so
-    // they're matched by asset name instead of the usual VCA lookup).
+    // A VisualTreeAsset and a PanelSettings aren't VoidCrewAsset-tagged GameObjects, so
+    // AssetLoader matches these by asset name instead of the usual VCA lookup.
     public const string ForgeScreenLayoutName = "ForgeScreenLayout";
     public const string ForgeScreenPanelSettingsName = "ForgeScreenPanelSettings";
 
     private BuildBox _moduleBox;
     private readonly List<GameObject> _relics = new();
 
-    // The items physically held on this Forge's anchors. AnchorDock owns their
-    // physics; this class owns what they MEAN — which are relics, which is the
-    // module, and who has to be told when one leaves.
     private readonly AnchorDock _dock = new();
     private readonly List<KeyValuePair<GameObject, Transform>> _grabbedScratch = new();
     private Transform[] _tubeAnchors = System.Array.Empty<Transform>();
@@ -95,31 +63,26 @@ public class UpgradeForgeBehavior : MonoBehaviour
     private readonly ForgeGhosts _ghosts = new();
     private float _ghostRefreshCountdown;
 
-    // Vanilla SocketOutlines re-decides on a 0.2s InvokeRepeating; matched so the
-    // Forge's previews pop on the same cadence as the ship's own.
+    // Matches vanilla SocketOutlines' 0.2s cadence so previews pop with the ship's own.
     private const float GhostRefreshInterval = 0.2f;
 
     public bool HasModule => _moduleBox != null;
     public int RelicCount => _relics.Count;
 
-    // Asks the dock rather than HasModule/RelicCount because the question
-    // ForgeDeconstructGuardPatch needs answered is physical — "would deconstructing
-    // strand an item?" — not semantic.
+    // Physical, not semantic: would deconstructing strand an item? Not HasModule/RelicCount.
     internal bool IsLoaded => _dock.Count > 0;
     public BuildBox ModuleBox => _moduleBox;
     public IReadOnlyList<GameObject> Relics => _relics;
 
     public int CurrentBoxLevel => LevelOfBox(_moduleBox);
 
-    // Static so the host can compute a client-operated box's level from the box
-    // resolved by ViewID (the host's own forge instance has no _moduleBox when a
-    // client docked — docking is a local interaction).
+    // Static so the host can compute a client-operated box's level by ViewID: docking is a
+    // local interaction, so the host's own forge instance has no _moduleBox.
     internal static int LevelOfBox(BuildBox box)
     {
         if (box == null || box.photonView == null) return 0;
 
-        // Only a module at its final vanilla mark may be forged; below that the
-        // vanilla upgrade-chip path still applies.
+        // Only a module at its final vanilla mark may be forged; below that the chip path applies.
         int mark = GetBoxMark(box, out bool isFinalMark);
         if (!isFinalMark) return mark; // 1 or 2 → below MinLevel → InvalidModuleLevel on commit
 
@@ -128,20 +91,15 @@ public class UpgradeForgeBehavior : MonoBehaviour
             : ForgeCostCurve.MinLevel;
     }
 
-    // STRICT: only modules provably at the END of an upgrade chain are forgeable.
-    // Anything unresolvable (no identity, table missing, guid in no chain) is
-    // refused — the permissive alternative ("unknown = final") let MkI/MkII modules
-    // slip through.
+    // Fail closed: anything unresolvable (no identity, table missing, guid in no chain) is
+    // refused, so only modules provably at the end of an upgrade chain are forgeable.
     //
-    // Composite weapon boxes are GENERIC prefabs: moduleRef is unset, identity
-    // arrives as a CompositeWeaponDataRef in instantiation data, and their chains
-    // are keyed by that guid. Plain module boxes chain by moduleRef guid.
+    // Composite weapon boxes are generic prefabs: moduleRef is unset and identity arrives as a
+    // CompositeWeaponDataRef in instantiation data, so their chains key by that guid instead.
     private int GetBoxMark(out bool isFinalMark) => GetBoxMark(_moduleBox, out isFinalMark);
 
-    // Guids already reported as unforgeable — see the log line at the end of
-    // GetBoxMark for why it must not repeat. Cleared per run (ADR-0001's rule for
-    // mod-side static state) so the whitelist hint is available once per run rather
-    // than once per process lifetime.
+    // Cleared per run (ADR-0001's rule for mod-side static state) so the hint below appears
+    // once per run rather than once per process.
     private static readonly HashSet<GUIDUnion> _unchainedWarned = new();
 
     internal static void ResetForRun() => _unchainedWarned.Clear();
@@ -172,13 +130,8 @@ public class UpgradeForgeBehavior : MonoBehaviour
             }
         }
 
-        // If a legitimately single-form module ever needs to forge, this log line
-        // names the guid to whitelist.
-        //
-        // Once per guid, and Debug not Info: this is not only reached on a commit
-        // attempt — RefreshGhosts calls LevelOfBox at 5 Hz for whatever box the
-        // player is carrying, so an unforgeable box in hand (the Forge's own crate,
-        // most of all) wrote hundreds of Info lines per playtest.
+        // Reached at 5 Hz from RefreshGhosts, not only on commit, so this stays once-per-guid
+        // and Debug. The guid named here is what a legitimately single-form module whitelists.
         if (_unchainedWarned.Add(guid))
             BepinPlugin.Log.LogDebug($"[Forge] Module {guid.AsHex()} not in any upgrade chain — refusing to forge (strict Mark III policy).");
         return 1;
@@ -227,8 +180,6 @@ public class UpgradeForgeBehavior : MonoBehaviour
         return sb.ToString();
     }
 
-    // Equal to CurrentBoxLevel when nothing is loaded, or when the next-level cost
-    // exceeds the inserted relic count.
     public int ProjectedTargetLevel => ForgeCostCurve.MaxReachable(CurrentBoxLevel, _relics.Count);
 
     public bool TryTakeModule(BuildBox box)
@@ -262,12 +213,8 @@ public class UpgradeForgeBehavior : MonoBehaviour
         return true;
     }
 
-    // Consumes only the relics actually spent; leftovers stay in the Forge.
-    //
-    // Local operator entry (host / solo) — a client operator is routed to
-    // RequestCommit by the policy instead. ForgeCommit computes, persists and
-    // broadcasts the outcome; consuming OUR relics stays here because we own them,
-    // which is what makes the networked destroy propagate.
+    // Host/solo entry; a client operator is routed to RequestCommit instead. Consuming our own
+    // relics stays local because ownership is what makes the networked destroy propagate.
     public CommitOutcome TryCommit()
     {
         var outcome = ForgeCommit.Execute(_moduleBox, _relics);
@@ -286,8 +233,6 @@ public class UpgradeForgeBehavior : MonoBehaviour
         }
     }
 
-    // ViewIDs of the relics currently docked here (for a client's commit request
-    // to the host).
     internal int[] RelicViewIds()
     {
         var ids = new List<int>(_relics.Count);
@@ -299,9 +244,8 @@ public class UpgradeForgeBehavior : MonoBehaviour
         return ids.ToArray();
     }
 
-    // The host's authoritative commit result arrived. If we're the operator (we
-    // hold the relics), consume our share and notify; non-operators (empty
-    // tubes) no-op. The snapshot itself is applied by ForgeNetSync.
+    // Only the operator (the client holding the relics) consumes; ForgeNetSync applies the
+    // snapshot itself.
     internal void OnNetworkCommitResult(int relicsConsumed)
     {
         if (_relics.Count == 0) return; // not the operator
@@ -312,11 +256,8 @@ public class UpgradeForgeBehavior : MonoBehaviour
             "Rebuild the module to apply.");
     }
 
-    // Docking is a LOCAL interaction — HandleInteraction runs only for the player
-    // who clicked — so the operator announces each dock/undock and everyone else
-    // mirrors it. Only the paths that ORIGINATE a dock announce it (the two Apply
-    // arms and the Update reconcile); the mirroring paths below say nothing, which
-    // is what stops two clients echoing each other forever.
+    // Docking is a local interaction, so the operator announces it and everyone else mirrors.
+    // Only originating paths broadcast; were the mirroring paths to, clients would echo forever.
     internal static UpgradeForgeBehavior FindByViewId(int forgeViewId)
     {
         var pv = Photon.Pun.PhotonView.Find(forgeViewId);
@@ -332,9 +273,8 @@ public class UpgradeForgeBehavior : MonoBehaviour
         }
     }
 
-    // -1 = the module socket; >= 0 indexes _tubeAnchors. Anchors are ordered by
-    // name (BuildInteractables sorts them), so the index means the same thing on
-    // every client running the same prefab.
+    // -1 is the module socket; >= 0 indexes _tubeAnchors. Ordered by name so the index means
+    // the same thing on every client running the same prefab.
     private int AnchorIndexOf(Transform anchor)
     {
         if (anchor == null) return -1;
@@ -360,17 +300,15 @@ public class UpgradeForgeBehavior : MonoBehaviour
         var anchor = AnchorFromIndex(anchorIndex);
         if (anchor == null) return;
 
-        // Mirror the bookkeeping so RelicCount / HasModule read correctly for
-        // observers too. The commit itself stays host-authoritative and is
-        // resolved from ViewIDs, so a mirrored list can't affect an outcome.
+        // Mirrored so RelicCount/HasModule read correctly for observers. Commits re-resolve
+        // from ViewIDs on the host, so a mirrored list can't affect an outcome.
         var box = go.GetComponent<BuildBox>();
         if (box != null) _moduleBox ??= box;
         else if (!_relics.Contains(go)) _relics.Add(go);
 
-        // -1 = the module socket (see AnchorIndexOf/AnchorFromIndex) — align by
-        // Center there to match the local LoadModule path below.
+        // -1 is the module socket; align by Center there to match the local LoadModule path.
         var align = anchorIndex < 0 ? AnchorAlign.Center : AnchorAlign.Base;
-        _dock.Dock(go, anchor, align); // no BroadcastDock — mirroring, not originating
+        _dock.Dock(go, anchor, align); // no BroadcastDock: mirroring, not originating
 
         BepinPlugin.Log.LogDebug($"[Net] ← applied dock item={itemViewId} anchor={anchorIndex} on forge={ForgeViewId}.");
     }
@@ -380,7 +318,7 @@ public class UpgradeForgeBehavior : MonoBehaviour
         var pv = Photon.Pun.PhotonView.Find(itemViewId);
         if (pv == null) return;
         var go = pv.gameObject;
-        if (go == null || !_dock.Undock(go)) return; // not docked here — nothing to mirror
+        if (go == null || !_dock.Undock(go)) return; // not docked here, nothing to mirror
 
         var box = go.GetComponent<BuildBox>();
         if (box != null && box == _moduleBox) _moduleBox = null;
@@ -404,8 +342,7 @@ public class UpgradeForgeBehavior : MonoBehaviour
         return null;
     }
 
-    // Idempotent — called every time ForgeInteractionPatch re-attaches after a
-    // module rebuild.
+    // Idempotent: ForgeInteractionPatch re-attaches after every module rebuild.
     public void BuildInteractables()
     {
         if (_interactablesBuilt) return;
@@ -437,10 +374,9 @@ public class UpgradeForgeBehavior : MonoBehaviour
         foreach (var tube in _tubeAnchors)
             CreateInteractable(tube, ForgeInteractableKind.RelicTube, new Vector3(0.35f, 0.35f, 0.35f), layer);
         if (_inputAnchor != null)
-            // Oversized so loading is forgiving to aim. It stays raycast-targetable
-            // while it holds a box — an empty-handed click retrieves the box through
-            // the socket rather than needing a ray to reach the box itself, which the
-            // hull would block (see ForgeInteractionPolicy.Decide).
+            // Oversized so loading is forgiving to aim, and still targetable while it holds a
+            // box: an empty-handed click retrieves through the socket, which the hull would
+            // block if the ray had to reach the box itself.
             CreateInteractable(_inputAnchor, ForgeInteractableKind.ModuleSocket, new Vector3(1.2f, 1.2f, 1.2f), layer);
         if (commitAnchor != null)
         {
@@ -488,17 +424,14 @@ public class UpgradeForgeBehavior : MonoBehaviour
     private void OnDisable()
     {
         ForgeMeterController.LevelChanged -= OnForgeLevelChanged;
-        // Nothing else will tick these while we're off — don't leave a hologram
-        // floating in a Forge that has stopped running.
+        // Nothing ticks these while disabled; don't leave a hologram floating.
         _ghosts.Clear();
     }
 
     private void OnForgeLevelChanged(int _) => RefreshTubeVisibility();
 
-    // Which anchors should be previewing, and of what. Acceptance is asked of
-    // ForgeInteractionPolicy — the same call HandleInteraction makes — so the preview
-    // appears exactly when the click would be taken, rather than drifting into
-    // promising an insert the Forge would then refuse.
+    // Previews ask ForgeInteractionPolicy the same question HandleInteraction does, so a
+    // preview can never promise an insert the click would refuse.
     private void RefreshGhosts()
     {
         if (!_interactablesBuilt) return;
@@ -506,8 +439,7 @@ public class UpgradeForgeBehavior : MonoBehaviour
         var payload = LocalPlayer.Instance != null ? LocalPlayer.Instance.Payload : null;
         var carried = ClassifyPayload(payload);
 
-        // Also keeps LevelOfBox's upgrade-chain walk off the tick unless a module box
-        // is actually in hand.
+        // Also keeps LevelOfBox's chain walk off the tick unless a module box is in hand.
         if (carried != ForgePayload.ModuleBox && carried != ForgePayload.Relic)
         {
             _ghosts.Clear();
@@ -527,8 +459,8 @@ public class UpgradeForgeBehavior : MonoBehaviour
     {
         if (anchor == null) return;
 
-        // Tubes above the Forge's Capacity are deactivated wholesale by
-        // RefreshTubeVisibility — a locked tube takes nothing, so it previews nothing.
+        // Tubes above Capacity are deactivated by RefreshTubeVisibility; a locked tube
+        // takes nothing, so it previews nothing.
         if (!anchor.gameObject.activeInHierarchy) { _ghosts.Hide(anchor); return; }
 
         var click = new ForgeClick(carried, carriedLevel, kind, IsAnchorOccupied(anchor));
@@ -543,10 +475,8 @@ public class UpgradeForgeBehavior : MonoBehaviour
             _ghosts.Hide(anchor);
     }
 
-    // Read from RaycastHandler.Current the way vanilla's
-    // CarryablesSocketActor.IsInteractableHighlighted does, rather than from
-    // ForgeInteractable.Highlighted — a highlight callback missed while an
-    // interactable was rebuilt would leave the two out of step.
+    // Read from RaycastHandler.Current, as vanilla's CarryablesSocketActor does: a highlight
+    // callback missed while an interactable was rebuilt would leave ForgeInteractable stale.
     private Transform AimedAnchor()
     {
         var player = LocalPlayer.Instance;
@@ -556,10 +486,9 @@ public class UpgradeForgeBehavior : MonoBehaviour
             : null;
     }
 
-    // Only the first Capacity tubes are active. Deactivating an anchor hides
-    // everything under it — click target, Highlight/Filled helpers, tube mesh — so
-    // locked tubes are enforced physically, not just by the insertion count check.
-    // A tube holding a docked relic never hides (level can drop via dev/reset).
+    // Deactivating an anchor hides everything under it, so locked tubes are enforced
+    // physically, not just by the count check. A tube holding a relic never hides,
+    // because the level can drop via dev commands or a reset.
     private void RefreshTubeVisibility()
     {
         for (int i = 0; i < _tubeAnchors.Length; i++)
@@ -585,9 +514,8 @@ public class UpgradeForgeBehavior : MonoBehaviour
         fi.InteractionInfo = ForgeInteractable.InfoFor(kind);
     }
 
-    // Held, not clicked — a different vanilla input pathway (EnvironmentInteract's
-    // Hold action), so it can't share ForgeInteractable's base. Building the click
-    // region is identical though. See ForgeCommitInteractable.
+    // Held, not clicked: a different vanilla input pathway (EnvironmentInteract's Hold action),
+    // so it can't share ForgeInteractable's base even though the click region is built the same.
     private void CreateCommitInteractable(Transform anchor, Transform leverBox, Transform level, Vector3 size, int layer)
     {
         var go = BuildAnchorClickRegion(anchor, "ForgeInteractable_CommitButton", size, layer);
@@ -605,10 +533,8 @@ public class UpgradeForgeBehavior : MonoBehaviour
         hc.InteractionInfo = ForgeInteractable.InfoFor(ForgeInteractableKind.CommitButton);
     }
 
-    // Same hold-to-confirm mechanism as Commit. `trigger` carries its own authored
-    // Collider so BuildAnchorClickRegion never takes the generated-box fallback —
-    // that fallback is what let this region balloon and steal clicks meant for a
-    // neighboring module. `handle` is cosmetic and optional (the pull animation).
+    // `trigger` carries its own authored Collider so BuildAnchorClickRegion never takes the
+    // generated-box fallback that steals clicks from neighbors. `handle` is cosmetic.
     private void CreateDeconstructInteractable(Transform trigger, Transform handle, int layer)
     {
         var go = BuildAnchorClickRegion(trigger, "ForgeInteractable_Deconstruct", new Vector3(0.2f, 0.2f, 0.2f), layer);
@@ -621,11 +547,9 @@ public class UpgradeForgeBehavior : MonoBehaviour
         dc.VisualHandle = handle;
     }
 
-    // Prefab authoring contract (all optional, plain Unity components so they survive
-    // the metem bundle): a Collider on the anchor itself or on a child named
-    // "ClickTarget" becomes the click region instead of the generated default box;
-    // a disabled child named "Highlight" is shown while the player hovers; a disabled
-    // child named "Filled" is shown while an item is docked on that anchor.
+    // Prefab authoring contract: an authored Collider on the anchor or a "ClickTarget" child
+    // replaces the generated box; disabled "Highlight"/"Filled" children are shown on hover
+    // and while docked. See docs/upgrade-forge-prefab-authoring.html.
     private static GameObject BuildAnchorClickRegion(Transform anchor, string generatedName, Vector3 size, int layer)
     {
         GameObject go;
@@ -635,8 +559,7 @@ public class UpgradeForgeBehavior : MonoBehaviour
 
         if (authored != null)
         {
-            // Click regions must not collide — enforce trigger regardless of how the
-            // collider was authored.
+            // Click regions must not collide, however the collider was authored.
             authored.isTrigger = true;
             go = authored.gameObject;
         }
@@ -655,16 +578,13 @@ public class UpgradeForgeBehavior : MonoBehaviour
                 size.z / Mathf.Max(Mathf.Abs(lossy.z), 1e-4f));
         }
 
-        // Layer is always forced at runtime — the editor project's layer table does
-        // not match the game's, so authored layer indices can't be trusted.
+        // Forced at runtime: the editor project's layer table doesn't match the game's, so
+        // authored layer indices can't be trusted.
         go.layer = layer;
 
         ForgeAnchors.StripHelperColliders(anchor, ForgeAnchors.HighlightName);
         ForgeAnchors.StripHelperColliders(anchor, ForgeAnchors.FilledName);
 
-        // Diagnostic: an oversized/mispositioned click region here would silently
-        // steal raycasts aimed at a neighboring module's own interactables (see
-        // the "deconstructing a different module hit the Forge instead" report).
         var builtCollider = go.GetComponent<Collider>();
         BepinPlugin.Log.LogDebug(
             $"[Forge] Click region '{generatedName}' on anchor '{anchor.name}': " +
@@ -674,16 +594,11 @@ public class UpgradeForgeBehavior : MonoBehaviour
         return go;
     }
 
-    // Entry point for all Forge interactions; runs on the interacting player's
-    // client. Tubes/socket/alloy arrive via ForgeInteractionPatch's CarryableInteract
-    // prefix, CommitButton via ForgeCommitInteractable's hold-completion.
-    //
-    // The rules live in ForgeInteractionPolicy, which is Unity-free and therefore
-    // testable. This reads the scene into facts, hands them over, and carries out the
-    // answer — everything decidable is decided before the world is touched.
+    // Runs only on the interacting player's client. The rules live in ForgeInteractionPolicy,
+    // which stays Unity-free so it can be tested; this only reads facts and applies the answer.
     public void HandleInteraction(ForgeInteractableKind kind, Transform anchor, LocalPlayer player)
     {
-        // Captured before any mutation — ReleaseCarryable clears player.Payload.
+        // Captured before any mutation: ReleaseCarryable clears player.Payload.
         var payload = player.Payload;
         var decision = ForgeInteractionPolicy.Decide(SnapshotView(), DescribeClick(kind, anchor, payload));
 
@@ -707,8 +622,8 @@ public class UpgradeForgeBehavior : MonoBehaviour
             payload: ClassifyPayload(payload),
             carriedBoxLevel: box != null ? LevelOfBox(box) : 0,
             target: kind,
-            // Strictly the dock's answer — see ForgeClick.TargetOccupied for why a
-            // null anchor must NOT report as occupied here.
+            // Strictly the dock's answer; see ForgeClick.TargetOccupied for why a null anchor
+            // must not report as occupied.
             targetOccupied: IsAnchorOccupied(anchor));
     }
 
@@ -718,8 +633,7 @@ public class UpgradeForgeBehavior : MonoBehaviour
         : IsRelic(payload.gameObject) ? ForgePayload.Relic
         : ForgePayload.Other;
 
-    // Carry out a decision. Nothing here re-checks a rule the policy already
-    // applied, and nothing here decides what to say about a refusal.
+    // Nothing here re-checks a rule the policy applied, or decides what to say about a refusal.
     private void Apply(ForgeAction action, Transform anchor, LocalPlayer player, CarryableObject payload)
     {
         switch (action)
@@ -728,28 +642,22 @@ public class UpgradeForgeBehavior : MonoBehaviour
                 player.Carrier.ReleaseCarryable();
                 TryTakeModule((BuildBox)payload);
                 var socket = _inputAnchor != null ? _inputAnchor : transform;
-                // Center-pivot align: the module socket's generated trigger volume
-                // is centered on the anchor, so the box's own center — not its
-                // BasePivot — is what should land there (see AnchorAlign).
                 _dock.Dock(payload.gameObject, socket, AnchorAlign.Center);
                 BroadcastDock(payload.gameObject, socket, docked: true);
                 break;
 
             case ForgeAction.InsertRelic:
-                // The anchor is guarded here rather than folded into
-                // ForgeClick.TargetOccupied: without it TryInsertRelic would claim the
-                // relic and ReleaseCarryable would take it out of the player's hands,
-                // then AnchorDock.Dock would no-op on the null anchor and leave the
-                // relic listed but unpinned.
+                // Without this guard TryInsertRelic claims the relic and ReleaseCarryable takes
+                // it from the player, then Dock no-ops on the null anchor and leaves the relic
+                // listed but unpinned.
                 if (anchor == null)
                 {
                     BepinPlugin.Log.LogWarning("[Forge] Insert on a missing anchor — ignored.");
                     break;
                 }
 
-                // The policy already cleared capacity and the tube, so a refusal here
-                // means the two disagree. Drop it rather than reprint a message the
-                // policy owns.
+                // The policy already cleared capacity and the tube, so a refusal here means the
+                // two disagree. Drop it rather than reprint a message the policy owns.
                 if (!TryInsertRelic(payload.gameObject))
                 {
                     BepinPlugin.Log.LogWarning(
@@ -766,15 +674,13 @@ public class UpgradeForgeBehavior : MonoBehaviour
                 break;
 
             case ForgeAction.Commit:
-                // Levels and counts are read back AFTER the attempt — on success the
-                // box reports its new level and the consumed relics are gone.
+                // Read back after the attempt: on success the box reports its new level.
                 var outcome = TryCommit();
                 foreach (var line in ForgeLabels.DescribeCommit(outcome, CurrentBoxLevel, RelicCount))
                     Messaging.Notification(line);
                 break;
 
             case ForgeAction.RequestCommit:
-                // The client asks, the host rolls and broadcasts back.
                 Net.ForgeNetSync.RequestCommit(_moduleBox.photonView.ViewID, RelicViewIds());
                 break;
 
@@ -782,7 +688,7 @@ public class UpgradeForgeBehavior : MonoBehaviour
                 if (ForgeMeterController.TrySpendAlloys(out var alloyError))
                 {
                     Messaging.Notification(ForgeMeterController.Describe());
-                    Net.ForgeNetSync.BroadcastState(); // host spent — propagate new meter/level
+                    Net.ForgeNetSync.BroadcastState(); // host spent: propagate new meter/level
                 }
                 else
                     Messaging.Notification(alloyError);
@@ -790,26 +696,16 @@ public class UpgradeForgeBehavior : MonoBehaviour
         }
     }
 
-    // Hand the item docked on `anchor` back to the player.
-    //
-    // Deliberately does NOT undock here. Vanilla's own pickup is invoked and the
-    // dock is left to notice on the next Update: CarryableInteract.StartInteraction
-    // sets the item's Carrier, _dock.Reconcile() sees that and runs the single
-    // grab-back-out path that already existed — one undock, one broadcast, one log
-    // line — instead of a second, parallel release that would have to keep itself
-    // in step with it.
-    //
-    // Routing through StartInteraction rather than Carrier.TryInsertCarryable
-    // directly is what buys the rest of the vanilla grab: the interaction lock, the
-    // fetch lerp that flies the item to the hand, hand IK, and the grab SFX all live
-    // in that method's private half. Our CarryableInteract prefix re-entry is not a
-    // concern — it only claims ForgeInteractable targets, and this passes a Grabbable.
+    // Deliberately does NOT undock: Reconcile notices the Carrier next Update and runs the one
+    // existing grab-back-out path. Routed through StartInteraction rather than
+    // Carrier.TryInsertCarryable because the interaction lock, fetch lerp, hand IK and grab SFX
+    // live in its private half; our CarryableInteract prefix only claims ForgeInteractable.
     private void RetrieveFrom(Transform anchor, LocalPlayer player)
     {
         if (!_dock.TryGetDockedAt(anchor, out var item))
         {
-            // Policy said occupied, the dock disagrees — the two are read one after
-            // the other from the same object, so this is a state bug, not a race.
+            // Policy and dock are read from the same object in sequence, so a disagreement
+            // here is a state bug, not a race.
             BepinPlugin.Log.LogWarning(
                 "[Forge] Retrieve approved by policy but the anchor holds nothing — state disagreement, ignored.");
             return;
@@ -831,18 +727,13 @@ public class UpgradeForgeBehavior : MonoBehaviour
             return;
         }
 
-        // ignorePlacingObjects has no effect on this path and no default to omit —
-        // vanilla reads it only inside its IsHoldingCarryable branch, and the policy
-        // only reaches RetrieveItem for ForgePayload.None. Passed true because that is
-        // what the branch would want if our hands ever turned out not to be empty: a
-        // swap to the docked item, rather than an interact with the held one.
+        // No effect on this path (the policy only reaches RetrieveItem with empty hands) and
+        // no default to omit. True is what the branch would want: swap to the docked item.
         interact.StartInteraction(grabbable, ignorePlacingObjects: true);
     }
 
-    // Hot-reload teardown (ScriptEngine): a reloaded assembly brings its OWN
-    // UpgradeForgeBehavior type, so this instance must leave cleanly — restoring
-    // held items' physics so nothing is left frozen mid-air. The reloaded assembly
-    // re-attaches on its own patch pass.
+    // Hot-reload teardown: a reloaded assembly brings its own type, so this instance must leave
+    // cleanly and restore held items' physics. The new assembly re-attaches on its own pass.
     public void TeardownForReload()
     {
         _ghosts.Clear();
@@ -852,13 +743,8 @@ public class UpgradeForgeBehavior : MonoBehaviour
         Destroy(this);
     }
 
-    // Drives the insert-vs-retrieve arm of the policy, and the matching HUD prompt
-    // on ForgeInteractable.
     public bool IsAnchorOccupied(Transform anchor) => _dock.IsOccupied(anchor);
 
-    // Reconcile with the world: players grab docked items back out via the vanilla
-    // Grabbable flow, and commits destroy consumed relics. The dock reports the ones
-    // a player is now carrying; destroyed ones it reaps itself.
     private void Update()
     {
         _relics.RemoveAll(r => r == null);
@@ -896,11 +782,10 @@ public class UpgradeForgeBehavior : MonoBehaviour
         _ghosts.SetAimed(AimedAnchor());
     }
 
-    // Keep docked items pinned to their anchors while the ship moves.
     private void LateUpdate() => _dock.Pin();
 
-    // Consumed relics are networked objects — destroy through the game's factory
-    // when we own them so the removal replicates; plain Destroy otherwise.
+    // Networked objects: destroy through the game's factory when we own them so the removal
+    // replicates; plain Destroy otherwise.
     private static void DestroyRelic(GameObject relic)
     {
         if (relic == null) return;
@@ -911,9 +796,8 @@ public class UpgradeForgeBehavior : MonoBehaviour
             Destroy(relic);
     }
 
-    // Primary check is the game's canonical relic CsTag — the same one the vanilla
-    // relic shrine filter resolves to, and what RuntimeCarryable stamps on modded
-    // relics. Name matching is the fallback for objects that aren't tagged carryables.
+    // The canonical relic CsTag is what the vanilla shrine filter resolves to and what
+    // RuntimeCarryable stamps on modded relics; name matching covers untagged objects.
     public static bool IsRelic(GameObject go)
     {
         if (go == null) return false;
@@ -930,7 +814,6 @@ public class UpgradeForgeBehavior : MonoBehaviour
                normalized.StartsWith("Relic_", System.StringComparison.Ordinal);
     }
 
-    // Returns null if no Forge is currently installed on the ship.
     public static UpgradeForgeBehavior FindNearest(Vector3 worldPosition)
     {
         UpgradeForgeBehavior nearest = null;

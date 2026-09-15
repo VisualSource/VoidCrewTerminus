@@ -11,8 +11,6 @@ public class CursedRelicRollTests
     private static RelicTierEntry Entry(float modifier = 0f) =>
         new(RelicTier.Common, isCursed: false, baseCurseChanceModifier: modifier);
 
-    // ---- ChanceFor -------------------------------------------------------
-
     [Fact]
     public void ChanceFor_AppliesDuringWarmUp_NotGatedOnEscalation()
     {
@@ -69,8 +67,6 @@ public class CursedRelicRollTests
         Assert.Equal(0.15f, chance, precision: 5);
     }
 
-    // ---- the ceiling (guards the uncapped-scalar bug) ---------------------
-
     [Fact]
     public void ChanceFor_ClampedToMaxChance_NotToOne()
     {
@@ -119,8 +115,6 @@ public class CursedRelicRollTests
 
         Assert.Equal(1f, chance);
     }
-
-    // ---- ShouldBeCursed --------------------------------------------------
 
     [Theory]
     [InlineData(0.5f, 0.4f, true)]     // roll below chance → cursed

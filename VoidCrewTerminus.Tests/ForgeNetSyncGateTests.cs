@@ -6,28 +6,16 @@ using Xunit;
 
 namespace VoidCrewTerminus.Tests;
 
-// The four gate rules in ForgeNetSync, which had no coverage at all before the
-// transport seam existed — verifying them used to mean launching the game twice
-// and reading two log files side by side.
-//
-// These drive the REAL entry points (BroadcastState, BroadcastDock, …) through a
-// recording transport, so the gates are exercised exactly as production does.
-// The interface is the test surface.
-//
-// Not covered here, and honestly so: every handler that resolves a PhotonView or
-// calls FindObjectsOfType still needs a live scene (ApplyIncomingCursed,
-// ApplyIncomingDock, HandleCommitRequest's box lookup, SendCursedSnapshotTo's
-// marker scan). The transport seam does not reach those; only a second port over
-// scene lookup would, and one adapter for that is a hypothetical seam.
+// Drives the real entry points through a recording transport, so the gates are exercised as
+// production does. Not covered: handlers that resolve a PhotonView or call FindObjectsOfType
+// need a live scene, which the transport seam does not reach.
 [Collection(SharedStaticStateCollection.Name)]
 public class ForgeNetSyncGateTests : IDisposable
 {
     private readonly IForgeTransport _original = ForgeNetSync.Transport;
 
-    // ApplyIncomingState can trigger a level-up (ForgeMeterController.Notify),
-    // which defaults to VoidManager.Utilities.Messaging.Notification — a real
-    // game/chat call that doesn't resolve under the test host. Swapped for a
-    // no-op for the duration of these tests; nothing here asserts on the text.
+    // Notify defaults to a real chat call that doesn't resolve under the test host; swapped
+    // for a no-op. Nothing here asserts on the text.
     private readonly Action<string> _originalNotify = ForgeMeterController.Notify;
 
     public ForgeNetSyncGateTests() => ForgeMeterController.Notify = _ => { };
@@ -44,10 +32,7 @@ public class ForgeNetSyncGateTests : IDisposable
         return t;
     }
 
-    // ---- gate 1: IsAuthority ---------------------------------------------
-
-    // Solo has to read as authority or single-player would sit waiting for a host
-    // that does not exist.
+    // Solo has to read as authority, or single-player waits for a host that does not exist.
     [Fact]
     public void IsAuthority_TrueSolo()
     {
@@ -62,8 +47,7 @@ public class ForgeNetSyncGateTests : IDisposable
         Assert.False(ForgeNetSync.IsAuthority);
     }
 
-    // Nulling the transport must not leave the mod unable to answer "am I the
-    // authority?" — falling back to offline keeps solo working.
+    // Falling back to offline keeps solo working when the transport is nulled.
     [Fact]
     public void Transport_NullFallsBackToOffline()
     {
@@ -72,8 +56,6 @@ public class ForgeNetSyncGateTests : IDisposable
         Assert.NotNull(ForgeNetSync.Transport);
         Assert.True(ForgeNetSync.IsAuthority);
     }
-
-    // ---- gate 2: ShouldBroadcast (authority AND peers) -------------------
 
     [Fact]
     public void Broadcast_SendsToOthers_AsHostWithPeers()
@@ -87,8 +69,7 @@ public class ForgeNetSyncGateTests : IDisposable
         Assert.Equal(typeof(ForgeStateSyncMessage), sent.Message);
     }
 
-    // Solo must be wire-silent: the whole design leans on "you are the authority
-    // and BroadcastState simply no-ops".
+    // Solo must be wire-silent: the design leans on the authority's broadcast simply no-oping.
     [Fact]
     public void Broadcast_SilentSolo()
     {
@@ -122,13 +103,9 @@ public class ForgeNetSyncGateTests : IDisposable
         Assert.Equal(0, client.Count);
     }
 
-    // ---- gate 3: ShouldRelay (peers only, authority irrelevant) ----------
-    //
-    // The distinction that is easiest to get wrong. Only the player who PLACED a
-    // module knows which ViewID its box became, and that player may be a client —
-    // so this relay must fire off-authority. Routing it through the broadcast gate
-    // would silently drop every overlay placed by a non-host, which is precisely
-    // the Phase 8-D bug.
+    // The distinction easiest to get wrong. Only the player who placed a module knows which
+    // ViewID its box became, and that player may be a client, so this relay must fire
+    // off-authority; the broadcast gate would drop every overlay placed by a client.
 
     [Fact]
     public void ModuleOverlay_RelaysFromAClient()
@@ -152,7 +129,7 @@ public class ForgeNetSyncGateTests : IDisposable
         Assert.Equal(typeof(ForgeDockMessage), t.Only().Message);
     }
 
-    // Still silent solo — a relay with no peers is nothing.
+    // Still silent solo: a relay with no peers is nothing.
     [Fact]
     public void Relays_SilentSolo()
     {
@@ -189,11 +166,8 @@ public class ForgeNetSyncGateTests : IDisposable
         Assert.Equal(0, t.Count);
     }
 
-    // ---- gate 4: targeted catch-up (authority, peer count irrelevant) ----
-
-    // The recipient is NAMED, so this must fire even with HasPeers false — gating
-    // the catch-up on peer count would break the two-player case entirely, which is
-    // the only case that matters for a late joiner.
+    // The recipient is named, so this must fire even with HasPeers false: gating the catch-up
+    // on peer count would break the two-player case, the only one a late joiner is in.
     [Fact]
     public void CatchUp_SendsStateToTheNamedJoiner_EvenWithoutPeerCount()
     {
@@ -207,7 +181,7 @@ public class ForgeNetSyncGateTests : IDisposable
         Assert.Equal(typeof(ForgeStateSyncMessage), sent.Message);
     }
 
-    // A client must never answer a joiner — only the authority owns the state.
+    // A client must never answer a joiner: only the authority owns the state.
     [Fact]
     public void CatchUp_SilentOnAClient()
     {
@@ -256,8 +230,6 @@ public class ForgeNetSyncGateTests : IDisposable
         Assert.Equal(0, t.Count);
     }
 
-    // ---- request hops (client → host, ungated on purpose) ----------------
-
     [Fact]
     public void AlloySpendRequest_GoesToTheMaster()
     {
@@ -295,17 +267,11 @@ public class ForgeNetSyncGateTests : IDisposable
         Assert.Empty((int[])t.Only().Payload[1]);
     }
 
-    // HandleCommitRequest's off-authority guard is deliberately NOT tested here.
-    // Its body resolves a PhotonView, and a method containing Unity engine calls
-    // throws SecurityException at JIT time in this host — before any early return
-    // executes. Only a second port over scene lookup would reach it, and a test
-    // adapter for that cannot produce real Components, so there is no second
-    // adapter to justify the seam.
+    // HandleCommitRequest's off-authority guard is not tested: its body resolves a PhotonView,
+    // and a method containing Unity calls throws at JIT time here, before any early return.
 
-    // ---- payload shape ---------------------------------------------------
-
-    // Four slots, in the order NetMessages documents. ApplyIncomingState reads
-    // them positionally, so a reordering here would desync silently.
+    // Four slots, in the order NetMessages documents. ApplyIncomingState reads them
+    // positionally, so a reordering here would desync silently.
     [Fact]
     public void StatePayload_HasFourSlotsInDocumentedOrder()
     {
@@ -335,11 +301,8 @@ public class ForgeNetSyncGateTests : IDisposable
         Assert.False(Convert.ToBoolean(p[3]));
     }
 
-    // ---- inbound state application ---------------------------------------
-
-    // Broadcasts go to Others so the host should never see its own push, but the
-    // guard matters: applying it would overwrite authoritative state with a copy
-    // of itself and, on a stale message, roll the run backwards.
+    // Broadcasts go to Others so the host should never see its own push, but the guard
+    // matters: on a stale message, applying it would roll the run backwards.
     [Fact]
     public void ApplyIncomingState_IgnoredOnTheAuthority()
     {
@@ -372,8 +335,8 @@ public class ForgeNetSyncGateTests : IDisposable
         }
     }
 
-    // A short or absent payload must leave state untouched rather than throw
-    // inside a Photon callback or apply a partially-read state.
+    // A short or absent payload must leave state untouched rather than throw inside a Photon
+    // callback or apply a partially-read state.
     [Fact]
     public void ApplyIncomingState_RejectsNullPayload() =>
         AssertStateUnchangedBy(null);

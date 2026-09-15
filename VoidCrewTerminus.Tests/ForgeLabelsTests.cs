@@ -4,17 +4,11 @@ using Xunit;
 
 namespace VoidCrewTerminus.Tests;
 
-// Pure formatting coverage for the tooltip vocabulary.
-//
-// RewriteMark carries the most risk in the hover feature: vanilla display names
-// live inside asset bundles and can't be inspected offline, so the regex has to
-// stay correct whether or not a mark is already embedded in the name.
-// BuildOverlayBody is deliberately NOT covered here — it reaches into PerkPool,
-// which needs StatType initialisation (same reason the existing perk pool tests
-// are skipped) and is verified by playtest instead.
+// RewriteMark carries the most risk: vanilla display names live inside asset bundles and
+// can't be inspected offline, so the regex must hold whether or not a mark is embedded.
+// BuildOverlayBody is not covered here: it reaches PerkPool, which needs StatType init.
 public class ForgeLabelsTests
 {
-    // ---- Mk mapping ------------------------------------------------------
 
     // Mk number maps directly onto module level so the mod continues vanilla's
     // ladder: L3 is vanilla's cap (Mk III) and forging runs it up to Mk X.
@@ -37,8 +31,6 @@ public class ForgeLabelsTests
     public void Roman_covers_vanilla_marks(int n, string expected) =>
         Assert.Equal(expected, ForgeLabels.Roman(n));
 
-    // ---- RewriteMark: name already carries a mark ------------------------
-
     [Theory]
     [InlineData("Pulse Laser Mk III")]
     [InlineData("Pulse Laser Mk. III")]
@@ -47,8 +39,6 @@ public class ForgeLabelsTests
     [InlineData("Pulse Laser mk III")]
     public void RewriteMark_replaces_an_existing_trailing_mark(string header) =>
         Assert.Equal("Pulse Laser Mk VII", ForgeLabels.RewriteMark(header, 7));
-
-    // ---- RewriteMark: name carries no mark -------------------------------
 
     [Fact]
     public void RewriteMark_appends_when_no_mark_present() =>
@@ -73,8 +63,6 @@ public class ForgeLabelsTests
     public void RewriteMark_only_strips_trailing_marks() =>
         Assert.Equal("Mk III Prototype Mk VII",
             ForgeLabels.RewriteMark("Mk III Prototype", 7));
-
-    // ---- HasOverlay: the "is this worth showing" gate --------------------
 
     // An untouched module must render byte-identical to vanilla. This is also the
     // path a client takes before forge state syncs, so it must stay silent rather
@@ -102,8 +90,6 @@ public class ForgeLabelsTests
     public void HasOverlay_tolerates_nulls() =>
         Assert.False(ForgeLabels.HasOverlay(3, null, null));
 
-    // ---- Display names ---------------------------------------------------
-
     [Fact]
     public void BurdenName_is_human_readable() =>
         Assert.Equal("Random Shutoff", ForgeLabels.BurdenName(BurdenType.RandomShutoff));
@@ -114,8 +100,6 @@ public class ForgeLabelsTests
     [InlineData(RelicTier.Legendary, "Legendary")]
     public void TierName_covers_every_tier(RelicTier tier, string expected) =>
         Assert.Equal(expected, ForgeLabels.TierName(tier));
-
-    // ---- Relic body ------------------------------------------------------
 
     [Fact]
     public void BuildRelicBody_labels_forge_tier_not_rarity()
@@ -144,8 +128,6 @@ public class ForgeLabelsTests
         Assert.DoesNotContain("chance", body);
     }
 
-    // ---- Plural ----------------------------------------------------------
-
     [Theory]
     [InlineData(0, "0 relics")]
     [InlineData(1, "1 relic")]
@@ -153,16 +135,10 @@ public class ForgeLabelsTests
     public void Plural_only_singularises_exactly_one(int count, string expected) =>
         Assert.Equal(expected, ForgeLabels.Plural(count, "relic"));
 
-    // ---- DescribeCommit --------------------------------------------------
     //
-    // The in-world commit button and the !forgecommit dev command used to hold
-    // separate copies of this switch, which had drifted apart on every arm. These
-    // tests pin the single vocabulary so the copies can't come back.
-    //
-    // Perk-bearing outcomes aren't constructed here: CommitOutcome.Success needs a
-    // PerkDefinition, whose payload type touches StatType — the same static-init
-    // limitation that skips the perk-pool tests. The no-perk and roll-failed
-    // branches are covered, which is every branch that doesn't read a perk's name.
+    // Pins the single commit vocabulary so separate copies can't reappear in the in-world
+    // button and the dev command. Perk-bearing outcomes aren't constructed: CommitOutcome
+    // .Success needs a PerkDefinition, whose payload touches StatType. Every other arm is here.
 
     private static CommitOutcome OkOutcome(int newLevel, int consumed) =>
         CommitOutcome.Success(newLevel, consumed, RelicTier.Common,
@@ -219,8 +195,7 @@ public class ForgeLabelsTests
         Assert.Contains("holds 0", lines[0]);
     }
 
-    // The max level is a const on the cost curve; the old copies of this message
-    // hardcoded "L10" in two places instead.
+    // The cap is read from the curve rather than written into the message.
     [Fact]
     public void DescribeCommit_already_at_max_reads_the_cap_from_the_curve() =>
         Assert.Contains($"L{ForgeCostCurve.MaxLevel}",

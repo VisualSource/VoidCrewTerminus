@@ -17,9 +17,8 @@ namespace VoidCrewTerminus
 
         internal static ManualLogSource Log;
 
-        // Stored so OnDestroy can unsubscribe — a bare lambda can't be removed, and
-        // under ScriptEngine hot-reload a leaked handler from the old assembly
-        // would keep running against the old statics.
+        // Stored so OnDestroy can unsubscribe: a bare lambda can't be removed, and under
+        // hot-reload a leaked handler would keep running against the old assembly's statics.
         private System.EventHandler _onHostStartSession;
 
         [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0051:Remove unused private members", Justification = "Unity magic method")]
@@ -29,9 +28,8 @@ namespace VoidCrewTerminus
             LoadResources();
         }
 
-        // Runs when ScriptEngine (BepInEx.Debug) destroys the plugin object on F6
-        // reload. Everything global this plugin touched must be undone here, or the
-        // OLD assembly keeps patches/subscriptions alive next to the freshly loaded copy.
+        // Runs when ScriptEngine destroys the plugin object on hot-reload. Everything global
+        // must be undone here, or the old assembly stays live beside the freshly loaded copy.
         [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0051:Remove unused private members", Justification = "Unity magic method")]
         private void OnDestroy()
         {
@@ -56,18 +54,15 @@ namespace VoidCrewTerminus
                 VoidCrewTerminus.Forge.UpgradeForgeBehavior.ResetForRun();
                 VoidCrewTerminus.Escalation.SectorEscalation.ResetForRun();
                 Patches.BossDefeatHook.OnSessionStart();
-                // Host owns the reset — push the cleared state so clients drop last
-                // run's scalar/bosses/meter/level (they don't get HostStartSession).
+                // Clients never get HostStartSession, so the cleared state must be pushed
+                // or they keep last run's scalar, bosses, meter and level.
                 Net.ForgeNetSync.BroadcastState();
             };
             VoidManager.Events.Instance.HostStartSession += _onHostStartSession;
 
-            // VoidManager discovers commands/plugins by walking the BepInEx
-            // Chainloader — which never sees ScriptEngine-loaded assemblies. When
-            // running from BepInEx/scripts (hot-reload dev flow), self-register the
-            // chat commands so the ! dev harness keeps working. VoidPlugin/modlist
-            // registration has no such hook, so script-loaded sessions are
-            // solo-dev only.
+            // VoidManager discovers commands by walking the BepInEx Chainloader, which never
+            // sees ScriptEngine-loaded assemblies. VoidPlugin/modlist registration has no such
+            // hook, so a script-loaded session is solo-dev only.
             if (!BepInEx.Bootstrap.Chainloader.PluginInfos.ContainsKey(MyPluginInfo.PLUGIN_GUID))
             {
                 Logger.LogDebug("Loaded via ScriptEngine — self-registering chat commands with VoidManager.");
@@ -77,9 +72,8 @@ namespace VoidCrewTerminus
             Logger.LogInfo($"Plugin {MyPluginInfo.PLUGIN_GUID} is loaded!");
         }
 
-        // VoidManager's CommandHandler is internal, so the re-discovery entry
-        // points are reached via reflection. Best-effort: a VoidManager update
-        // renaming them degrades to a logged warning, not a crash.
+        // VoidManager's CommandHandler is internal, so the re-discovery entry points are
+        // reached by reflection. A VoidManager rename degrades to a warning, not a crash.
         private void SelfRegisterCommands()
         {
             try
@@ -88,9 +82,8 @@ namespace VoidCrewTerminus
                 var asm = Assembly.GetExecutingAssembly();
                 AccessTools.Method(handler, "DiscoverCommands")?.Invoke(null, new object[] { asm, MyPluginInfo.USERS_PLUGIN_NAME });
                 AccessTools.Method(handler, "DiscoverPublicCommands")?.Invoke(null, new object[] { asm, MyPluginInfo.USERS_PLUGIN_NAME });
-                // ModMessages are discovered on the same chainloader scan; self-register
-                // them too under ScriptEngine so MP net code is reachable. Internal, so
-                // reached by reflection.
+                // ModMessages ride the same chainloader scan, so they need the same
+                // self-registration for MP net code to be reachable.
                 var mmHandler = AccessTools.TypeByName("VoidManager.ModMessages.ModMessageHandler");
                 AccessTools.Method(mmHandler, "DiscoverModMessages")?.Invoke(null, new object[] { asm, Info });
             }
@@ -110,20 +103,14 @@ namespace VoidCrewTerminus
             Patches.ForgeSectorHook.Shutdown();
             Net.ForgeNetSync.Shutdown();
 
-            // Live scene objects created by this assembly must go with it: a
-            // reloaded assembly has its OWN UpgradeForgeBehavior type, so the
-            // attach patch would stack a second behavior beside the orphaned old
-            // one. Teardown undocks held items (restoring their physics) first.
+            // Live scene objects created by this assembly must go with it: a reloaded
+            // assembly brings its own types, so the attach patch would stack a second
+            // behavior beside the orphaned old one.
             foreach (var forge in FindObjectsOfType<Forge.UpgradeForgeBehavior>(true))
                 forge.TeardownForReload();
             foreach (var interactable in FindObjectsOfType<Forge.ForgeInteractable>(true))
                 DestroyForgeInteractable(interactable.gameObject, interactable);
-            // Commit button and deconstruct handle — separate component types
-            // (ForgeCommitInteractable / ForgeDeconstructInteractable), same
-            // runtime-generated-vs-authored-collider teardown rule. Both
-            // self-subscribe a hold-completion handler in their own Awake, so an
-            // orphaned instance left behind would otherwise leak silently across
-            // reloads.
+            // Separate component types, same runtime-generated-vs-authored-collider rule.
             foreach (var commitButton in FindObjectsOfType<Forge.ForgeCommitInteractable>(true))
                 DestroyForgeInteractable(commitButton.gameObject, commitButton);
             foreach (var deconstructHandle in FindObjectsOfType<Forge.ForgeDeconstructInteractable>(true))
@@ -133,11 +120,9 @@ namespace VoidCrewTerminus
             Log?.LogDebug("Plugin resources unloaded (hot-reload teardown).");
         }
 
-        // A runtime-generated click region (name-prefixed by its builder) is ours
-        // outright — destroy the whole GameObject. An authored collider is the
-        // prefab's own, borrowed only to carry our interactable component — strip
-        // just that component and leave the collider for the reloaded assembly's
-        // BuildInteractables to find and reuse.
+        // A runtime-generated click region is ours outright, so the whole GameObject goes.
+        // An authored collider is the prefab's own, borrowed only to carry our component,
+        // so strip the component and leave the collider for the reloaded assembly to reuse.
         private static void DestroyForgeInteractable(GameObject go, Component interactable)
         {
             if (go.name.StartsWith("ForgeInteractable_"))

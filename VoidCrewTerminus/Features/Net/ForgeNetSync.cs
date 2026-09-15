@@ -12,37 +12,25 @@ using VoidManager.Utilities;
 
 namespace VoidCrewTerminus.Net;
 
-// Host-authoritative sync of the meter / escalation state (DifficultyScalar,
-// BossesDefeated, Meter, Level) plus the client→host alloy spend hop.
+// Host-authoritative sync of the meter/escalation state plus the client→host alloy hop.
 //
-// Authority == Photon master client, and ALSO true in solo/offline play, so
-// single-player is unchanged: you are the authority, and BroadcastState simply
-// no-ops with no one to send to. Which of those you are is the transport's
-// business (see IForgeTransport) — this class only composes gates out of it.
-//
-// The escalation increment hooks (ForgeSectorHook, BossDefeatHook), the alloy
-// spend, the per-run reset, and the dev setters all run ONLY on the authority,
-// which then calls BroadcastState(); every other client is a pure receiver that
-// applies whatever the host sends. A late joiner gets a targeted snapshot on
-// join. On host migration authority is re-derived live from IsMasterClient (no
-// stored role to flip), so the new master's hooks just start acting — we only
-// re-assert current state so nobody is briefly stale.
+// Authority is the Photon master client and ALSO true solo, so single-player is unchanged:
+// BroadcastState no-ops with no peers. It is re-derived live from IsMasterClient rather than
+// stored, so host migration needs no role flip, only a re-assert so nobody stays stale.
 internal sealed class ForgeNetSync : IInRoomCallbacks
 {
     private static readonly ForgeNetSync _callbacks = new();
     private static bool _initialized;
 
-    // Whether our IInRoomCallbacks target is currently attached to PUN.
     private static bool _registered;
 
-    // Stored so Shutdown can unsubscribe — a bare lambda can't be removed, and a
-    // leaked handler would survive ScriptEngine hot-reload into the new assembly.
+    // Stored so Shutdown can unsubscribe: a bare lambda can't be removed, and a leaked
+    // handler would survive hot-reload into the new assembly.
     private static EventHandler _onJoinedRoom;
     private static EventHandler _onLeftRoom;
 
-    // The network underneath us. Starts OFFLINE and is swapped to the PUN adapter
-    // only once we are genuinely in a room — see OfflineTransport for why that
-    // ordering is load-bearing rather than cosmetic. Tests install a fake.
+    // Starts OFFLINE and swaps to the PUN adapter only once genuinely in a room; see
+    // OfflineTransport for why that ordering is load-bearing. Tests install a fake.
     private static IForgeTransport _transport = OfflineTransport.Instance;
 
     internal static IForgeTransport Transport
@@ -51,38 +39,19 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         set => _transport = value ?? OfflineTransport.Instance;
     }
 
-    // Four distinct rules, stated together so the differences are visible. Each is
-    // a composition of the two facts the transport reports:
-    //
-    //   IsAuthority     — we own the state. Read by callers OUTSIDE this class
-    //                     (DoCommit, ForgeSectorHook) to decide whether to act
-    //                     locally or ask the host. True solo.
-    //   ShouldBroadcast — an authority-originated push. Silent solo (no peers) and
-    //                     silent on clients (not authority).
-    //   ShouldRelay     — a push whose originator need NOT be the authority: the
-    //                     player who PLACED a module announces its overlay, and
-    //                     that player may be a client. Relaying already-
-    //                     authoritative state, not deciding anything new.
-    //   Targeted sends  — the late-joiner catch-up. Authority-only; the recipient
-    //                     is named, so peer count is irrelevant.
+    // The gates differ only in who may originate: IsAuthority says we own the state (true
+    // solo); ShouldBroadcast is an authority-originated push; ShouldRelay is a push whose
+    // originator need not be the authority, for state that is already authoritative.
     internal static bool IsAuthority => _transport.IsAuthority;
 
     private static bool ShouldBroadcast => _transport.IsAuthority && _transport.HasPeers;
 
     private static bool ShouldRelay => _transport.HasPeers;
 
-    // Init runs from BepInEx plugin Awake, which is FAR earlier than the game's
-    // own Photon setup — the chainloader finishes before "Starting photon
-    // connect". Calling PhotonNetwork.AddCallbackTarget here forces PUN's static
-    // initializer to construct the LoadBalancingClient before the game has
-    // applied its ServerSettings, which leaves matchmaking unable to create a
-    // lobby (region list renders as raw codes, status hangs on "connecting").
-    //
-    // So this method must touch NOTHING in Photon. We subscribe to VoidManager's
-    // room events instead — Events.Instance is safe at Awake, it was already
-    // being used there before any of this net code existed — and only attach the
-    // PUN callback target once we're genuinely in a room, long after the game has
-    // configured Photon itself.
+    // This method must touch NOTHING in Photon: Awake runs long before the game's own Photon
+    // setup, and any PhotonNetwork reference here constructs the LoadBalancingClient before
+    // the game applies its ServerSettings, silently breaking matchmaking. VoidManager's room
+    // events are safe at Awake, so the PUN callback target is attached only once in a room.
     internal static void Init()
     {
         if (_initialized) return;
@@ -91,9 +60,8 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         _onJoinedRoom = (_, _) => RegisterCallbacks();
         _onLeftRoom = (_, _) => UnregisterCallbacks();
 
-        // Both paths are covered because a host and a joining client don't
-        // necessarily raise the same event; RegisterCallbacks is idempotent, so
-        // overlapping delivery is harmless.
+        // A host and a joining client don't necessarily raise the same event;
+        // RegisterCallbacks is idempotent, so overlapping delivery is harmless.
         VoidManager.Events.Instance.JoinedRoom += _onJoinedRoom;
         VoidManager.Events.Instance.HostCreateRoom += _onJoinedRoom;
         VoidManager.Events.Instance.LeftRoom += _onLeftRoom;
@@ -103,8 +71,7 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
     {
         if (_registered) return;
         _registered = true;
-        // First touch of PhotonNetwork in the plugin's whole lifetime, and it
-        // happens here — inside a room event — on purpose.
+        // First touch of PhotonNetwork in the plugin's lifetime, inside a room event, on purpose.
         _transport = PunTransport.Instance;
         PhotonNetwork.AddCallbackTarget(_callbacks);
         BepinPlugin.Log?.LogDebug("[Net] PUN callback target attached (in room).");
@@ -141,8 +108,7 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         ClearPending();
     }
 
-    // Both buffers, not just the cursed one. ViewIDs are scoped to a room, so a
-    // module overlay left buffered across a room change would eventually be
+    // ViewIDs are scoped to a room, so a buffer left across a room change would eventually be
     // applied to whatever unrelated object inherits that ID.
     private static void ClearPending()
     {
@@ -158,9 +124,8 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         BepinPlugin.Log?.LogDebug($"[Net] → sent forge state {Describe(args)} to all.");
     }
 
-    // internal, not private: this and SendOverlaySnapshotTo are the two catch-up
-    // pushes free of Unity calls, so they are the only way to exercise the
-    // targeted-send gate from a test. See ForgeNetSyncGateTests.
+    // internal, not private: free of Unity calls, so it is one of the only ways to exercise
+    // the targeted-send gate from a test. See ForgeNetSyncGateTests.
     internal static void SendStateTo(int actorNumber)
     {
         if (!IsAuthority) return;
@@ -183,8 +148,7 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
     internal static void ApplyIncomingState(object[] a)
     {
         if (a == null || a.Length < 4) return;
-        // The authority never applies pushed state (broadcasts go to Others, so
-        // this shouldn't fire on the host — but guard anyway).
+        // Broadcasts go to Others, so this shouldn't fire on the host; guard anyway.
         if (IsAuthority) return;
 
         int scalar = Convert.ToInt32(a[0]);
@@ -212,16 +176,14 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
             $"[Net] ← alloy-spend request from #{senderActor}: {(ok ? "spent" : message)}");
         if (ok) BroadcastState(); // push the new meter/level to everyone incl. the requester
 
-        // The requester's own local TrySpendAlloys call already returned before
-        // the host ever saw this request (it just fired RequestAlloySpend and gave
-        // up), so BroadcastState alone leaves them with no explanation on success
-        // and nothing at all on failure. Tell them directly what happened.
+        // The requester's local call already returned before the host saw this, so
+        // BroadcastState alone leaves them with no explanation on success and nothing on failure.
         SendAlloySpendResultTo(senderActor, ok,
             ok ? $"Alloys spent — {ForgeMeterController.Describe()}" : message);
     }
 
-    // Host → requester only (not a broadcast — SendToOthers would tell every
-    // OTHER client about a request that wasn't theirs).
+    // Requester only: SendToOthers would tell every other client about a request that
+    // wasn't theirs.
     private static void SendAlloySpendResultTo(int actorNumber, bool ok, string message)
     {
         if (!IsAuthority) return;
@@ -230,8 +192,7 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
             $"[Net] → sent alloy-spend result to #{actorNumber}: {(ok ? "ok" : "failed")} ({message}).");
     }
 
-    // Client: surface the host's outcome. The host resolved this locally too
-    // (TrySpendAlloys already ran there), so it never sends itself a result.
+    // The host resolved this locally already, so it never sends itself a result.
     internal static void ApplyIncomingAlloySpendResult(object[] a)
     {
         if (IsAuthority) return;
@@ -242,22 +203,17 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         BepinPlugin.Log?.LogDebug($"[Net] ← applied alloy-spend result: {(ok ? "ok" : "failed")} ({message}).");
     }
 
-    // Cursed state is host-authoritative (rolled at spawn in CursedRelicSpawnPatch)
-    // and purely for client AWARENESS — the authoritative commit below reads the
-    // host's own markers, so a client mis-seeing cursed can't change an outcome.
-    // Relics are keyed by PhotonView.ViewID. A live broadcast can beat the relic's
-    // own instantiation on the client, so unresolved ViewIDs are buffered and
-    // drained from the client's OnPhotonInstantiate (see CursedRelicSpawnPatch).
+    // Cursed state is host-authoritative and purely for client awareness: the commit reads the
+    // host's own markers, so a client mis-seeing cursed can't change an outcome. A live
+    // broadcast can beat the relic's instantiation, so unresolved ViewIDs are buffered.
 
     // ViewID → burden, for cursed flags that arrived before the object existed.
     private static readonly PendingByViewId<BurdenType> _pendingCursed = new();
 
-    // Both cursed messages carry parallel arrays so a single live flag and a whole
-    // joiner snapshot share one wire shape.
+    // Parallel arrays so a single live flag and a whole joiner snapshot share one wire shape.
     private static object[] CursedPayload(int[] viewIds, int[] burdens) =>
         new object[] { viewIds, burdens };
 
-    // Host: announce one freshly-cursed relic to all clients.
     internal static void BroadcastCursed(PhotonView pv, BurdenType burden)
     {
         if (!ShouldBroadcast) return;
@@ -267,7 +223,6 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         BepinPlugin.Log?.LogDebug($"[Net] → sent cursed relic viewID={pv.ViewID} ({burden}) to all.");
     }
 
-    // Host: full cursed set for a joining player.
     private static void SendCursedSnapshotTo(int actorNumber)
     {
         if (!IsAuthority) return;
@@ -288,7 +243,6 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         BepinPlugin.Log?.LogDebug($"[Net] → sent cursed snapshot ({ids.Count} relics) to joiner #{actorNumber}.");
     }
 
-    // Client: apply (or buffer) cursed flags from host.
     internal static void ApplyIncomingCursed(object[] a)
     {
         if (IsAuthority) return; // host already has its own markers
@@ -312,8 +266,7 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         }
     }
 
-    // Client: called from OnPhotonInstantiate to drain a buffered cursed flag for
-    // a relic that has now appeared.
+    // Called from OnPhotonInstantiate once the relic appears.
     internal static void TryApplyPendingCursed(PhotonView pv, GameObject go)
     {
         if (pv == null || go == null) return;
@@ -322,13 +275,8 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         BepinPlugin.Log?.LogDebug($"[Net] ← applied buffered cursed relic viewID={pv.ViewID} ({burden}).");
     }
 
-    // The commit ROLL is host-authoritative (cursed markers + RNG live on the
-    // host). A client sends {boxViewID, relicViewIDs}; the host resolves the
-    // relics itself (never trusting client-reported tier/cursed), rolls, persists,
-    // and broadcasts the full resulting box snapshot. Every client overwrites its
-    // snapshot; the operator (the client holding the relics) also consumes them.
-
-    // Client → host.
+    // The roll is host-authoritative: a client sends {boxViewID, relicViewIDs} and the host
+    // re-resolves the relics itself rather than trusting any client-reported tier or cursed flag.
     internal static void RequestCommit(int boxViewId, int[] relicViewIds)
     {
         _transport.SendToMaster(typeof(CommitRequestMessage),
@@ -336,8 +284,7 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         BepinPlugin.Log?.LogDebug($"[Net] → sent commit request box={boxViewId} ({relicViewIds?.Length ?? 0} relics) to host.");
     }
 
-    // Host resolves + computes. ForgeCommit.Execute saves the host snapshot and
-    // broadcasts the result; the operator consumes on receipt.
+    // ForgeCommit.Execute saves the host snapshot and broadcasts; the operator consumes on receipt.
     internal static void HandleCommitRequest(object[] a, int senderActor)
     {
         if (!IsAuthority) return;
@@ -346,9 +293,8 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         int boxViewId = Convert.ToInt32(a[0]);
         var relicViewIds = a[1] as int[] ?? Array.Empty<int>();
 
-        // Resolve the box directly by ViewID — the host's own forge instance has no
-        // _moduleBox when a client docked (docking is a local interaction), so we
-        // compute from the box object, not from a behaviour.
+        // By ViewID, not from a behaviour: docking is a local interaction, so the host's own
+        // forge instance has no _moduleBox when a client docked.
         var boxPv = PhotonView.Find(boxViewId);
         var box = boxPv != null ? boxPv.GetComponent<CG.Ship.Object.BuildBox>() : null;
         if (box == null)
@@ -368,8 +314,7 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         ForgeCommit.Execute(box, relics); // saves host snapshot + broadcasts result
     }
 
-    // Host → all: authoritative box snapshot (also the late-joiner overlay push,
-    // with relicsConsumed = 0).
+    // Also the late-joiner overlay push, with relicsConsumed = 0.
     internal static void BroadcastCommitResult(int boxViewId, ForgeSnapshot snap, int relicsConsumed)
     {
         if (!ShouldBroadcast) return;
@@ -378,7 +323,6 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
             $"({DescribeOverlay(snap.PerkSlots, snap.Burdens)}, consumed {relicsConsumed}) to all.");
     }
 
-    // Client applies the authoritative snapshot + (if operator) consumes.
     internal static void ApplyCommitResult(object[] a)
     {
         if (IsAuthority) return; // host already persisted inline
@@ -391,15 +335,9 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         UpgradeForgeBehavior.FindByBoxViewId(boxViewId)?.OnNetworkCommitResult(relicsConsumed);
     }
 
-    // Deconstructing player → everyone else: "this freshly-created BuildBox
-    // carries this forge overlay." Mirrors BroadcastModuleOverlay's reasoning but
-    // for the opposite direction — see DeconstructCreateBuildBoxPatch for why the
-    // relay is needed at all. Reuses CommitResultMessage/ApplyCommitResult: the
-    // wire shape is identical to a zero-relics commit result, which is exactly
-    // what SendOverlaySnapshotTo already sends for the late-joiner case below.
-    //
-    // ShouldRelay, not ShouldBroadcast: the deconstructing player may be a client,
-    // not the host, same reasoning as BroadcastModuleOverlay.
+    // Reuses CommitResultMessage: the wire shape is identical to a zero-relics commit result.
+    // ShouldRelay, not ShouldBroadcast, because the deconstructing player may be a client. See
+    // DeconstructCreateBuildBoxPatch for why the relay is needed.
     internal static void BroadcastBoxOverlay(int boxViewId, ForgeSnapshot snap)
     {
         if (!ShouldRelay) return;
@@ -410,9 +348,7 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
             $"({DescribeOverlay(snap.PerkSlots, snap.Burdens)}) to all.");
     }
 
-    // Compact perk/burden summary for the paired →sent / ←applied log lines. Both
-    // sides format through here so a 2-client verification can diff them directly —
-    // the level alone can't prove burdens crossed the wire.
+    // Both sides format through here so paired →sent / ←applied log lines diff directly.
     private static string DescribeOverlay(IReadOnlyList<string> perkSlots, IReadOnlyList<BurdenType> burdens)
     {
         int filled = 0;
@@ -427,8 +363,7 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         return $"perks={filled}, burdens={burdenText}";
     }
 
-    // Host → joiner: every upgraded box's overlay so their modules reconstruct
-    // with the right level/perks/burdens.
+    // Every upgraded box's overlay, so a joiner's modules reconstruct with the right state.
     internal static void SendOverlaySnapshotTo(int actorNumber)
     {
         if (!IsAuthority) return;
@@ -439,25 +374,16 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         BepinPlugin.Log?.LogDebug($"[Net] → sent overlay snapshot ({all.Count} boxes) to joiner #{actorNumber}.");
     }
 
-    // BuildBox.BuildModule ends in PhotonNetwork.Instantiate, so it runs ONLY on
-    // the machine that placed the box. Every remote client receives the module
-    // through Photon's own instantiation path and never executes BuildModule —
-    // which is why the snapshot restore (and the forge's interactables) were
-    // missing entirely on the other player's screen.
-    //
-    // The box snapshot is already replicated everywhere by BroadcastCommitResult,
-    // but only the placer knows which module ViewID that box turned into. So the
-    // placer announces the mapping. It isn't inventing state: the snapshot it
-    // relays originated from the host-authoritative commit.
+    // BuildModule ends in PhotonNetwork.Instantiate, so it runs only on the machine that placed
+    // the box; remote clients never execute it. Only the placer knows which module ViewID the
+    // box became, so the placer announces that mapping; the snapshot itself came from the host.
 
     // moduleViewID → snapshot, for overlays that arrived before the module spawned.
     private static readonly PendingByViewId<ForgeSnapshot> _pendingModuleOverlay = new();
 
-    // Placer → everyone else: "this module ViewID carries this overlay."
     internal static void BroadcastModuleOverlay(int moduleViewId, ForgeSnapshot snap)
     {
-        // ShouldRelay, not ShouldBroadcast: the placer may be a client, and this
-        // is a relay of already-authoritative state rather than a new decision.
+        // ShouldRelay, not ShouldBroadcast: the placer may be a client.
         if (!ShouldRelay) return;
         if (moduleViewId <= 0 || snap == null) return;
 
@@ -466,10 +392,8 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
             $"({DescribeOverlay(snap.PerkSlots, snap.Burdens)}) to all.");
     }
 
-    // Convenience for any path that mutates an installed module's state OUTSIDE
-    // the commit flow — the dev commands (!setlevel, !forceperk) in particular.
-    // Without this the change lands only on the machine that typed it and every
-    // other player keeps rendering the old overlay.
+    // For paths that mutate an installed module outside the commit flow (the dev commands).
+    // Without it the change lands only on the machine that typed it.
     internal static void BroadcastModuleOverlayFor(CellModule module)
     {
         if (module == null || module.photonView == null) return;
@@ -477,8 +401,7 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         BroadcastModuleOverlay(module.photonView.ViewID, state.Snapshot());
     }
 
-    // Host → joiner: every installed module's overlay, so a late joiner sees
-    // forged modules already welded into the ship.
+    // So a late joiner sees forged modules already welded into the ship.
     private static void SendModuleOverlaysTo(int actorNumber)
     {
         if (!IsAuthority) return;
@@ -519,12 +442,8 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
             $"({DescribeOverlay(snap.PerkSlots, snap.Burdens)}).");
     }
 
-    // HandleInteraction only runs for the player who clicked, so docking a relic
-    // or a build box was invisible to everyone else without this relay.
-    //
-    // Relayed from the operator rather than routed through the host: docking is a
-    // presentation/staging concern, and the commit that consumes these items is
-    // still host-authoritative and re-resolves everything from ViewIDs.
+    // Docking is a presentation concern relayed by the operator rather than routed through the
+    // host; the commit that consumes these items re-resolves everything from ViewIDs anyway.
     internal static void BroadcastDock(int forgeViewId, int itemViewId, int anchorIndex, bool docked)
     {
         // ShouldRelay: the operator may be a client, same as the module overlay.
@@ -549,9 +468,8 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         var forge = UpgradeForgeBehavior.FindByViewId(forgeViewId);
         if (forge == null)
         {
-            // Unlike cursed markers and overlays this isn't buffered: a dock is a
-            // transient staging state, and replaying a stale one against a Forge
-            // that appears later would be worse than showing nothing.
+            // Not buffered, unlike cursed markers: a dock is transient staging state, and
+            // replaying a stale one against a Forge that appears later is worse than nothing.
             BepinPlugin.Log?.LogDebug($"[Net] ← dock for forge={forgeViewId} ignored — forge not found here.");
             return;
         }
@@ -566,13 +484,9 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
         SendCatchUpTo(newPlayer.ActorNumber);
     }
 
-    // The late-joiner catch-up, in one place so the four pushes can't drift out of
-    // step. Each is individually authority-gated.
-    //
-    // Not reachable from tests: SendCursedSnapshotTo scans the scene for markers,
-    // and a method body containing Unity engine calls cannot even be JIT-compiled
-    // in the test host — an early return does not help. The two Unity-free pushes
-    // are covered individually instead.
+    // One place so the four pushes can't drift; each is individually authority-gated. Not
+    // reachable from tests: a method body containing a Unity call can't be JIT-compiled in the
+    // test host, so the two Unity-free pushes are covered individually instead.
     private static void SendCatchUpTo(int actorNumber)
     {
         SendStateTo(actorNumber);
@@ -583,9 +497,8 @@ internal sealed class ForgeNetSync : IInRoomCallbacks
 
     public void OnMasterClientSwitched(Player newMasterClient)
     {
-        // Authority is derived live, so the new master's hooks already act on their
-        // own — just re-assert so no client stays stale, and so escalation never
-        // silently freezes after a host leaves.
+        // Authority is derived live, so the new master's hooks already act; this only
+        // re-asserts so no client stays stale and escalation never freezes after a host leaves.
         if (IsAuthority)
         {
             BepinPlugin.Log?.LogInfo("[Net] Became master client — asserting forge-state authority.");

@@ -37,8 +37,6 @@ public class ForgeCommitTests
     private const float GateMisses = 1f;   // >= any chance
     private const float GateLands = 0f;    // < any chance
 
-    // ---- the outcome reaches the snapshot ----------------------------------
-
     [Fact]
     public void Resolve_saves_the_level_the_outcome_reports()
     {
@@ -91,8 +89,6 @@ public class ForgeCommitTests
     // is covered directly in ForgeSnapshotTests; what stays unproven is that this
     // path passes it the right slot, and only when a perk actually landed.
 
-    // ---- relic facts reach the calculator in order -------------------------
-
     // Position is meaning: the tier driving the roll comes from the relics the cost
     // curve actually consumed, in order. RelicFacts keeps each relic's three facts
     // together precisely so that alignment cannot drift.
@@ -125,8 +121,6 @@ public class ForgeCommitTests
         Assert.Equal(RelicTier.Common, resolution.Outcome.BestTier);
         Assert.Empty(resolution.Updated.Burdens);
     }
-
-    // ---- burdens ------------------------------------------------------------
 
     [Fact]
     public void Resolve_applies_a_burden_from_a_consumed_cursed_relic()

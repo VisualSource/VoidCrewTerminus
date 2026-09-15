@@ -1,25 +1,23 @@
 namespace VoidCrewTerminus.Forge;
 
-// What the player is carrying when they click a Forge interactable.
 public enum ForgePayload
 {
-    None,       // empty-handed
+    None,
     Relic,
     ModuleBox,
     Other,      // carrying something the Forge does not accept
 }
 
-// What the Forge should DO about a click. Every arm of the matrix resolves to
-// exactly one of these plus at most one message.
+// Every arm of the matrix resolves to exactly one of these plus at most one message.
 public enum ForgeAction
 {
-    None,           // message only — a refusal, or an empty-handed status readout
-    LoadModule,     // take the carried box into the module socket and dock it
-    InsertRelic,    // take the carried relic into the clicked tube and dock it
-    RetrieveItem,   // hand the item docked on the clicked anchor back to the player
+    None,           // message only: a refusal, or an empty-handed status readout
+    LoadModule,
+    InsertRelic,
+    RetrieveItem,
     Commit,         // resolve the upgrade here (we are the authority)
     RequestCommit,  // ask the host to resolve it
-    FeedAlloy,      // spend alloys into the Forge Meter
+    FeedAlloy,
 }
 
 // The Forge as the rules need to see it: facts, with Unity stripped out.
@@ -29,7 +27,7 @@ public readonly struct ForgeView
     public int SocketedBoxLevel { get; }        // Module Level of the box in the socket; 0 when empty
     public bool SocketedBoxHasViewId { get; }   // false = no network identity, so no commit can name it
     public int RelicCount { get; }
-    public int Capacity { get; }                // Forge Capacity — the Forge Meter's level
+    public int Capacity { get; }                // Forge Capacity: the Forge Meter's level
     public bool IsAuthority { get; }            // true solo; decides commit-here vs ask-the-host
 
     public ForgeView(bool hasModule, int socketedBoxLevel, bool socketedBoxHasViewId,
@@ -44,21 +42,15 @@ public readonly struct ForgeView
     }
 }
 
-// The click itself.
 public readonly struct ForgeClick
 {
     public ForgePayload Payload { get; }
     public int CarriedBoxLevel { get; }         // Module Level of the carried box; meaningless unless Payload is ModuleBox
     public ForgeInteractableKind Target { get; }
 
-    // The clicked anchor is physically holding an item (AnchorDock's answer).
-    // Single meaning, because two arms now read it in opposite directions: an
-    // insert is refused, and an empty-handed click retrieves what's there.
-    //
-    // A MISSING anchor is therefore NOT reported here. It used to be folded in as
-    // "occupied", back when occupied only ever meant refuse — once occupied also
-    // meant "hand the item back", that fold made a null anchor decide RetrieveItem
-    // with nothing to retrieve. The insert paths guard the anchor themselves.
+    // Physically holding an item (AnchorDock's answer). Two arms read this in opposite
+    // directions: an insert is refused, an empty-handed click retrieves. A MISSING anchor is
+    // therefore not reported here, or it would decide RetrieveItem with nothing to retrieve.
     public bool TargetOccupied { get; }
 
     public ForgeClick(ForgePayload payload, int carriedBoxLevel,
@@ -82,30 +74,20 @@ public readonly struct ForgeDecision
         Message = message;
     }
 
-    // A refusal or a readout: nothing happens, the player is told why.
     public static ForgeDecision Say(string message) => new(ForgeAction.None, message);
 
     public static ForgeDecision Nothing => new(ForgeAction.None, null);
 }
 
-// Every rule about what a click on the Upgrade Forge means, in one place and free
-// of Unity — a MonoBehaviour method body cannot even be JIT-compiled in the test
-// host, so this used to be verifiable only by standing in front of a Forge and
-// clicking.
-//
-// The split is: everything decidable BEFORE touching the world is decided here;
-// everything that depends on the outcome of touching it (the commit result, the
-// alloy spend) is reported by the caller afterwards.
-//
-// Commit refusals deliberately route through ForgeLabels.DescribeCommit rather
-// than carrying their own strings — the host and client paths used to drift
-// (a box with no network identity was once misreported as "load a module box").
+// Every rule about a Forge click, in one place and free of Unity: a MonoBehaviour method
+// body can't be JIT-compiled in the test host. Everything decidable before touching the
+// world is decided here; outcomes (commit result, alloy spend) are reported by the caller.
+// Commit refusals route through ForgeLabels.DescribeCommit so host and client can't drift.
 public static class ForgeInteractionPolicy
 {
     public static ForgeDecision Decide(in ForgeView forge, in ForgeClick click)
     {
-        // Carrying something: the payload decides which target is legal, and a
-        // mismatch names the right target instead of just refusing.
+        // A mismatch names the right target instead of just refusing.
         switch (click.Payload)
         {
             case ForgePayload.ModuleBox:
@@ -116,28 +98,10 @@ public static class ForgeInteractionPolicy
                 return ForgeDecision.Say("The Forge only accepts relics and module boxes.");
         }
 
-        // Empty-handed. Commit lives on its own button; an occupied tube or socket
-        // hands its item back, the way a vanilla CarryablesSocket does.
-        //
-        // Retrieval is the Forge's job rather than the player grabbing the docked
-        // item directly. The earlier design had the anchor's ForgeInteractable step
-        // aside (IsInteractive false) so the interaction ray could continue to the
-        // item's own Grabbable — but a ray that has to reach INTO the machine is at
-        // the mercy of the hull: once the hull colliders moved onto "MovingPlatform"
-        // (which RaycastHandler's mask includes), any solid surface in front of the
-        // item blanked the interactable and the module box became unretrievable,
-        // while the shallower relic tubes still worked. Vanilla never depends on
-        // that ray — CarryableInteract.IsGrabbableTarget retrieves a socketed item
-        // through the SOCKET's own interactable — so neither do we.
-        //
-        // Stated once, ahead of the per-target matrix, because ForgeInteractable
-        // reads the same rule to pick its HUD prompt: two copies would let the
-        // prompt say "Insert" on an anchor the click would empty, or the reverse.
-        //
-        // Keyed on TargetOccupied, not HasModule. Those are separate sources —
-        // semantic bookkeeping (_moduleBox) vs. what is physically pinned to the
-        // anchor (AnchorDock) — and retrieval has to consult the one that owns the
-        // item, since that is the same source the Forge then asks for it.
+        // Retrieval goes through the anchor's own interactable rather than a ray into the
+        // machine: the hull sits on a layer RaycastHandler's mask includes and would block it.
+        // Stated ahead of the matrix because ForgeInteractable reads the same rule for its HUD
+        // prompt. Keyed on TargetOccupied (physically pinned), not HasModule (bookkeeping).
         if (click.TargetOccupied && RetrievesWhenOccupied(click.Target))
             return new ForgeDecision(ForgeAction.RetrieveItem, null);
 
@@ -162,12 +126,8 @@ public static class ForgeInteractionPolicy
         }
     }
 
-    // Which anchors hand their item back to an empty-handed click. The commit lever
-    // and the alloy terminal never hold anything, so they are not retrieval targets
-    // even if something contrived ever docked to their anchor.
-    //
-    // Public so ForgeInteractable can label its prompt from the same rule that
-    // decides the click.
+    // The commit lever and alloy terminal never hold anything, so they are not retrieval
+    // targets. Public so ForgeInteractable labels its prompt from the rule that decides the click.
     public static bool RetrievesWhenOccupied(ForgeInteractableKind kind) =>
         kind is ForgeInteractableKind.ModuleSocket or ForgeInteractableKind.RelicTube;
 
@@ -178,8 +138,7 @@ public static class ForgeInteractionPolicy
         if (forge.HasModule)
             return ForgeDecision.Say("The Forge already holds a module box.");
 
-        // The level quoted is the CARRIED box's, which is what the socket is about
-        // to hold — the socket's own level is 0 until this lands.
+        // The level quoted is the carried box's: the socket's own level is 0 until this lands.
         return new ForgeDecision(ForgeAction.LoadModule,
             $"Module loaded (L{click.CarriedBoxLevel}). Insert relics and commit to upgrade.");
     }
@@ -189,16 +148,15 @@ public static class ForgeInteractionPolicy
         if (click.Target != ForgeInteractableKind.RelicTube)
             return ForgeDecision.Say("Insert relics into the relic tubes.");
 
-        // Tube before capacity: clicking a full tube while the Forge still has room
-        // is a mis-aim, and "the Forge is full" would send the player away from a
-        // Forge that would happily take the relic one tube over.
+        // Tube before capacity: "the Forge is full" would send the player away from a Forge
+        // that would happily take the relic one tube over.
         if (click.TargetOccupied)
             return ForgeDecision.Say("That tube is occupied — pick an empty one.");
         if (forge.RelicCount >= forge.Capacity)
             return ForgeDecision.Say($"The Forge is full ({forge.RelicCount}/{forge.Capacity} relics).");
 
-        // Counts and projection are stated as they will read AFTER the insert — the
-        // message describes the Forge the player is about to be looking at.
+        // Counts and projection read as they will after the insert: the message describes the
+        // Forge the player is about to be looking at.
         int after = forge.RelicCount + 1;
         return new ForgeDecision(ForgeAction.InsertRelic,
             $"Relic inserted ({after}/{forge.Capacity}). Projected level: L{Projected(forge, after)}.");
@@ -206,15 +164,14 @@ public static class ForgeInteractionPolicy
 
     private static ForgeDecision DecideCommit(in ForgeView forge)
     {
-        // Checked here rather than once per path, so the host and a client refuse
-        // on the same facts with the same words. On the host these are the same
-        // three guards ForgeCommit.Execute would have hit a moment later.
+        // Checked here rather than once per path, so host and client refuse on the same facts
+        // with the same words. These are the guards ForgeCommit.Execute would hit anyway.
         if (!forge.HasModule) return Refuse(CommitStatus.NoModule, forge);
         if (!forge.SocketedBoxHasViewId) return Refuse(CommitStatus.MissingViewId, forge);
         if (forge.RelicCount == 0) return Refuse(CommitStatus.NoRelics, forge);
 
-        // The roll is host-authoritative — cursed markers and RNG live there.
-        // Solo counts as authority, so single-player runs inline.
+        // The roll is host-authoritative: cursed markers and RNG live there. Solo counts as
+        // authority, so single-player runs inline.
         return forge.IsAuthority
             ? new ForgeDecision(ForgeAction.Commit, null)   // the outcome does the talking
             : new ForgeDecision(ForgeAction.RequestCommit, "Requesting upgrade from the host…");
@@ -233,9 +190,8 @@ public static class ForgeInteractionPolicy
               $"projected L{Projected(forge, forge.RelicCount)}."
             : $"Forge: no module loaded, {forge.RelicCount}/{forge.Capacity} relics.");
 
-    // With no module socketed this reports the curve's floor (L3) rather than
-    // nothing, because MaxReachable clamps its from-level. Kept as it was: relics
-    // are legitimately staged in the tubes before the box arrives.
+    // With no module socketed this reports the curve's floor because MaxReachable clamps its
+    // from-level; relics are legitimately staged in the tubes before the box arrives.
     private static int Projected(in ForgeView forge, int relicCount) =>
         ForgeCostCurve.MaxReachable(forge.SocketedBoxLevel, relicCount);
 }

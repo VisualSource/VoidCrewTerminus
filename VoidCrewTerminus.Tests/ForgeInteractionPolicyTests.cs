@@ -3,15 +3,8 @@ using Xunit;
 
 namespace VoidCrewTerminus.Tests;
 
-// The Upgrade Forge's click matrix — the rules that used to sit inline in
-// UpgradeForgeBehavior.HandleInteraction, where a MonoBehaviour body cannot be
-// JIT-compiled in the test host and so nothing could reach them. Every arm below
-// was previously verifiable only by standing in front of a Forge and clicking.
-//
-// No [Collection] attribute: the policy is pure and writes no statics. It reads
-// TerminusConfig.CostCurveRaw through ForgeCostCurve, which falls back to the
-// shipped default (1,1,2,2,3,3,4) when BepInEx has bound nothing — the same
-// assumption UpgradeCommitCalculatorTests documents.
+// No [Collection]: the policy is pure and writes no statics. It reads the cost curve through
+// ForgeCostCurve, which falls back to the shipped default (1,1,2,2,3,3,4) under the test host.
 public class ForgeInteractionPolicyTests
 {
     private const int DefaultCapacity = 4;
@@ -25,8 +18,6 @@ public class ForgeInteractionPolicyTests
         ForgePayload payload, ForgeInteractableKind target,
         bool occupied = false, int carriedBoxLevel = ForgeCostCurve.MinLevel) =>
         new(payload, carriedBoxLevel, target, occupied);
-
-    // ---- carrying a module box -------------------------------------------
 
     // A mismatch names the target that would have worked rather than just
     // refusing — the tubes and the commit button are inches apart in-world.
@@ -65,8 +56,6 @@ public class ForgeInteractionPolicyTests
         Assert.Equal(ForgeAction.LoadModule, d.Action);
         Assert.Equal("Module loaded (L5). Insert relics and commit to upgrade.", d.Message);
     }
-
-    // ---- carrying a relic -------------------------------------------------
 
     [Theory]
     [InlineData(ForgeInteractableKind.ModuleSocket)]
@@ -138,8 +127,6 @@ public class ForgeInteractionPolicyTests
         Assert.Equal("Relic inserted (2/4). Projected level: L5.", d.Message);
     }
 
-    // ---- carrying anything else -------------------------------------------
-
     [Theory]
     [InlineData(ForgeInteractableKind.RelicTube)]
     [InlineData(ForgeInteractableKind.ModuleSocket)]
@@ -152,8 +139,6 @@ public class ForgeInteractionPolicyTests
         Assert.Equal(ForgeAction.None, d.Action);
         Assert.Equal("The Forge only accepts relics and module boxes.", d.Message);
     }
-
-    // ---- empty-handed ------------------------------------------------------
 
     [Fact]
     public void Empty_handed_on_an_empty_socket_explains_how_to_fill_it()
@@ -177,9 +162,8 @@ public class ForgeInteractionPolicyTests
         Assert.Null(d.Message);
     }
 
-    // Retrieval is the Forge's own action, not the player grabbing the docked item
-    // past the machine's hull — an occluding hull collider is what made the module
-    // box unretrievable while the shallower tubes still worked.
+    // Retrieval is the Forge's own action, not the player reaching past the machine's hull,
+    // which occludes the ray to a deeply-socketed box.
     [Theory]
     [InlineData(ForgeInteractableKind.ModuleSocket)]
     [InlineData(ForgeInteractableKind.RelicTube)]
@@ -252,8 +236,6 @@ public class ForgeInteractionPolicyTests
         Assert.Equal("Forge: no module loaded, 0/4 relics.", d.Message);
     }
 
-    // ---- commit ------------------------------------------------------------
-
     // The three refusals delegate their wording to ForgeLabels rather than
     // carrying copies — asserting against DescribeCommit is the point, since a
     // literal here would be a fourth copy of the string.
@@ -276,9 +258,7 @@ public class ForgeInteractionPolicyTests
             d.Message);
     }
 
-    // The invariant the split exists to protect: the client path used to keep
-    // private copies of these refusals, and answered a box with no network
-    // identity with "load a module box" — wrong, and different from the host.
+    // The invariant the split exists to protect: host and client must refuse identically.
     [Theory]
     [InlineData(false, true, 1)]
     [InlineData(true, false, 1)]
@@ -311,7 +291,7 @@ public class ForgeInteractionPolicyTests
         Assert.Null(d.Message);
     }
 
-    // Phase 8-C: cursed markers and RNG live on the host, so a client asks.
+    // Cursed markers and RNG live on the host, so a client asks.
     [Fact]
     public void A_client_asks_the_host_to_commit()
     {

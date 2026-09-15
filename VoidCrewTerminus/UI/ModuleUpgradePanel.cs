@@ -5,24 +5,16 @@ using VoidCrewTerminus.Forge;
 
 namespace VoidCrewTerminus.UI;
 
-/// <summary>
-/// Drives the module upgrade panel. Ported from src/panel.ts in the HTML mock.
-///
-/// Two jobs:
-///   1. Build the repeated decorative elements. USS has no ::before/::after, so
-///      every meander bar and grid line is a real VisualElement. Writing 250 of
-///      them into the UXML would be unreadable, so they are looped here.
-///   2. Drive visuals by toggling classes and setting inline style values.
-///      USS has no @keyframes, so animation is a class flip plus a transition.
-/// </summary>
+// USS has no ::before/::after, so every meander bar and grid line is a real VisualElement,
+// looped here rather than written 250 times into the UXML. USS has no @keyframes either, so
+// animation is a class flip plus a transition.
 [RequireComponent(typeof(UIDocument))]
 public sealed class ModuleUpgradePanel : MonoBehaviour
 {
     public enum PanelState { Filling, Max, Unpowered }
 
-    // Real ceiling, not the placeholder 5 this file shipped with — the pip
-    // count (BuildPips) and level clamp both need to match ForgeMeterController's
-    // actual MaxLevel or a real L6 Forge would render as if capped at 5.
+    // Pip count and level clamp must both match ForgeMeterController's MaxLevel, or a real
+    // L6 Forge renders as if capped lower.
     public const int MaxLevel = ForgeMeterController.MaxLevel;
 
     const int MeanderKeys = 23;
@@ -37,10 +29,8 @@ public sealed class ModuleUpgradePanel : MonoBehaviour
     Label _levelText;
     Label _curText;
     Label _totText;
-    // One list per pip column. The two ladders mirror the same level (the HTML
-    // mock walks each .rnk__pips separately), so a single flat list spanning both
-    // lights the left column and leaves the right one permanently dark: with
-    // MaxLevel=6 the right column's indices are 6..11 and _level never reaches 7.
+    // One list per pip column: the two ladders mirror the same level, so a single flat list
+    // spanning both would leave the right column permanently dark.
     readonly List<List<VisualElement>> _pipColumns = new List<List<VisualElement>>();
 
     int _level = 1;
@@ -63,11 +53,8 @@ public sealed class ModuleUpgradePanel : MonoBehaviour
         _curText = root.Q<Label>("cur-text");
         _totText = root.Q<Label>("tot-text");
 
-        // Every other lookup here is optional; this one is load-bearing. Render()
-        // drives all three state classes off it, so an unguarded miss throws out of
-        // OnEnable, the .anim schedule below never registers, and every later
-        // ApplyState throws as well — leaving the screen drawing the layout's
-        // authored placeholder values forever with nothing in the log to say why.
+        // The only load-bearing lookup: an unguarded miss throws out of OnEnable, so the
+        // .anim schedule never registers and the screen silently draws authored defaults.
         if (_panel == null)
         {
             BepinPlugin.Log.LogWarning(
@@ -76,11 +63,9 @@ public sealed class ModuleUpgradePanel : MonoBehaviour
             return;
         }
 
-        // OnEnable runs again on every re-enable, and UIDocument recreates its tree
-        // on some of those but keeps it on others. These builders therefore adopt
-        // whatever is already present instead of appending a second copy of
-        // everything — stacking a second pip ladder would strand the live one at
-        // indices the level counter can never reach.
+        // OnEnable runs again on every re-enable, and UIDocument recreates its tree on some of
+        // those but keeps it on others, so the builders adopt whatever is present rather than
+        // appending; a stacked pip ladder would strand the live one at unreachable indices.
         _pipColumns.Clear();
         BuildMeander(root.Q<VisualElement>("meander-top"));
         BuildMeander(root.Q<VisualElement>("meander-bot"));
@@ -93,17 +78,13 @@ public sealed class ModuleUpgradePanel : MonoBehaviour
             $"fills={_fillTop != null && _fillBot != null}, " +
             $"labels={_levelText != null && _curText != null && _totText != null}");
 
-        // ApplyState (called by whatever drives this panel with real data,
-        // e.g. ForgeScreenDisplay) overwrites these before anything is ever
-        // actually visible — this first Render() just needs to not crash.
+        // ApplyState overwrites these before anything is visible; this just needs to not crash.
         Render();
 
         // First paint lands on the final values; transitions come on a frame
         // later so the panel never animates itself in from empty.
         _panel.schedule.Execute(() => _panel.AddToClassList("anim")).StartingIn(32);
     }
-
-    // ---------------------------------------------------------------- build --
 
     static VisualElement Div(params string[] classes)
     {
@@ -160,13 +141,7 @@ public sealed class ModuleUpgradePanel : MonoBehaviour
         _pipColumns.Add(column);
     }
 
-    // ----------------------------------------------------------------- api --
-
-    // Sets level/current/total straight from an external source of truth
-    // (ForgeMeterController) and re-renders — replaces this panel's own
-    // Deposit/CostForLevel simulation, which computed its own (placeholder)
-    // progression instead of reflecting the real one. Leaves PanelState alone
-    // when unpowered, since a power cut isn't something meter/level data implies.
+    // Leaves PanelState alone when unpowered: a power cut isn't something meter data implies.
     public void ApplyState(int level, float current, float total, bool maxed)
     {
         _level = Mathf.Clamp(level, 1, MaxLevel);
@@ -195,17 +170,13 @@ public sealed class ModuleUpgradePanel : MonoBehaviour
         Render();
     }
 
-    // Public so a real level-up event (ForgeMeterController.LevelChanged) can
-    // trigger it directly — this panel no longer detects level-ups itself
-    // (that lived in the removed Deposit loop).
+    // Public so ForgeMeterController.LevelChanged drives it; this panel detects no level-ups.
     public void FlashLevelUp()
     {
         if (_panel == null) return;
         _panel.AddToClassList("is-levelup");
         _panel.schedule.Execute(() => _panel.RemoveFromClassList("is-levelup")).StartingIn(110);
     }
-
-    // -------------------------------------------------------------- render --
 
     public void Render()
     {
@@ -234,7 +205,7 @@ public sealed class ModuleUpgradePanel : MonoBehaviour
 
         _panel.EnableInClassList("is-full", p >= 0.999f);
 
-        // Every column restates the same level — see _pipColumns.
+        // Every column restates the same level; see _pipColumns.
         for (int c = 0; c < _pipColumns.Count; c++)
         {
             var column = _pipColumns[c];

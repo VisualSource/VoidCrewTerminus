@@ -8,28 +8,18 @@ using UnityEngine.Rendering;
 
 namespace VoidCrewTerminus.Forge;
 
-// Marks a rendering-only preview clone, so ForgeOutline's renderer sweep can skip
-// it — that sweep runs once per module and is cached forever, so a ghost caught in
-// it would be captured permanently and flicker with the module's hover highlight.
+// Marks a rendering-only preview clone so ForgeOutline's renderer sweep skips it: that sweep
+// is cached forever, so a ghost caught in it would flicker with the module's hover highlight.
 internal sealed class ForgeGhostMarker : MonoBehaviour { }
 
-// The translucent blue placement preview, on the Forge's anchors.
-//
-// Vanilla's CG.Rendering.SocketOutlines does this for ship sockets, but drives off
-// CarryablesSocket.OnSocketAdded and so never sees the Forge's plain anchors
-// (ADR-0002). Reimplemented here against vanilla's own HologramMaterial, so the
-// preview is the same blue rather than a lookalike that drifts on a game update.
-//
-// Two visual states, both from SocketOutlines.HighlightObjects.ShowHighlight:
-// aimed elsewhere draws an outline-layer silhouette; aimed at the anchor draws the
-// full translucent solid.
-//
-// Purely local and cosmetic — reads LocalPlayer, touches no physics, ownership or
-// network state, so it needs no sync.
+// The translucent blue placement preview on the Forge's anchors. Vanilla's SocketOutlines
+// drives off CarryablesSocket.OnSocketAdded and so never sees plain anchors (ADR-0002), so
+// this reimplements it against vanilla's own HologramMaterial rather than a lookalike that
+// would drift on a game update. Purely local and cosmetic, so it needs no sync.
 internal sealed class ForgeGhosts
 {
-    // SocketOutlines.OUTLINE_LAYER — renderers parked here draw in the outline pass
-    // alone. SkipLayer (15) is the other layer it refuses to clone from.
+    // Renderers parked on OutlineLayer draw in the outline pass alone. SkipLayer is the
+    // other layer SocketOutlines refuses to clone from.
     private const int OutlineLayer = 3;
     private const int SkipLayer = 15;
 
@@ -44,8 +34,7 @@ internal sealed class ForgeGhosts
         var sourceGo = source.gameObject;
         if (_ghosts.TryGetValue(anchor, out var existing))
         {
-            // The common case — the refresh tick re-asserts every accepted anchor
-            // several times a second.
+            // The common case: the refresh tick re-asserts every accepted anchor at 5 Hz.
             if (existing.Root != null && existing.Source == sourceGo) return;
             existing.Destroy();
             _ghosts.Remove(anchor);
@@ -65,8 +54,7 @@ internal sealed class ForgeGhosts
         _ghosts.Remove(anchor);
     }
 
-    // Runs every frame, unlike the rebuild — hover feedback lagging by a refresh
-    // interval would feel broken.
+    // Runs every frame, unlike the rebuild: hover feedback a refresh interval late feels broken.
     internal void SetAimed(Transform aimed)
     {
         if (_ghosts.Count == 0) return;
@@ -89,13 +77,12 @@ internal sealed class ForgeGhosts
 
         root.AddComponent<ForgeGhostMarker>();
 
-        // Parented to the anchor so it rides the ship for free — no rigidbody, so it
-        // needs none of AnchorDock's per-frame pinning.
+        // Parented to the anchor so it rides the ship for free: no rigidbody, so none of
+        // AnchorDock's per-frame pinning is needed.
         root.transform.SetParent(anchor, worldPositionStays: false);
 
-        // Must match AnchorDock.PlaceAtAnchor's pivot choice, or the preview lands
-        // somewhere the item won't — e.g. previewing a BuildBox with its BasePivot
-        // pins the top to the module socket's center instead of centering the box.
+        // Must match AnchorDock.PlaceAtAnchor's pivot choice, or the preview lands somewhere
+        // the item won't.
         var pivot = align == AnchorAlign.Center ? source.CenterPivot : source.BasePivot;
         if (pivot == null) pivot = sourceTr;
         ForgeAnchors.ComputeDockedPose(sourceTr, pivot, anchor, out var pos, out var rot);
@@ -112,9 +99,8 @@ internal sealed class ForgeGhosts
         return ghost;
     }
 
-    // SocketOutlines.RecursiveInstantiateGraphics, reimplemented: bare GameObjects
-    // carrying only meshes, no shadows, probes or colliders — nothing that could
-    // interact with the world.
+    // SocketOutlines.RecursiveInstantiateGraphics, reimplemented: bare GameObjects carrying
+    // only meshes, with nothing that could interact with the world.
     private static GameObject CloneGraphics(GameObject reference, Material hologram)
     {
         if (!reference.activeSelf) return null;
@@ -168,8 +154,7 @@ internal sealed class ForgeGhosts
             worldScale.z / Mathf.Max(Mathf.Abs(inherited.z), 1e-4f));
     }
 
-    // Resolved lazily and retried on failure — SocketOutlines lives on the ship and
-    // is not present at plugin load.
+    // Resolved lazily and retried: SocketOutlines lives on the ship, not at plugin load.
     private static Material _hologram;
     private static bool _loggedMissing;
 
