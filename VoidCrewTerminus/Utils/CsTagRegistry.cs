@@ -4,8 +4,6 @@ using VoidCrewTerminus.Forge;
 
 namespace VoidCrewTerminus.Utils;
 
-// Lazily resolves built-in CsTag ScriptableObjects from the game's CsTagTable and
-// exposes the mod-authored Forge_Upgraded tag created at runtime.
 public static class CsTagRegistry
 {
     private static CsTag _weapon;
@@ -32,8 +30,8 @@ public static class CsTagRegistry
     public static CsTag Utility => _utility ??= Resolve("Module_Category_Utility");
     public static CsTag BuiltIn => _builtIn ??= Resolve("Module_Category_BuiltIn");
 
-    // Mod-authored tag: stamped on every Forge-applied StatMod via TagsToAdd so that
-    // future perk mods can narrow with RequiredLocalTags = [Forge_Upgraded].
+    // Stamped on every Forge-applied StatMod via TagsToAdd, so perk mods can narrow with
+    // RequiredLocalTags.
     public static CsTag ForgeUpgraded
     {
         get
@@ -45,9 +43,8 @@ public static class CsTagRegistry
         }
     }
 
-    // Mod-authored tag stamped onto the Upgrade Forge CellModule when the behavior
-    // attaches (ForgeAttachHelper), so Forge instances are identifiable by tag
-    // instead of prefab name everywhere past the initial build.
+    // Stamped onto the Forge CellModule when the behavior attaches, so instances are
+    // identifiable by tag rather than prefab name everywhere past the initial build.
     public static CsTag ForgeModule
     {
         get
@@ -68,15 +65,14 @@ public static class CsTagRegistry
     // Stamped on a module while at least one Leech is attached to it.
     public static CsTag ModuleLeechAttached => Authored(ref _moduleLeechAttached, "Tag_Module_Leech_Attached");
 
-    // Ship-level exposure. Bucketing runs per-client — none of this is networked.
+    // Ship-level exposure. Bucketing runs per-client; none of this is networked.
     public static CsTag ShipHasLeeches => Authored(ref _shipHasLeeches, "Tag_Ship_HasLeeches");
     public static CsTag ShipLeechSwarmSmall => Authored(ref _shipLeechSwarmSmall, "Tag_Ship_LeechSwarm_Small");
     public static CsTag ShipLeechSwarmHeavy => Authored(ref _shipLeechSwarmHeavy, "Tag_Ship_LeechSwarm_Heavy");
     public static CsTag ShipLeechSwarmCritical => Authored(ref _shipLeechSwarmCritical, "Tag_Ship_LeechSwarm_Critical");
 
     // Bundled CsTag ScriptableObjects cannot resolve through the game's table, so
-    // mod-authored tags are constructed at runtime. The Tag_ prefix matches how the
-    // game names its own.
+    // mod-authored tags are constructed at runtime. The Tag_ prefix matches the game's.
     private static CsTag Authored(ref CsTag cache, string name)
     {
         if (cache != null) return cache;
@@ -85,10 +81,9 @@ public static class CsTagRegistry
         return cache;
     }
 
-    // The game's canonical relic tag. This is the same asset RuntimeCarryable stamps
-    // onto RuntimeAssets-modded relics (RuntimeAssetTable.RelicTag), and vanilla relic
-    // carryables carry it in their serialized CsTags — so a reference-equality check
-    // against CarryableObject.CsTags identifies relics without name matching.
+    // The same asset RuntimeCarryable stamps onto modded relics, and vanilla relics carry it
+    // in their serialized CsTags, so reference equality identifies a relic without name
+    // matching.
     public static CsTag Relic
     {
         get
@@ -101,10 +96,8 @@ public static class CsTagRegistry
         }
     }
 
-    // Mod-authored burden tag: stamped on modules that carry a RandomShutoff burden,
-    // following the ForgeUpgraded pattern — a zero-value marker StatMod in BuildMods
-    // projects this tag onto the module for game-visible queries ("is this module
-    // burdened?" as a one-liner).
+    // Projected onto a burdened module by a zero-value marker StatMod in BuildMods, the same
+    // way ForgeUpgraded is, so "is this module burdened?" is a tag query.
     public static CsTag BurdenRandomShutoff
     {
         get

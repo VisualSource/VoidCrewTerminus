@@ -3,13 +3,10 @@ using Gameplay.Utilities;
 
 namespace VoidCrewTerminus.Utils;
 
-// The stats that define "how well does this module do its job", grouped by the
-// category CsTag that narrows them. Any effect wanting to scale a module's
-// effectiveness as a whole — the Forge's level bonus upward, a Leech debuff
-// downward — needs the same per-category list, so it lives in one place.
+// The stats that define how well a module does its job, grouped by the category CsTag that
+// narrows them, so the Forge's level bonus and a Leech debuff share one list.
 //
-// ForgeModuleState.BuildMods still carries its own copy; it predates this and is
-// shipped, working code. Worth folding onto this once there's a reason to touch it.
+// ForgeModuleState.BuildMods still carries its own copy, not yet folded onto this.
 public static class ModuleStatBundles
 {
     public static readonly StatType[] Weapon =
@@ -40,8 +37,7 @@ public static class ModuleStatBundles
         StatType.AttractorMaxRange, StatType.AttractorPullVelocity,
     };
 
-    // Category tag paired with the stats it narrows, for callers that apply the
-    // same treatment across every category.
+    // Category tag paired with the stats it narrows, for callers treating every category.
     public static (CsTag Tag, StatType[] Stats)[] All() => new[]
     {
         (CsTagRegistry.Weapon, Weapon),

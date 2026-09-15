@@ -7,18 +7,13 @@ using VoidCrewTerminus.Utils;
 
 namespace VoidCrewTerminus.Leech;
 
-// One IModifierSource for every Leech on the ship, ref-counted per module.
+// One IModifierSource shared by every Leech on the ship, ref-counted per module. The two
+// threat axes split deliberately: the effectiveness debuff is NON-stacking (three Leeches on
+// one module debuff it once) while module HP damage stacks. Ref counting is the first half.
 //
-// The design splits the two threat axes deliberately: the effectiveness debuff is
-// NON-stacking (three Leeches on one module debuff it once) while module HP damage
-// stacks (each Leech ticks independently). Ref counting here is what implements the
-// first half — LeechController owns the second.
-//
-// Deliberately carries no ModDynamicCondition. A condition's Init() overwrites
-// Mod.Source to itself, and UpdateMods detaches by source, so a condition flipping
-// on one mod would strip this whole shared bundle while leaving its siblings in
-// ActiveModifiers, never to be re-added. Conditions belong on per-mod unique
-// sources; see the Leech Dynamic Source work.
+// Deliberately carries no ModDynamicCondition: a condition's Init() overwrites Mod.Source to
+// itself and UpdateMods detaches by source, so one condition flipping would strip this whole
+// shared bundle and leave its siblings in ActiveModifiers, never re-added.
 internal sealed class LeechModuleDebuffApplicator : IModifierSource
 {
     internal static LeechModuleDebuffApplicator Instance { get; } = new();
@@ -80,9 +75,8 @@ internal sealed class LeechModuleDebuffApplicator : IModifierSource
         _refCounts.Clear();
     }
 
-    // Negative AdditiveMultiplier across every category bundle. A module only
-    // carries one category tag, so RequiredTags means only its own group activates
-    // and the rest sit inert — the same shape the Forge uses for its level bonus.
+    // Negative AdditiveMultiplier across every category bundle. A module carries one category
+    // tag, so RequiredTags means only its own group activates and the rest sit inert.
     private List<StatMod> BuildMods(float magnitude)
     {
         var mods = new List<StatMod>();
@@ -106,10 +100,9 @@ internal sealed class LeechModuleDebuffApplicator : IModifierSource
             }
         }
 
-        // The category groups above bind to stats on child collections, so without
-        // a mod on the module's own collection the tag never reaches its LocalTags.
-        // A zero addend on MaxHitPoints — which every OrbitObject registers —
-        // carries the tag without altering anything.
+        // The category groups bind to stats on child collections, so a zero addend on
+        // MaxHitPoints, which every OrbitObject registers, is what carries the tag onto the
+        // module's own collection.
         mods.Add(new StatMod(
             new FloatModifier(0f, ModifierType.PrimaryAddend, this),
             StatType.MaxHitPoints.Id,
@@ -118,9 +111,8 @@ internal sealed class LeechModuleDebuffApplicator : IModifierSource
         return mods;
     }
 
-    // The game rebuilds runtimeTags only inside UpdateMods, which fires on a mod's
-    // active/inactive transition — ApplyModifiers alone never triggers it, so
-    // TagsToAdd would never surface in LocalTags(). Mirror it in directly; the
+    // runtimeTags is rebuilt only inside UpdateMods, which fires on a mod's active/inactive
+    // transition, so TagsToAdd would never surface in LocalTags(). Mirrored in directly; the
     // zero-value marker mod above keeps it alive across any later rebuild.
     private static void SyncTag(CellModule module, bool present)
     {

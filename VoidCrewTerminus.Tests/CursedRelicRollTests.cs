@@ -3,9 +3,8 @@ using Xunit;
 
 namespace VoidCrewTerminus.Tests;
 
-// Pure math coverage of the spawn-time cursed roll.
-// The Harmony-hosted spawn scan itself (CursedRelicSpawnPatch) is scene-
-// integrated and verified by playtest via !cursedstatus.
+// Pure math coverage of the spawn-time cursed roll. The spawn scan itself is scene-
+// integrated and verified by playtest.
 public class CursedRelicRollTests
 {
     private static RelicTierEntry Entry(float modifier = 0f) =>
@@ -14,9 +13,8 @@ public class CursedRelicRollTests
     [Fact]
     public void ChanceFor_AppliesDuringWarmUp_NotGatedOnEscalation()
     {
-        // Curses are a property of the relic, not of run progress — the roll is
-        // live from the first sector. At scalar 0 (warm-up) that's the flat
-        // base + relic modifier: 0.15 + 0.10 = 0.25.
+        // Curses are a property of the relic, not of run progress, so the roll is live from
+        // the first sector. At scalar 0 that is base + relic modifier: 0.15 + 0.10 = 0.25.
         var chance = CursedRelicRoll.ChanceFor(
             Entry(0.10f), difficultyScalar: 0,
             baseChance: 0.15f, scalarBonusPerScalar: 0.03f, maxChance: 1f);

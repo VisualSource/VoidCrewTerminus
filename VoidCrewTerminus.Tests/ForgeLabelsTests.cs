@@ -10,8 +10,7 @@ namespace VoidCrewTerminus.Tests;
 public class ForgeLabelsTests
 {
 
-    // Mk number maps directly onto module level so the mod continues vanilla's
-    // ladder: L3 is vanilla's cap (Mk III) and forging runs it up to Mk X.
+    // Mk number maps directly onto module level: L3 is vanilla's cap, forging runs to Mk X.
     [Theory]
     [InlineData(3, "Mk III")]
     [InlineData(4, "Mk IV")]
@@ -44,8 +43,8 @@ public class ForgeLabelsTests
     public void RewriteMark_appends_when_no_mark_present() =>
         Assert.Equal("Pulse Laser Mk VII", ForgeLabels.RewriteMark("Pulse Laser", 7));
 
-    // A localised name won't match the English-centric regex. It must degrade to
-    // a plain append — possibly duplicating a mark, but never corrupting the name.
+    // A localised name won't match the English-centric regex, so it must degrade to a
+    // plain append: possibly duplicating a mark, never corrupting the name.
     [Fact]
     public void RewriteMark_falls_back_to_append_on_unmatched_format() =>
         Assert.Equal("Impulslaser Ausf. 3 Mk VII",
@@ -58,15 +57,14 @@ public class ForgeLabelsTests
         Assert.Equal("Mk VII", ForgeLabels.RewriteMark("", 7));
     }
 
-    // Only a TRAILING mark may be stripped — a mark mid-name is part of the name.
+    // Only a TRAILING mark may be stripped; a mark mid-name is part of the name.
     [Fact]
     public void RewriteMark_only_strips_trailing_marks() =>
         Assert.Equal("Mk III Prototype Mk VII",
             ForgeLabels.RewriteMark("Mk III Prototype", 7));
 
-    // An untouched module must render byte-identical to vanilla. This is also the
-    // path a client takes before forge state syncs, so it must stay silent rather
-    // than display a wrong level.
+    // An untouched module renders byte-identical to vanilla. This is also the path a client
+    // takes before forge state syncs, so it must stay silent rather than show a wrong level.
     [Fact]
     public void HasOverlay_false_for_untouched_module() =>
         Assert.False(ForgeLabels.HasOverlay(3, new[] { "", "", "" }, new BurdenType[0]));

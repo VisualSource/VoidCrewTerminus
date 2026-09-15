@@ -108,8 +108,8 @@ internal class LootDumpCommand : PublicCommand
             return;
         }
 
-        // At 0 bosses you'll see Legendaries/Rares collapse to Common; at 2 bosses the
-        // ceiling is Legendary so it reports no downgrades — that's correct, not a bug.
+        // At 0 bosses Legendaries and Rares collapse to Common; at 2 the ceiling is
+        // already Legendary, so reporting no downgrades is correct.
         Messaging.Notification($"Reshape: {Patches.LootTableEscalationPatch.LastReshapeSummary}");
 
         int recognizedTotal = 0;
@@ -147,9 +147,9 @@ internal class LootDumpCommand : PublicCommand
             Messaging.Notification($"[{kv.Key}] {string.Join(", ", parts)}");
         }
 
-        // If RelicTierData recognizes zero entries, the key format almost certainly
-        // doesn't match CraftableItemRef.Filename and loot gating is a silent no-op —
-        // print the raw filenames so the mismatch is visible.
+        // Zero recognized entries almost certainly means the key format doesn't match
+        // CraftableItemRef.Filename and loot gating is a silent no-op, so print the raw
+        // filenames to make the mismatch visible.
         if (recognizedTotal == 0)
             Messaging.Notification("WARNING: 0 relics recognized by RelicTierData — loot gating is likely a NO-OP (name mismatch). Raw sample names below:");
         if (unrecognizedSamples.Count > 0)
@@ -157,11 +157,8 @@ internal class LootDumpCommand : PublicCommand
     }
 }
 
-// Dump every live AIDirector spawner's intensity so density escalation can be
-// verified directly (Target/Max are what SpawnerInitIntensityScalingPatch and the
-// AIDirector prefixes inflate; Current is how much has actually spawned). If the
-// escalation is working you'll see Max/Target above the vanilla profile values;
-// compare the same encounter at !setdifficulty 0 vs a high value.
+// Target/Max are what SpawnerInitIntensityScalingPatch and the AIDirector prefixes inflate;
+// Current is how much has actually spawned.
 internal class SpawnersDumpCommand : PublicCommand
 {
     private static readonly FieldInfo SpawnersField =

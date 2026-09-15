@@ -19,8 +19,8 @@ public class ForgeInteractionPolicyTests
         bool occupied = false, int carriedBoxLevel = ForgeCostCurve.MinLevel) =>
         new(payload, carriedBoxLevel, target, occupied);
 
-    // A mismatch names the target that would have worked rather than just
-    // refusing — the tubes and the commit button are inches apart in-world.
+    // A mismatch names the target that works rather than just refusing; the tubes and the
+    // commit button are inches apart in-world.
     [Theory]
     [InlineData(ForgeInteractableKind.RelicTube)]
     [InlineData(ForgeInteractableKind.CommitButton)]
@@ -44,8 +44,7 @@ public class ForgeInteractionPolicyTests
         Assert.Equal("The Forge already holds a module box.", d.Message);
     }
 
-    // The level quoted is the CARRIED box's, not the socket's — the socket reads
-    // level 0 until the load lands, so sourcing it from there would announce "L0".
+    // The level quoted is the carried box's: the socket reads 0 until the load lands.
     [Fact]
     public void Module_box_loads_and_reports_the_carried_box_level()
     {
@@ -113,9 +112,8 @@ public class ForgeInteractionPolicyTests
         Assert.Contains("Relic inserted (1/4).", d.Message);
     }
 
-    // Same for the projection: two relics on the default curve (1,1,...) carry an
-    // L3 module to L5, and the second insert must say so rather than quote the L4
-    // it was worth a moment ago.
+    // Same for the projection: two relics on the default curve carry an L3 module to L5,
+    // and the second insert must say so rather than quote the L4 of a moment ago.
     [Fact]
     public void Relic_insert_projects_from_the_post_insert_count()
     {

@@ -63,9 +63,8 @@ public static class PerkPool
         },
     };
 
-    // Tied to specific relic identities. Roll only when that exact relic is
-    // consumed in a commit; take priority over category pool draws. Grouped by
-    // SignatureRelicId at first-touch (see EnsureSignatureIndex).
+    // Roll only when that exact relic is consumed in a commit, and take priority over
+    // category pool draws. Grouped by SignatureRelicId at first touch.
     private static readonly PerkDefinition[] _signatures = new[]
     {
         new PerkDefinition("sig_biomass_ram", "Biomass Ram", ForgeCategory.BuiltIn,
@@ -91,8 +90,8 @@ public static class PerkPool
             payload: new[] { (StatType.FireRate, 0.30f), (StatType.ProjectileSpeed, 0.10f) }),
     };
 
-    // Built lazily on first access to keep the static ctor cheap and avoid
-    // StatType touches during test-host init.
+    // Built lazily so the static ctor stays cheap and StatType is not touched during
+    // test-host init.
     private static Dictionary<string, List<PerkDefinition>> _signaturesByRelic;
 
     private static void EnsureSignatureIndex()
@@ -134,9 +133,8 @@ public static class PerkPool
 
     public static IReadOnlyList<PerkDefinition> PoolFor(ForgeCategory category)
     {
-        // Short-circuits before touching _pools so callers can query Unknown
-        // without triggering the dictionary's static initializer, which references
-        // StatType and other game types.
+        // Short-circuits before touching _pools, so Unknown can be queried without
+        // triggering the dictionary's static initializer and its StatType references.
         if (category == ForgeCategory.Unknown) return System.Array.Empty<PerkDefinition>();
         return _pools.TryGetValue(category, out var pool) ? pool : System.Array.Empty<PerkDefinition>();
     }

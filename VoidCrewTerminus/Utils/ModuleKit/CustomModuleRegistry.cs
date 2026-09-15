@@ -12,8 +12,7 @@ public static class CustomModuleRegistry
 {
     private static readonly List<RegisteredModule> _modules = new();
 
-    // Module prefabs the game's RuntimeAssetConverter can't handle (it only covers
-    // carryables/cosmetics).
+    // Module prefabs the game's RuntimeAssetConverter can't handle.
     private static readonly Dictionary<string, GameObject> _modulePrefabs = new();
 
     private static readonly Dictionary<string, GameObject> _boxTemplates = new();
@@ -47,8 +46,7 @@ public static class CustomModuleRegistry
         VanillaAssetRegistrar.RegisterAssetIfAbsent(new GUIDUnion(vca.AssetGuid), prefab, vca.Name);
     }
 
-    // A post-pass: a module prefab and its BuildBox marker arrive from the bundle in
-    // either order.
+    // A post-pass: a module prefab and its BuildBox marker arrive in either order.
     public static void LinkBuildBoxRefs()
     {
         foreach (var module in _modules)
@@ -59,7 +57,7 @@ public static class CustomModuleRegistry
     }
 
     // Can't run at plugin Awake: ResourcePaths, the vanilla containers and any live donor
-    // BuildBox all come up later (same too-early trap as PhotonNetwork — see CLAUDE.md).
+    // BuildBox all come up later, the same too-early trap as PhotonNetwork (see CLAUDE.md).
     // Idempotent, so every entry point needing a BuildBox calls it.
     public static void EnsureTemplatesReady()
     {
@@ -78,8 +76,8 @@ public static class CustomModuleRegistry
 
     public static void Clear()
     {
-        // A BuildBox template is a live clone, not a bundle asset — bundle.Unload won't
-        // touch it, so it leaks across hot-reloads unless destroyed here.
+        // A BuildBox template is a live clone, not a bundle asset, so bundle.Unload won't
+        // touch it and it leaks across hot-reloads unless destroyed here.
         foreach (var template in _boxTemplates.Values)
         {
             if (template != null) Object.Destroy(template);
@@ -90,9 +88,8 @@ public static class CustomModuleRegistry
         _containersPopulated = false;
     }
 
-    // RegisterAssetIfAbsent only covers RuntimeAssetsRegister, but vanilla code does raw
-    // container lookups with no null-check on a miss — register here rather than patch
-    // every call site.
+    // RegisterAssetIfAbsent covers only RuntimeAssetsRegister, but vanilla does raw
+    // container lookups with no null-check on a miss.
     private static void EnsureContainersPopulated()
     {
         if (_containersPopulated) return;

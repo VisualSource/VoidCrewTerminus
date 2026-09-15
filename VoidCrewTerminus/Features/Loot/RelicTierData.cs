@@ -8,22 +8,14 @@ public enum RelicTier { Common = 0, Rare = 1, Legendary = 2 }
 public readonly struct RelicTierEntry
 {
     public readonly RelicTier Tier;
-    public readonly bool IsCursed; // Legacy static flag, retained for compatibility — superseded by per-instance spawn-time rolls (see CursedRelicMarker).
+    public readonly bool IsCursed; // Superseded by per-instance spawn rolls; see CursedRelicMarker.
 
-    // Additive modifier applied to the base curse chance at spawn time. Some
-    // relics are innately more curse-prone; positive values push them toward
-    // cursed, negative values (rare) protect them. Range [-1, +1]; the final
-    // chance is clamped to [0, 1] after adding scalar-driven bonuses.
+    // Added to the base curse chance at spawn. Range [-1, +1]; the final chance is clamped
+    // to [0, 1] after scalar-driven bonuses.
     public readonly float BaseCurseChanceModifier;
 
-    // Which burden types this relic can inflict when it's cursed AND the burden
-    // roll passes. The calculator gathers affinities from every consumed cursed
-    // relic and picks uniformly from the union. Empty = this relic never causes
-    // any burden even if cursed and the roll passes.
-    //
-    // With only RandomShutoff shipped, the default [RandomShutoff] is the
-    // sensible fallback — every cursed relic today manifests as random power
-    // drops. Later burden types get authored per-relic based on lore fit.
+    // Which burden types this relic can inflict once cursed and the burden roll passes.
+    // Empty means this relic never causes a burden even then.
     public readonly IReadOnlyList<BurdenType> BurdenAffinity;
 
     private static readonly IReadOnlyList<BurdenType> _defaultAffinity = new[] { BurdenType.RandomShutoff };
@@ -39,12 +31,9 @@ public readonly struct RelicTierEntry
     public override string ToString() => $"{Tier}{(IsCursed ? " (Cursed)" : "")}{(BaseCurseChanceModifier != 0f ? $" [curse+{BaseCurseChanceModifier:+0.00;-0.00}]" : "")}";
 }
 
-// Mod-side tier metadata for all ~29 vanilla relics.
-// Key is the prefab base name (runtime name with "(Clone)" stripped).
-// Tier assignments are based on effect complexity and power level.
-// BaseCurseChanceModifier per-relic: relics whose vanilla effects hint at
-// instability (breakers, defects, vulnerability) get positive modifiers; clean
-// stat trades get negative modifiers.
+// Keyed by prefab base name, with "(Clone)" stripped. Tier follows effect complexity and
+// power level; BaseCurseChanceModifier follows vanilla flavour, so relics whose effects hint
+// at instability go positive and clean stat trades go negative.
 public static class RelicTierData
 {
     private static readonly RelicTierEntry Common = new(RelicTier.Common);
@@ -57,8 +46,7 @@ public static class RelicTierData
 
     private static readonly Dictionary<string, RelicTierEntry> _map = new()
     {
-        // Straight-forward effects get a slight negative curse modifier (safer
-        // picks); trade-off effects stay neutral.
+        // Straightforward effects go slightly negative; trade-off effects stay neutral.
         ["Relic_00_Solo"] = CommonCurse(-0.05f),
         ["Relic_01_A_StarboardPower"] = Common,
         ["Relic_01_B_PortPower"] = Common,
@@ -69,8 +57,7 @@ public static class RelicTierData
         ["Relic_08_B_KineticForEnergy"] = Common,
         ["Relic_21_DamageForRange"] = Common,
 
-        // Relics that lean on breakers / defects / vulnerability lore get positive
-        // curse modifiers — their vanilla flavour already hints at instability.
+        // Breakers, defects and vulnerability lore go positive.
         ["Relic_02_PowerForBreakers"] = RareCurse(+0.10f),
         ["Relic_03_VulnerabilityDuringVoidCharge"] = RareCurse(+0.10f),
         ["Relic_06_FireRateForBreakersCount"] = RareCurse(+0.10f),
@@ -90,7 +77,7 @@ public static class RelicTierData
         ["Relic_24_EnergyDamageForBreakersCount"] = RareCurse(+0.10f),
         ["Relic_27_FireRateDuringThrusterBoost"] = Rare,
 
-        // Higher innate curse chance — the flagship relics come with strings attached.
+        // The flagship relics come with strings attached.
         ["Relic_15_BiomassForThrustersAndDamage"] = LegendaryCurse(+0.15f),
         ["Relic_28_PayloadRecharge"] = LegendaryCurse(+0.15f),
     };

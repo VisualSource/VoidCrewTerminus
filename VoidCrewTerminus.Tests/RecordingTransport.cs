@@ -5,10 +5,8 @@ using VoidCrewTerminus.Net;
 
 namespace VoidCrewTerminus.Tests;
 
-// The third adapter at the transport seam: records instead of transmitting.
-//
-// This is what makes the gate rules testable at all. Set the two facts the
-// transport reports, drive ForgeNetSync's real entry points, and assert on what
+// The third adapter at the transport seam: records instead of transmitting. Set the two
+// facts the transport reports, drive ForgeNetSync's real entry points, and assert on what
 // would have gone on the wire.
 internal sealed class RecordingTransport : IForgeTransport
 {
@@ -24,7 +22,7 @@ internal sealed class RecordingTransport : IForgeTransport
     public bool IsAuthority { get; set; }
     public bool HasPeers { get; set; }
 
-    // The two states worth naming, since almost every gate assertion is one of them.
+    // Almost every gate assertion is one of these two.
     internal static RecordingTransport Host() => new() { IsAuthority = true, HasPeers = true };
     internal static RecordingTransport Client() => new() { IsAuthority = false, HasPeers = true };
 

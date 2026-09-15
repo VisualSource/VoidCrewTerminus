@@ -4,26 +4,19 @@ using Gameplay.Utilities;
 
 namespace VoidCrewTerminus.Leech.Dynamics;
 
-// Factories for StatMods that read the live Leech count, plus the teardown the
-// game does not do for us.
+// Factories for StatMods that read the live Leech count, plus the teardown the game does not
+// do for us. Two rules callers cannot opt out of:
 //
-// Two rules callers cannot opt out of:
-//
-//   1. Dynamics must be attached BEFORE the StatMod reaches a collection.
-//      StatTagCollection.ApplyModifier initialises dynamics and then evaluates
-//      whether the mod is active; assigning afterwards leaves the mod classified
-//      inactive until some later refresh happens to correct it.
-//
-//   2. Condition-bearing mods must go through the PLURAL ApplyModifiers(mods,
-//      source). ModDynamicCondition.Init assigns itself as the mod's source, and
-//      the singular ApplyModifier sets the source before init — so the condition
-//      overwrites it, and a later RemoveModifier(yourSource) cannot find the mod
-//      and can never remove it. The plural overload re-asserts the source after
-//      init, which is why it is safe.
+//   1. Dynamics must be attached BEFORE the StatMod reaches a collection. ApplyModifier
+//      initialises dynamics and then evaluates whether the mod is active, so assigning
+//      afterwards leaves it classified inactive until some later refresh corrects it.
+//   2. Condition-bearing mods must go through the PLURAL ApplyModifiers(mods, source).
+//      ModDynamicCondition.Init assigns itself as the mod's source and the singular overload
+//      sets the source before init, so RemoveModifier(yourSource) can never find the mod.
 internal static class LeechDynamics
 {
-    // A fresh dynamic per StatMod, always. Init binds permanently and Destroy never
-    // resets it, so a cached instance would silently fail to drive its second owner.
+    // A fresh dynamic per StatMod, always: Init binds permanently and Destroy never resets
+    // it, so a cached instance would silently fail to drive its second owner.
     internal static StatMod WithLeechCountScaling(
         StatType stat,
         float perLeech,
@@ -51,10 +44,9 @@ internal static class LeechDynamics
         return mod;
     }
 
-    // StatTagCollection.RemoveModifier detaches the modifier and drops the
-    // collection's own subscriptions, but never calls DestroyDynamicRules. Without
-    // this the dynamic stays subscribed to AttachedCountChanged and keeps writing
-    // Mod.Amount for a mod that is no longer applied, for the rest of the session.
+    // RemoveModifier detaches the modifier and drops the collection's subscriptions but never
+    // calls DestroyDynamicRules, so without this the dynamic stays subscribed to
+    // AttachedCountChanged and keeps writing Mod.Amount for an unapplied mod all session.
     internal static void Teardown(IEnumerable<StatMod> mods)
     {
         if (mods == null) return;

@@ -9,16 +9,14 @@ using UnityEngine;
 
 namespace VoidCrewTerminus.Leech;
 
-// Derives from GuidedProjectile so vanilla keeps owning the whole lifecycle after
-// launch: homing, the 1 Hz position/target correction, client dead reckoning,
-// server-clock expiry, sector-exit cleanup and projectile-id repair on migration.
-// What this adds is an interception counter and an impact that carries a payload
-// instead of damage.
+// Derives from GuidedProjectile so vanilla keeps owning the lifecycle after launch: homing,
+// position correction, dead reckoning, expiry, sector cleanup and id repair on migration.
+// What this adds is an interception counter and an impact that carries a payload, not damage.
 internal sealed class LeechMissileBehavior : GuidedProjectile, IDamageReceiver, IHitReceiver
 {
     internal int HitPointsRemaining { get; private set; } = 1;
 
-    // Phase 2 hangs leech deployment here. Host-side only.
+    // Host-side only.
     internal Action<LeechMissileBehavior, Vector3, Vector3> Deployed;
 
     private OrbitObject _assignedTarget;
@@ -29,24 +27,22 @@ internal sealed class LeechMissileBehavior : GuidedProjectile, IDamageReceiver, 
         _assignedTarget = target;
         HitPointsRemaining = Mathf.Max(1, hitPoints);
 
-        // Vanilla destroys the projectile inside InformOfHit on the first hit.
-        // Holding this false is what turns interception into a counter — every
-        // destruction from here on is ours to call.
+        // Vanilla destroys the projectile inside InformOfHit on the first hit. Holding this
+        // false is what turns interception into a counter; every destruction is ours to call.
         IsDestroyedOnImpact = false;
 
         if (target != null) SetTarget(target);
     }
 
-    // The Leech Carrier fires at one ship on purpose. Vanilla's nearest-viable
-    // search is the fallback for when that target dies mid-flight.
-    // public rather than protected because GameLibs ships publicized reference
-    // assemblies — the decompile shows these as protected, the metadata does not.
+    // The Carrier fires at one ship on purpose; vanilla's nearest-viable search is the
+    // fallback for when that target dies mid-flight. public, not protected, because GameLibs
+    // ships publicized reference assemblies: the decompile shows protected, metadata doesn't.
     public override OrbitObject GetTarget()
         => _assignedTarget.Valid() ? _assignedTarget : base.GetTarget();
 
-    // Re-implementation, not an override: SyncedProjectile declares InformOfHit
-    // non-virtual, and every inbound site dispatches through IHitReceiver, so
-    // re-listing the interfaces above is what remaps the slot to this method.
+    // Re-implementation, not an override: SyncedProjectile declares InformOfHit non-virtual
+    // and every inbound site dispatches through IHitReceiver, so re-listing the interfaces
+    // on the class above is what remaps the slot to this method.
     public new void InformOfHit(
         IDamageReceiver target,
         float damage,
@@ -59,9 +55,8 @@ internal sealed class LeechMissileBehavior : GuidedProjectile, IDamageReceiver, 
     {
         base.InformOfHit(target, damage, source, impactSize, damageType, point, rotation, isMine);
 
-        // Point-defense kill paths are master-only, but player gunfire reaches
-        // this on every client — an ungated decrement would spend one HP per
-        // player in the room for a single hit.
+        // Point-defense kill paths are master-only, but player gunfire reaches this on every
+        // client, so an ungated decrement spends one HP per player in the room per hit.
         if (!PhotonNetwork.IsMasterClient || _terminated) return;
 
         HitPointsRemaining--;
@@ -71,9 +66,8 @@ internal sealed class LeechMissileBehavior : GuidedProjectile, IDamageReceiver, 
         if (HitPointsRemaining <= 0) Terminate();
     }
 
-    // Deliberately does not call base: the design forbids the missile damaging
-    // hull HP on impact, and base.OnImpact applies Damage to the struck object.
-    // The leeches are the payload.
+    // Deliberately does not call base: base.OnImpact applies Damage to the struck object, and
+    // the missile must not damage hull HP. The leeches are the payload.
     public override bool OnImpact(IHitReceiver target, Vector3 impactPoint, Vector3 normal, float damage)
     {
         if (!ShouldDamageOrbitObject(target, out OrbitObject hit)) return false;
@@ -97,8 +91,8 @@ internal sealed class LeechMissileBehavior : GuidedProjectile, IDamageReceiver, 
         Terminate();
     }
 
-    // DestroyProjectile tells every client, so calling it twice would emit a
-    // second removal for an id the synchronizer has already dropped.
+    // DestroyProjectile tells every client, so a second call emits a removal for an id the
+    // synchronizer has already dropped.
     private void Terminate()
     {
         if (_terminated) return;

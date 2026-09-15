@@ -15,16 +15,15 @@ internal class HubShipManagerPatch
 {
     static void Postfix(HubShipManager __instance)
     {
-        // Start can run repeatedly across hub loads; without this guard every
-        // pass stacked another controller, each redoing the full ship preload.
+        // Start can run repeatedly across hub loads; without this guard each pass stacks
+        // another controller, redoing the full ship preload.
         if (__instance.gameObject.GetComponent<HangarShipController>() == null)
             __instance.gameObject.AddComponent<HangarShipController>();
     }
 }
 
-// All three ship prefabs are loaded asynchronously at scene start and parked below
-// the level geometry, so selection just teleports and fades the relevant model in
-// rather than triggering a per-selection load spike.
+// All three ship prefabs load asynchronously at scene start and park below the level
+// geometry, so selection just teleports and fades one in rather than loading on demand.
 internal class HangarShipController : MonoBehaviour
 {
     private const float HangarScale = 1f;
@@ -72,12 +71,9 @@ internal class HangarShipController : MonoBehaviour
         var container = ResourceAssetContainer<ShipLoadoutDataContainer, ShipLoadoutData, ShipLoadoutDataDef>.Instance;
         var pending = new List<(string shipType, ResourceRequest req)>();
 
-        // GetAllItems returns every loadout preset, not every ship — many presets
-        // reference the same prefab. Loading per preset rebuilt the same ship
-        // repeatedly and threw away all but the last (_cache is keyed by ship
-        // type), which was the hangar's load hitch. Preload one prefab per ship
-        // type instead; first path wins, which also skips variant prefabs that
-        // map onto a type already queued.
+        // GetAllItems returns every loadout preset, not every ship, and many presets share a
+        // prefab. One prefab per ship type is preloaded, first path winning, which also skips
+        // variant prefabs mapping onto a type already queued.
         var queued = new HashSet<string>();
         foreach (var item in container.GetAllItems())
         {
@@ -103,9 +99,8 @@ internal class HangarShipController : MonoBehaviour
         }
     }
 
-    // Builds the visual clone across as many frames as needed, yielding whenever the
-    // per-frame time budget is spent, so scene start doesn't hitch on three ship
-    // builds landing in single frames.
+    // Yields whenever the per-frame time budget is spent, so scene start doesn't hitch on
+    // three ship builds landing in single frames.
     private IEnumerator BuildAndCacheRoutine(string shipType, GameObject prefab)
     {
         if (prefab == null) { BepinPlugin.Log.LogWarning($"[HangarShip] Load failed for {shipType}"); yield break; }
@@ -113,7 +108,7 @@ internal class HangarShipController : MonoBehaviour
         float budgetMs = Mathf.Max(0.5f, TerminusConfig.ShipBuildBudgetMs);
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        // Pass 1 — collect LOD sets.
+        // Pass 1: collect LOD sets.
         HashSet<Renderer> lod0 = null;
         HashSet<Renderer> allLod = null;
         foreach (var lg in prefab.GetComponentsInChildren<LODGroup>(true))
@@ -132,10 +127,9 @@ internal class HangarShipController : MonoBehaviour
             if (stopwatch.ElapsedMilliseconds >= budgetMs) { yield return null; stopwatch.Restart(); }
         }
 
-        // Pass 2 — decide which renderers to keep, and mark every transform on the
-        // path from each kept renderer up to the root. Subtrees with no kept
-        // renderer are never cloned at all — typically most of a ship prefab is
-        // empty logic/collider nodes that don't need visual copies.
+        // Pass 2: decide which renderers to keep and mark every transform from each up to
+        // the root. Subtrees with no kept renderer are never cloned; most of a ship prefab
+        // is empty logic and collider nodes.
         var needed = new HashSet<Transform>();
         int keptCount = 0;
         foreach (var r in prefab.GetComponentsInChildren<Renderer>(true))
@@ -154,9 +148,9 @@ internal class HangarShipController : MonoBehaviour
 
         if (keptCount == 0) { BepinPlugin.Log.LogWarning($"[HangarShip] No mesh for {shipType}"); yield break; }
 
-        // Pass 3 — clone the pruned hierarchy iteratively, converting materials to
-        // transparent/alpha-0 as they're first seen. Deduped per source material so
-        // repeated hull materials are cloned and converted exactly once.
+        // Pass 3: clone the pruned hierarchy iteratively, converting materials to
+        // transparent/alpha-0 as they are first seen. Deduped per source material so a
+        // repeated hull material is converted exactly once.
         var (offset, rot) = GetPositionRot(shipType);
         var parked = new Vector3(transform.position.x + offset.x, ParkY, transform.position.z + offset.z);
         var root = new GameObject("ShipVisual");
@@ -269,10 +263,9 @@ internal class HangarShipController : MonoBehaviour
 
     private static bool ShouldInclude(Renderer r, HashSet<Renderer> lod0, HashSet<Renderer> allLod)
     {
-        // Interior geometry is invisible from the hangar camera — use the game's
-        // own marker: interior groups sit under OcclusionNodes flagged to hide
-        // when the local player is in space, exterior hull nodes don't. Checked
-        // before the LOD0 shortcut since interior props are LOD-managed too.
+        // Interior geometry is invisible from the hangar camera, and the game's own marker
+        // for it is an OcclusionNode flagged to hide when the local player is in space.
+        // Checked before the LOD0 shortcut, since interior props are LOD-managed too.
         var occlusion = r.GetComponentInParent<OcclusionNode>(true);
         if (occlusion != null && occlusion.HideOnLocalPlayerIsInSpace) return false;
 

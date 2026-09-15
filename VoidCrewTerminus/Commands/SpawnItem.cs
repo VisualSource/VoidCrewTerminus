@@ -86,11 +86,10 @@ internal class SpawnItemCommand : PublicCommand
         }
     }
 
-    // Repopulates DebugSpawnObjects' Carryable-only list on every call rather than
-    // trusting its cached state: that list is shared with the vanilla debug menu's
-    // own Object Type toolbar, so if a player ever switches it to WeaponBuildBox/
-    // SpaceObject, our filter on _objectType silently returns nothing until it's
-    // switched back. Clearing first avoids appending duplicates on repeat calls.
+    // Repopulated on every call rather than trusting the cached state: the list is shared
+    // with the vanilla debug menu's Object Type toolbar, so a player switching that to
+    // WeaponBuildBox leaves this filter silently returning nothing. Cleared first to avoid
+    // appending duplicates.
     internal static List<SpawnableCarryable> GetCarryables()
     {
         DebugSpawnObjects.SpawnablesList.Clear();
@@ -123,19 +122,13 @@ internal class SpawnItemCommand : PublicCommand
     private static bool TrySpawn(SpawnableCarryable item, Vector3 position, out string message) =>
         TrySpawnGuarded(item.Guid, item.Name, position, out message, out _);
 
-    // SpawnUtils.SpawnCarryable throws rather than returning null when the game
-    // isn't in a state to take a spawn — it dereferences both the guid's
-    // CloneStarObjectDef and GameSessionManager.ActiveSector unconditionally, and
-    // the latter is null across a void jump. Seen live as a run of
-    // NullReferenceExceptions from !spawn, and worse from the settings menu's Spawn
-    // tab, where the throw escapes into the OnGUI draw loop.
+    // SpawnUtils.SpawnCarryable throws rather than returning null when the game can't take a
+    // spawn: it dereferences GameSessionManager.ActiveSector unconditionally, and that is
+    // null across a void jump, where the throw escapes into the settings menu's OnGUI loop.
+    // Logged at Warning, not Debug: a swallowed exception is not routine diagnostics, and
+    // this is the only place it is recorded.
     //
-    // Reported as a failed spawn, which is what it is. Logged at Warning, not Debug:
-    // a swallowed exception is not routine diagnostics, and this is the only place
-    // it's recorded at all.
-    //
-    // Shared with !forgespawn (ForgeCommitCommand), which spawns by raw guid and hit
-    // the identical crash from the same helper.
+    // Shared with !forgespawn, which spawns by raw guid through the same helper.
     internal static bool TrySpawnGuarded(
         GUIDUnion guid, string label, Vector3 position, out string message, out OrbitObject spawned)
     {

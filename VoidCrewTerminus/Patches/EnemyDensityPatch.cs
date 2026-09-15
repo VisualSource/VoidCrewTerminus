@@ -6,11 +6,9 @@ using VoidCrewTerminus.Escalation;
 
 namespace VoidCrewTerminus.Patches;
 
-// Both Set and Add mutators are patched so scenarios that flip intensity
-// mid-encounter still get escalation applied consistently. AIDirector's tick is
-// host-only, so scale writes on non-host clients are harmless — their local
-// Spawner state isn't authoritative for the actual spawn count, and the scale
-// itself is deterministic (same scalar, same result).
+// Both Set and Add mutators are patched so scenarios that flip intensity mid-encounter still
+// get escalation applied. AIDirector's tick is host-only, so scale writes on non-host clients
+// are harmless: their Spawner state isn't authoritative and the scale is deterministic.
 
 [HarmonyPatch(typeof(AIDirector), nameof(AIDirector.SetSpawnerTargetIntensity))]
 internal static class AIDirectorSetTargetIntensityPatch
@@ -60,16 +58,12 @@ internal static class AIDirectorAddMaxTargetIntensityPatch
     }
 }
 
-// Scaling the target intensity alone (above) gets clipped: Spawner.SetTargetIntensity
-// clamps to maxTargetIntensity, which is baked in from the profile at spawner
-// creation and never routes through the AIDirector mutators above. So the ceiling
-// itself (and the initial target) has to be raised here too, at creation, or
-// scaling produces no extra enemies.
+// Scaling the target intensity alone gets clipped: SetTargetIntensity clamps to
+// maxTargetIntensity, which is baked in from the profile at spawner creation and never routes
+// through the AIDirector mutators above, so the ceiling has to be raised here too.
 //
-// Host-only: maxTargetIntensity/targetIntensity are IPunObservable-synced from
-// the master client, so scaling on the host is authoritative and clients receive
-// the boosted values. Clients scaling locally would just be overwritten by the
-// next sync, so they're skipped to avoid transient divergence.
+// Host-only: these fields are IPunObservable-synced from the master, so a client scaling
+// locally would just be overwritten by the next sync.
 [HarmonyPatch(typeof(Spawner), "InitSpawner", new[] { typeof(SpawnerProfile) })]
 internal static class SpawnerInitIntensityScalingPatch
 {

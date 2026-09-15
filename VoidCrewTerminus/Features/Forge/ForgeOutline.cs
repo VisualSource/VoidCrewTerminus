@@ -5,11 +5,9 @@ using UnityEngine;
 
 namespace VoidCrewTerminus.Forge;
 
-// ClickerInteractable's own highlight walks an outlineObjects[] that only the Unity
-// Inspector populates, so it NREs on every Forge interactable (all built at runtime
-// via AddComponent). This walks the module's renderers instead, adding an
-// OutlineObject to each on first use — the same outline-shader mechanism vanilla
-// modules use, with no Unity-side authoring required.
+// ClickerInteractable's own highlight walks an outlineObjects[] that only the Inspector
+// populates, so it NREs on every runtime-built Forge interactable. This walks the module's
+// renderers instead, using the same outline shader with no Unity-side authoring.
 internal static class ForgeOutline
 {
     private static readonly ConditionalWeakTable<Transform, OutlineObject[]> _cache = new();
@@ -22,9 +20,8 @@ internal static class ForgeOutline
             if (outline != null) outline.enabled = isHighlighted;
     }
 
-    // ForgeGhosts parks render-only clones under the module's anchors, so they turn
-    // up in this sweep — which runs once per module and is cached forever, capturing
-    // a transient ghost permanently. They own their own outlines; skip them.
+    // ForgeGhosts parks render-only clones under the anchors, and this sweep is cached
+    // forever, so an unfiltered ghost would be captured permanently. They outline themselves.
     private static OutlineObject[] BuildOutlines(Transform moduleRoot)
     {
         var renderers = moduleRoot.GetComponentsInChildren<Renderer>(true);

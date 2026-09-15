@@ -3,10 +3,8 @@ using System.Linq;
 
 namespace VoidCrewTerminus.Forge;
 
-// Cost curve for module upgrades L4..L10. Config-driven via TerminusConfig.ForgeCostCurve
-// (comma-separated string). Falls back to the design default 1/1/2/2/3/3/4 = 16 total
-// if the config string is malformed. Curve is re-parsed on every access so tuning during
-// dev mode does not require a restart.
+// Cost curve for module upgrades L4..L10, falling back to 1/1/2/2/3/3/4 when the config
+// string is malformed. Re-parsed on every access, so dev-mode tuning needs no restart.
 public static class ForgeCostCurve
 {
     public const int MinLevel = 3;
@@ -14,8 +12,7 @@ public static class ForgeCostCurve
 
     private static readonly int[] Default = { 1, 1, 2, 2, 3, 3, 4 };
 
-    // Relics required to advance from `fromLevel` to `toLevel`. Both bounded to [3, 10].
-    // Returns 0 for no-op / downgrade attempts.
+    // Both levels bounded to [3, 10]. Returns 0 for a no-op or downgrade attempt.
     public static int RelicsRequired(int fromLevel, int toLevel)
     {
         fromLevel = Math.Max(MinLevel, Math.Min(MaxLevel, fromLevel));
@@ -29,7 +26,7 @@ public static class ForgeCostCurve
         return sum;
     }
 
-    // Highest level reachable from `fromLevel` given `relicsAvailable` — greedy walk up the curve.
+    // Greedy walk up the curve.
     public static int MaxReachable(int fromLevel, int relicsAvailable)
     {
         fromLevel = Math.Max(MinLevel, Math.Min(MaxLevel, fromLevel));

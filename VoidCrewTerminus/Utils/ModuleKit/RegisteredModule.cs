@@ -48,9 +48,9 @@ internal sealed class RegisteredModule
         BepinPlugin.Log.LogDebug($"[ModuleKit] Linked {modulePrefab.name} -> BuildBox ref {_buildBoxGuid.Value.AsHex()}");
     }
 
-    // A live vanilla BuildBox to clone instead of instantiating a grafted prefab — whose
-    // Rigidbody never connected to MovingSpacePlatform's PhysicsScene and fell through the
-    // floor. Cached after the first lookup to avoid a per-spawn registry scan.
+    // A live vanilla BuildBox to clone: a grafted prefab's Rigidbody never connects to
+    // MovingSpacePlatform's PhysicsScene and falls through the floor. Cached after the
+    // first lookup to avoid a per-spawn registry scan.
     internal bool TryFindDonorGuid(out GUIDUnion guid)
     {
         if (_donorGuid.HasValue)
@@ -67,8 +67,8 @@ internal sealed class RegisteredModule
             if (cell.BuildBoxRef == null || cell.BuildBoxRef.IsNull) continue;
             var candidateGuid = cell.BuildBoxRef.AssetGuid;
 
-            // CompositeWeaponBuildBox reads WeaponDataRef instead of moduleRef, which our
-            // moduleRef-based clone leaves null — NREs everywhere downstream. Skip it.
+            // CompositeWeaponBuildBox reads WeaponDataRef instead of moduleRef, which a
+            // moduleRef-based clone leaves null, NREing everywhere downstream.
             var candidatePrefab = LoadPrefab(candidateGuid);
             var candidateBox = candidatePrefab != null ? candidatePrefab.GetComponent<BuildBox>() : null;
             if (candidateBox == null || candidateBox is CompositeWeaponBuildBox) continue;
@@ -94,9 +94,9 @@ internal sealed class RegisteredModule
         return false;
     }
 
-    // Presets moduleRef on the TEMPLATE before any instance's Awake runs — relabeling
-    // it on the spawned instance instead left the box half-donor-half-custom, since
-    // moduleRef-keyed systems (BuildBoxActor.Awake) had already run against the original.
+    // moduleRef is preset on the TEMPLATE, before any instance's Awake: moduleRef-keyed
+    // systems like BuildBoxActor.Awake run too early for a per-instance relabel to reach
+    // them, leaving the box half donor and half custom.
     internal GameObject TryBuildBuildBoxTemplate(GameObject modulePrefab)
     {
         if (!_buildBoxGuid.HasValue)
@@ -122,9 +122,9 @@ internal sealed class RegisteredModule
             return null;
         }
 
-        // Clone while inactive so Awake doesn't run on the clone (it's a template only,
-        // same active-state dance CustomObjectPool.Instantiate does around real spawns).
-        // Synchronous, no yield — nothing else observes the donor's brief inactive state.
+        // Cloned while inactive so Awake never runs on a template, the same active-state
+        // dance CustomObjectPool.Instantiate does around real spawns. Synchronous, so
+        // nothing else observes the donor's brief inactive state.
         var donorWasActive = donorPrefab.activeSelf;
         donorPrefab.SetActive(false);
         var template = UnityEngine.Object.Instantiate(donorPrefab);
@@ -140,14 +140,13 @@ internal sealed class RegisteredModule
 
         box.moduleRef ??= new CloneStarObjectRef();
         box.moduleRef.AssetGuid = moduleGuid;
-        // IsRuntime is [NonSerialized] — clones of this template reset it to false;
+        // IsRuntime is [NonSerialized], so clones of this template reset it to false;
         // BuildBoxRuntimeRefPatch re-stamps it per-instance before Awake reads it.
         box.moduleRef.IsRuntime = true;
 
-        // The box's OWN identity, distinct from moduleRef (what it builds). assetGuid is
-        // a plain serialized field, so the clone inherited the DONOR's — and every
-        // self-lookup (hover text, the instance's own name) keys off it. Assigned BEFORE
-        // the registrations below, which read it.
+        // The box's OWN identity, distinct from moduleRef (what it builds). assetGuid is a
+        // plain serialized field, so the clone inherits the DONOR's, and every self-lookup
+        // keys off it. Assigned before the registrations below, which read it.
         var boxGuid = _buildBoxGuid.Value;
         box.ContainerGuid = boxGuid;
 
@@ -158,17 +157,16 @@ internal sealed class RegisteredModule
         if (VanillaAssetRegistrar.GetAsset(boxGuid) != template)
         {
             // Corrected rather than skipped: RuntimeAssetsRegister is a vanilla static that
-            // outlives the assembly, so after a ScriptEngine reload it still holds the
-            // previous load's template — which Clear has since destroyed.
+            // outlives the assembly, so after a hot-reload it still holds the previous
+            // load's template, which Clear has since destroyed.
             if (!VanillaAssetRegistrar.TryReplaceAsset(boxGuid, template))
                 BepinPlugin.Log.LogWarning(
                     $"[ModuleKit] {template.name} {boxGuid.AsHex()} is registered to a different object and could not be corrected — " +
                     "spawns will resolve the stale one. Restart the game rather than hot-reloading.");
         }
 
-        // A null ContextInfo falls back to "missing description" hover text — prefer the
-        // crate's own authored Name/Description over the donor's, falling back to the
-        // donor's for whatever wasn't authored (Icon, in particular).
+        // A null ContextInfo falls back to "missing description" hover text, so the crate's
+        // own authored fields win and the donor's cover whatever was not authored.
         var donorContext = VanillaAssetRegistrar.GetContextInfo(donorGuid);
         var header = !string.IsNullOrEmpty(_buildBoxName) ? _buildBoxName : donorContext?.HeaderText;
         var body = !string.IsNullOrEmpty(_buildBoxDescription) ? _buildBoxDescription : donorContext?.BodyText;
@@ -178,9 +176,8 @@ internal sealed class RegisteredModule
         VanillaAssetRegistrar.RegisterModuleDef(boxGuid, template.name, Definition.Category);
         VanillaAssetRegistrar.RegisterRarity(boxGuid, template.name, Definition.Rarity);
 
-        // Path and header are read BACK out of the container rather than echoed from the
-        // locals above: the bug this line exists to catch is another registrar winning the
-        // race and leaving the donor's name/hover text in place (#34).
+        // Read back out of the container rather than echoed from the locals above, so the
+        // line catches another registrar winning the race and leaving the donor's name in place.
         BepinPlugin.Log.LogInfo(
             $"[ModuleKit] {template.name} template ready — cloned from donor {donorGuid.AsHex()}, " +
             $"moduleRef -> {moduleGuid.AsHex()}, registered as {boxGuid.AsHex()}; " +

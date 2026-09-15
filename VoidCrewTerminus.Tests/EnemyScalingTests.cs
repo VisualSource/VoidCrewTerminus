@@ -3,9 +3,8 @@ using Xunit;
 
 namespace VoidCrewTerminus.Tests;
 
-// Pure math coverage of the density scale. HP/damage StatMod attachment paths
-// need a live game (StatType, IModifierSource pipeline, faction resolution) —
-// same limitation as the existing skipped tests.
+// Pure math coverage of the density scale. The HP and damage StatMod attachment paths need
+// a live game for StatType and faction resolution.
 public class EnemyScalingTests
 {
 
@@ -44,9 +43,8 @@ public class EnemyScalingTests
     [Fact]
     public void ScaleIntensity_NegativeDelta_PassesThroughUnamplified()
     {
-        // Scenario reducing intensity — we must not amplify the reduction.
-        // Rate 0.20, scalar 3 → factor 1.6. Naive: -5 * 1.6 = -8 (bigger reduction).
-        // Guarded: keeps the smaller-magnitude value (-5).
+        // A scenario reducing intensity must not have its reduction amplified: at factor
+        // 1.6 the naive -5 * 1.6 = -8, where the guard keeps -5.
         Assert.Equal(-5, EnemyScalingHelpers.ScaleIntensity(-5, 3, 0.20f));
     }
 

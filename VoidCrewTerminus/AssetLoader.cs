@@ -21,9 +21,7 @@ public class AssetLoader
     // Bundles this assembly loaded, for hot-reload teardown.
     private static readonly List<AssetBundle> _loadedBundles = new();
 
-    // Unity-authored UI Toolkit assets for ForgeScreenDisplay, captured by name
-    // from the bundle. Null until the bundle loads; ForgeScreenDisplay logs and
-    // no-ops if either is still missing when a Forge builds its screen.
+    // Captured by name from the bundle, so both stay null until it loads.
     private static VisualTreeAsset _forgeScreenVisualTree;
     private static PanelSettings _forgeScreenPanelSettingsTemplate;
 
@@ -38,8 +36,8 @@ public class AssetLoader
     public static VisualTreeAsset ForgeScreenVisualTree => _forgeScreenVisualTree;
     public static PanelSettings ForgeScreenPanelSettingsTemplate => _forgeScreenPanelSettingsTemplate;
 
-    // Hot-reload teardown. Unload(false) frees the bundle handle only — live assets
-    // (modules/materials already in use) keep working.
+    // Hot-reload teardown. Unload(false) frees the bundle handle only, so assets already
+    // in use keep working.
     public static void UnloadBundles()
     {
         foreach (var bundle in _loadedBundles)
@@ -88,17 +86,15 @@ public class AssetLoader
         }
     }
 
-    // Routes bundle content to the game's RuntimeAssets pipeline or to ModuleKit,
-    // depending on what the game's converter can handle (only carryables/cosmetics).
-    // The two UI Toolkit assets match by name — neither is a VoidCrewAsset-tagged
-    // GameObject, so the usual VCA lookup can't see them.
+    // Routed to the game's RuntimeAssets pipeline or to ModuleKit, since the game's
+    // converter handles only carryables and cosmetics. The two UI Toolkit assets match by
+    // name: neither is a VoidCrewAsset-tagged GameObject, so the VCA lookup can't see them.
     private static void LoadBundle(string filepath)
     {
         var bundle = AssetBundle.LoadFromFile(filepath);
         if (!(bool)bundle)
         {
-            // A previous (hot-reloaded) copy of this plugin may still hold the
-            // bundle; reuse the in-memory instance rather than failing.
+            // A hot-reloaded copy of this plugin may still hold the bundle.
             var name = Path.GetFileName(filepath);
             foreach (var loaded in AssetBundle.GetAllLoadedAssetBundles())
             {

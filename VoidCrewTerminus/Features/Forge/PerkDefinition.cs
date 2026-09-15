@@ -4,8 +4,7 @@ using Gameplay.Utilities;
 
 namespace VoidCrewTerminus.Forge;
 
-// Module categories the Forge recognises, mapped 1:1 to the built-in
-// Module_Category_* CsTags resolved by CsTagRegistry.
+// Mapped 1:1 to the built-in Module_Category_* CsTags resolved by CsTagRegistry.
 public enum ForgeCategory
 {
     Unknown = 0,
@@ -29,14 +28,10 @@ public static class ForgeCategoryExtensions
     };
 }
 
-// Payload is stored as (stat, additive-multiplier) pairs rather than live StatMod
-// instances — StatMods bind their IModifierSource at apply time, so ForgeModuleState
-// builds fresh ones per module (see BuildMods).
-//
-// SignatureRelicId is null for normal category-pool perks; non-null identifies the
-// specific relic that unlocks this signature. A signature perk only rolls when its
-// owning relic is consumed in the commit (see PerkPool.SignaturesFor and
-// UpgradeCommitCalculator.RollPerk).
+// Payload is (stat, additive-multiplier) pairs rather than live StatMod instances, because
+// StatMods bind their IModifierSource at apply time and ForgeModuleState builds fresh ones
+// per module. SignatureRelicId is null for category-pool perks; non-null names the relic
+// that must be consumed in the commit for this perk to roll.
 public sealed class PerkDefinition
 {
     public string Id { get; }

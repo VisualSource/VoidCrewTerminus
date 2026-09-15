@@ -3,13 +3,9 @@ using Xunit;
 
 namespace VoidCrewTerminus.Tests;
 
-// EscalationIntensity replaced a four-line preamble that five separate patch
-// sites each carried their own copy of. These tests pin the combined gate/cap/
-// multiplier behaviour so the copies can't drift back in.
-//
-// Everything goes through the explicit constructor. EscalationIntensity.Current
-// reads two static singletons plus the config and is the ambient convenience for
-// production; the constructor is the seam that makes the logic testable at all.
+// Pins the combined gate, cap and multiplier behaviour so per-patch copies can't drift back
+// in. Everything goes through the explicit constructor: Current reads two static singletons
+// plus the config, and the constructor is the seam that makes the logic testable at all.
 public class EscalationIntensityTests
 {
     private static EscalationIntensity Active(int rawScalar, int cap = 0,
