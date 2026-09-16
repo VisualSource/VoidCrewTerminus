@@ -57,6 +57,7 @@ If the `.voidcrew/` directory is present in the project root, it contains decomp
 | `.voidcrew/namespace-index.json` | 273 namespaces mapped to their member types |
 | `.voidcrew/manifest.json` | Per-assembly checksums and file counts (compare to detect stale data after a game update) |
 | `.voidcrew/dlls/` | Raw game DLLs used as the decompilation source |
+| `.voidcrew/assets/` | Project-level *asset* data — the things the decompile can't carry. See below |
 
 **Quick lookup examples:**
 ```sh
@@ -69,6 +70,33 @@ jq '.[] | select(.type == "ShipModule")' .voidcrew/types-index.json
 # List all types in a namespace
 jq '."CG.Ship"' .voidcrew/namespace-index.json
 ```
+
+### Asset data (`.voidcrew/assets/`)
+
+Layer numbers, tags and asset paths are serialized project settings, not code — the
+decompile shows `LayerMask.NameToLayer("SpaceObjects")` but never which number that is,
+or whether a camera draws it. Check here before writing a runtime probe for it.
+
+| File | Contents |
+|------|---------|
+| `layers.json` | All 32 layer names by index, plus the physics collision matrix as per-layer lists |
+| `tags.json` | Tags and sorting layers |
+| `resource-paths.json` | 5,578 `Resources.Load` keys — this is what `ResourceAssetRef.Path` resolves against (lowercased; loads are case-insensitive) |
+| `addressable-paths.json` | The same assets with their authored capitalisation, from the Addressables catalog |
+| `manifest.json` | Server, game version, source checksums and counts — compare after a game update |
+
+```sh
+# Which layer is that, and what does it collide with?
+jq '.layers["13"], .collisionMatrix["13"]' .voidcrew/assets/layers.json
+
+# What path loads a prefab?
+jq -r '.[] | select(test("hollowtorpedo"))' .voidcrew/assets/resource-paths.json
+```
+
+Regenerate with `scripts/dump_game_assets.py` (needs `pip install UnityPy` and the game
+file server reachable). It pulls only `globalgamemanagers` and the Addressables catalog —
+tens of MB, not the multi-gigabyte `resources.assets` — and caches the originals under
+`.voidcrew/assets/raw/` so re-extraction is free. `--refresh` re-downloads.
 
 The key assemblies are `Assembly-CSharp` (main game logic, 3 312 files), `VoidCrewCommon`, `Assembly-CSharp-firstpass`, `PhotonUnityNetworking`, and `Opsive.UltimateCharacterController`.
 

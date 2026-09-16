@@ -207,6 +207,11 @@ internal static class TerminusConfig
     internal static ConfigEntry<int> LeechMissileBaseHitPoints;
     internal static int LeechMissileHitPoints => LeechMissileBaseHitPoints?.Value ?? DefaultLeechMissileBaseHitPoints;
 
+    private const string DefaultLeechMissileVisualPrefab = "Projectile_HollowRocket_Fighter";
+    [BindConfig("leech", DefaultLeechMissileVisualPrefab, "Vanilla NPC projectile prefab (Objects/Projectiles/*) to borrow the Leech Missile's mesh and trail from. Only the visuals are used; the clone's own projectile logic, collider and PhotonView are stripped. Blank falls back to a plain capsule. !leechvisual lists what is loadable and switches this mid-run")]
+    internal static ConfigEntry<string> LeechMissileVisualPrefab;
+    internal static string LeechMissileVisualName => LeechMissileVisualPrefab?.Value ?? DefaultLeechMissileVisualPrefab;
+
     // Damage is expressed as a fraction of the target's max HP because module
     // hit points are per-prefab asset data — an absolute figure would gut a
     // Small utility module and barely scratch a Large reactor.

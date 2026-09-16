@@ -3,6 +3,7 @@ using CG.Space;
 using CG.Space.Projectiles;
 using Photon.Pun;
 using UnityEngine;
+using UnityEngine.Rendering.HighDefinition;
 
 namespace VoidCrewTerminus.Leech;
 
@@ -18,10 +19,16 @@ internal static class LeechMissileFactory
     private const int ProjectileTargetMask = 13312;
 
     // Layer numbers are asset-side, so resolve by name and let the mask arbitrate.
-    private static readonly string[] PreferredLayers = { "SpaceObjects", "MovingPlatform" };
+    // Projectiles before SpaceObjects: both are in the mask, but SpaceObjects is a
+    // collision-only layer that no camera draws — see LeechMissileVisual. ("MovingPlatform"
+    // was in this list and is layer 27, outside the mask, so it could never have matched.)
+    private static readonly string[] PreferredLayers = { "Projectiles", "SpaceObjects" };
 
     private static readonly int BaseColor = Shader.PropertyToID("_BaseColor");
     private static readonly int EmissiveColor = Shader.PropertyToID("_EmissiveColor");
+
+    private static readonly Color BodyColor = new(0.35f, 0.75f, 0.30f);
+    private const float EmissiveBoost = 4f;
 
     private static int _cachedLayer = -1;
     private static Material _bodyMaterial;
@@ -73,6 +80,13 @@ internal static class LeechMissileFactory
         missile.Arm(target, hitPoints);
         missile.Deployed += (_, point, normal) => LeechEncounterController.DeployBatch(point, normal);
 
+        // After the behaviour exists, not inside BuildBody: the borrowed VFX hang their
+        // trail's detach-and-fade off the owning projectile's events, so they need a live
+        // missile to be repointed at.
+        LeechMissileVisual.Attach(go, missile);
+
+        if (TerminusConfig.DevMode) LeechVisibilityProbe.Attach(go, "missile");
+
         // Registration is explicit — point-defense finds NPC projectiles through
         // the synchronizer's dictionary, not by scanning colliders.
         sync.RegisterNpcProjectile(missile);
@@ -89,50 +103,77 @@ internal static class LeechMissileFactory
         go.name = "LeechMissile";
         go.transform.position = origin;
         go.transform.rotation = Quaternion.LookRotation(heading);
-        go.transform.localScale = new Vector3(0.5f, 1.4f, 0.5f);
         go.layer = ResolveTargetLayer();
 
-        Material body = BodyMaterial();
-        if (body != null) go.GetComponent<MeshRenderer>().sharedMaterial = body;
+        // The primitive is kept only for its collider — the surface player fire and
+        // point-defense have to hit — and never drawn. Along Z to match the heading.
+        var hitBox = go.GetComponent<CapsuleCollider>();
+        hitBox.direction = 2;
+        hitBox.height = 2.8f;
+
+        // Immediate, not deferred: a Destroy here survives to the end of the frame, and
+        // the visibility probe would bind to this doomed renderer instead of the body.
+        Object.DestroyImmediate(go.GetComponent<MeshRenderer>());
+        Object.DestroyImmediate(go.GetComponent<MeshFilter>());
 
         return go;
     }
 
-    // CreatePrimitive assigns the built-in Default-Material, whose Standard shader
-    // is not in this HDRP build — the capsule then renders as nothing at all, with
-    // no error. Emissive because an unlit placeholder reads as black against space.
-    private static Material BodyMaterial()
+    internal static Material BodyMaterial()
     {
         if (_bodyMaterial != null) return _bodyMaterial;
 
-        Shader shader = Shader.Find("HDRP/Lit");
-        if (shader == null) shader = Shader.Find("HDRP/Unlit");
-        if (shader == null) shader = BorrowSceneShader();
+        _bodyMaterial = BuildLitMaterial(BodyColor, "LeechMissileBody")
+                        ?? CloneVisibleSceneMaterial("LeechMissileBody");
 
-        if (shader == null)
-        {
-            BepinPlugin.Log.LogWarning("[Leech] no usable shader found; missile will be invisible.");
-            return null;
-        }
+        if (_bodyMaterial == null)
+            BepinPlugin.Log.LogWarning("[Leech] no usable material source; missile will be invisible.");
 
-        _bodyMaterial = new Material(shader) { name = "LeechMissileBody" };
-        if (_bodyMaterial.HasProperty(BaseColor))
-            _bodyMaterial.SetColor(BaseColor, new Color(0.35f, 0.75f, 0.30f));
-        if (_bodyMaterial.HasProperty(EmissiveColor))
-            _bodyMaterial.SetColor(EmissiveColor, new Color(0.9f, 2.6f, 0.7f));
-
-        BepinPlugin.Log.LogDebug($"[Leech] missile material using shader '{shader.name}'.");
         return _bodyMaterial;
     }
 
-    private static Shader BorrowSceneShader()
+    // CreatePrimitive assigns the built-in Default-Material, whose Standard shader is
+    // not in this HDRP build, so the capsule renders as nothing with no error. Finding
+    // HDRP/Lit is necessary but not sufficient: a material built from a shader at
+    // runtime skips the validation the importer normally runs, leaving its keywords
+    // and stencil state unset, and HDRP then drops it from the deferred pass — still
+    // invisible, still silent. ValidateMaterial is the step that was missing.
+    internal static Material BuildLitMaterial(Color color, string name)
+    {
+        Shader shader = Shader.Find("HDRP/Lit");
+        if (shader == null)
+        {
+            BepinPlugin.Log.LogWarning("[Leech] HDRP/Lit not found in this build.");
+            return null;
+        }
+
+        var material = new Material(shader) { name = name };
+        material.SetColor(BaseColor, color);
+        material.SetColor(EmissiveColor, color * EmissiveBoost);
+        HDMaterial.ValidateMaterial(material);
+
+        BepinPlugin.Log.LogDebug(
+            $"[Leech] material '{name}' built on HDRP/Lit — queue {material.renderQueue}, " +
+            $"keywords [{string.Join(" ", material.shaderKeywords)}].");
+        return material;
+    }
+
+    // Fallback: a material already rendering in this scene is guaranteed to carry both
+    // a validated keyword set and a shader variant that survived build-time stripping.
+    internal static Material CloneVisibleSceneMaterial(string name)
     {
         foreach (MeshRenderer renderer in Object.FindObjectsOfType<MeshRenderer>())
         {
-            Material candidate = renderer.sharedMaterial;
-            if (candidate != null && candidate.shader != null && candidate.shader.isSupported)
-                return candidate.shader;
+            if (!renderer.isVisible) continue;
+
+            Material source = renderer.sharedMaterial;
+            if (source == null || source.shader == null || !source.shader.isSupported) continue;
+
+            BepinPlugin.Log.LogDebug(
+                $"[Leech] material '{name}' cloned from '{source.name}' on shader '{source.shader.name}'.");
+            return new Material(source) { name = name };
         }
+
         return null;
     }
 
