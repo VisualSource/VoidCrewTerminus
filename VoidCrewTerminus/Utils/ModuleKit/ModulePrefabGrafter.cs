@@ -15,9 +15,9 @@ namespace VoidCrewTerminus.ModuleKit;
 // flow, PhotonNetwork.Instantiate and the power/culling systems need to not NRE.
 internal static class ModulePrefabGrafter
 {
-    // Bundle-loaded shaders carry a different keyword/variant set than the player
-    // build's copy, which renders solid black — re-resolve by name to fix it.
-    // sharedMaterials since this runs on the prefab asset, not an instance.
+    // Bundle-loaded shaders carry a different keyword/variant set than the player build's
+    // copy and render solid black, so they are re-resolved by name. sharedMaterials because
+    // this runs on the prefab asset, not an instance.
     internal static void RelinkShaders(GameObject prefab)
     {
         foreach (var rend in prefab.GetComponentsInChildren<Renderer>(true))
@@ -28,10 +28,9 @@ internal static class ModulePrefabGrafter
                 var shader = Shader.Find(mat.shader.name);
                 if (shader == null) continue;
 
-                // Reassigning .shader resets renderQueue to the new shader's default
-                // (opaque range) even though it leaves _SurfaceType/_SrcBlend/_DstBlend
-                // untouched — HDRP sorts opaque-vs-transparent off renderQueue alone, so
-                // a transparent material (e.g. Glass) silently draws fully opaque here.
+                // Reassigning .shader resets renderQueue to the new shader's default even
+                // though _SurfaceType is untouched, and HDRP sorts opaque-vs-transparent off
+                // renderQueue alone, so a transparent material would silently draw opaque.
                 var queue = mat.renderQueue;
                 mat.shader = shader;
                 mat.renderQueue = queue;
@@ -112,11 +111,9 @@ internal static class ModulePrefabGrafter
             view.ObservedComponents = new List<Component> { cell };
         }
 
-        // PowerDrain is the only carrier of IsOn over the wire (CellModule's
-        // OnPhotonSerializeView writes IsBeingDeconstructed and nothing else), so an
-        // unobserved drain leaves every non-owner stuck at IsOn == false forever.
-        // Vanilla prefabs list their drain in the editor; a grafted one is added here.
-        // Appended, not assigned, so an authored list survives.
+        // PowerDrain is the only carrier of IsOn over the wire, so an unobserved drain leaves
+        // every non-owner stuck at IsOn == false forever. Appended, not assigned, so an
+        // authored list survives.
         if (drain != null)
         {
             view.ObservedComponents ??= new List<Component>();

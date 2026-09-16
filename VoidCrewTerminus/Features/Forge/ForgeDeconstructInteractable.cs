@@ -8,31 +8,17 @@ using UnityEngine;
 
 namespace VoidCrewTerminus.Forge;
 
-// The Forge's deconstruct handle. Same hold-to-confirm mechanism as
-// ForgeCommitInteractable, reused instead of vanilla's Mediator/ExtruderLever chain.
-//
-// Vanilla wires deconstruct through AbstractModuleMediator.InitializeDeconstructButton,
-// needing BaseModuleMediator + ModuleDeconstructButton + ExtruderLever on the prefab —
-// none authorable in the modding SDK or runtime-graftable (ExtruderLever needs real
-// geometry and a configured AnimationCurve). But OnClickedDeconstructButton is three
-// plain calls with no dependency on the Mediator instance — two static Deconstruct
-// checks and BuildProcessController.TryDeconstructModule, already fully networked —
-// so replicating them here is lower-risk than grafting three more component types.
-//
-// The hold DURATION, though, is matched to vanilla exactly: ForgeHoldGate measures a
-// live ExtruderLever in the scene and times this lever to the same figure, rather
-// than firing on the short global HoldAction the way HoldClickerInteractable does.
-//
-// Visual: rotates VisualHandle on Z, driven by hold progress so the lever bottoms out
-// exactly when the deconstruct fires. This component sits on DeconstructTrigger (the
-// collider), not the lever mesh, so VisualHandle may be null — deconstruct still
-// works, just without the animation.
+// The Forge's deconstruct handle, using the same hold gate as ForgeCommitInteractable.
+// Vanilla wires deconstruct through a Mediator + ModuleDeconstructButton + ExtruderLever
+// chain, none of it authorable in the SDK or runtime-graftable, but
+// OnClickedDeconstructButton is three plain calls with no dependency on the Mediator, so
+// replicating them is lower-risk than grafting three component types. The hold duration is
+// measured off a live ExtruderLever (ForgeHoldGate). VisualHandle may be null.
 public class ForgeDeconstructInteractable : ClickerInteractable
 {
     private const float MaxAngle = 80f;
 
-    // Only used for the spring-back after an early release; the pull itself tracks
-    // hold progress directly.
+    // Only the spring-back after an early release; the pull itself tracks hold progress.
     private const float SpringBackDegPerSec = 180f;
 
     public Transform VisualHandle;
@@ -44,7 +30,7 @@ public class ForgeDeconstructInteractable : ClickerInteractable
     public override void Awake()
     {
         base.Awake();
-        // Sits on the "DeconstructTrigger" child, not the module root — walk up.
+        // Sits on the DeconstructTrigger child, not the module root.
         _module = GetComponentInParent<CellModule>();
     }
 
@@ -74,14 +60,9 @@ public class ForgeDeconstructInteractable : ClickerInteractable
         _gate.Cancel();
     }
 
-    // Root cause of the "deconstructing any other module deconstructs the Forge too"
-    // bug: ClickerInteractable.Highlighted iterates a private outlineObjects[] that
-    // only the Inspector populates — null on every runtime-built Forge interactable —
-    // and the NRE aborted the rest of RaycastHandler.RaycastInteractables() for that
-    // frame, including the line reassigning Current. Looking away therefore left
-    // Current stuck on this trigger, and every later Hold anywhere fired on the Forge.
-    //
-    // ForgeOutline instead, scoped to VisualHandle, falling back to the whole module.
+    // base.Highlighted iterates a private outlineObjects[] only the Inspector populates, so
+    // it NREs on a runtime-built interactable and aborts the rest of the raycast sweep for
+    // that frame, leaving RaycastHandler.Current stuck on this trigger.
     public override void Highlighted(bool isHighlighted)
     {
         var target = VisualHandle != null ? VisualHandle : (_module != null ? _module.transform : null);
@@ -92,10 +73,8 @@ public class ForgeDeconstructInteractable : ClickerInteractable
     {
         bool fired = _gate.Tick(Time.deltaTime);
 
-        // Tracking progress rather than easing toward a fixed target at a fixed speed:
-        // at any hold longer than MaxAngle/speed the old version bottomed the lever out
-        // early and left it sitting there, which reads as "it's stuck" rather than
-        // "keep holding".
+        // Tracks progress rather than easing at a fixed speed, so the lever bottoms out
+        // exactly when the deconstruct fires rather than early, which reads as stuck.
         if (VisualHandle != null)
         {
             _angle = _gate.IsHolding

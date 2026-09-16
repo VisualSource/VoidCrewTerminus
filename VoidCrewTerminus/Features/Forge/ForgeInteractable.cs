@@ -11,45 +11,28 @@ namespace VoidCrewTerminus.Forge;
 
 public enum ForgeInteractableKind
 {
-    RelicTube,     // insert a held relic / status when empty-handed
-    ModuleSocket,  // load a held BuildBox / commit when empty-handed
-    CommitButton,  // commit when empty-handed, held not clicked (CommitTarget anchor — see ForgeCommitInteractable)
-    AlloyTerminal, // feed alloys into the Forge Meter (AlloyTarget anchor)
+    RelicTube,
+    ModuleSocket,
+    CommitButton,  // held, not clicked; see ForgeCommitInteractable
+    AlloyTerminal,
 }
 
-// Raycast target for the player's interaction system: RaycastHandler picks these up
-// by collider (layer "InteractiveObjects") and clicks arrive through the
-// CarryableInteract prefix in ForgeInteractionPatch. Built at runtime by
-// BuildInteractables — the shipped prefab carries only anchor transforms.
-//
-// Covers every Forge interactable EXCEPT the Commit button, which needs a different
-// vanilla base class for its hold gate. ForgeInteractableKind.CommitButton still
-// exists here because the policy's click matrix is keyed by it regardless of which
-// component originates the interaction.
+// Raycast target on layer "InteractiveObjects"; clicks arrive through the CarryableInteract
+// prefix. Covers every Forge interactable except the Commit button, which needs a different
+// base for its hold gate; that kind still lives here because the policy's matrix is keyed by it.
 public class ForgeInteractable : AbstractInteractable
 {
     public UpgradeForgeBehavior Forge;
     public ForgeInteractableKind Kind;
     public Transform Anchor;
 
-    // Whether the prompt currently reads "Retrieve" rather than the kind's own
-    // label. Tracked so the assignment below only happens on a flip — the setter
-    // fires InteractionInfoUpdated, which the HUD listens to.
+    // Tracked so the assignment below happens only on a flip: the setter fires
+    // InteractionInfoUpdated, which the HUD listens to.
     private bool _promptShowsRetrieve;
 
-    // The prompt has to follow the anchor's occupancy: this interactable stays
-    // targetable while it holds something (that is what makes retrieval work at all
-    // — see the empty-handed section of ForgeInteractionPolicy.Decide), so its label
-    // has to say which of the two things a click will do.
-    //
-    // Polled rather than pushed. AnchorDock does signal dock/undock, but only into
-    // the anchor's "Filled" helper object, so subscribing would mean new plumbing
-    // through the Forge plus teardown to match; the poll is a bool compare against
-    // at most Capacity docked entries. Worth revisiting if the Forge ever grows
-    // enough anchors for it to show up in a profile.
-    //
-    // The retrieval rule itself is the policy's, not restated here: a second copy
-    // could drift and label an anchor "Insert" that a click would in fact empty.
+    // The prompt must say which of the two things a click will do, since this interactable
+    // stays targetable while it holds something. Polled rather than pushed: AnchorDock signals
+    // only into the anchor's "Filled" helper, and the poll is a compare against Capacity entries.
     private void Update()
     {
         if (Forge == null) return;
@@ -62,18 +45,15 @@ public class ForgeInteractable : AbstractInteractable
         InteractionInfo = retrieve ? RetrieveInfo() : InfoFor(Kind);
     }
 
-    // No outline yet, deliberately — which mesh RelicTube/ModuleSocket/AlloyTerminal
-    // should each scope to hasn't been modeled. base.Highlighted is empty and
-    // harmless; called to keep the override chain intact for when this is revisited.
+    // Deliberately no outline yet: which mesh each kind should scope to isn't modeled. The
+    // override is kept so the chain is intact when it is.
     public override void Highlighted(bool isHighlighted)
     {
         base.Highlighted(isHighlighted);
     }
 
-    // HUD prompt assets are private serialized fields, so borrow them from whatever
-    // CarryablesSocketActor the ship already has (every ship has sockets). Falls back
-    // to an empty InteractionInfo, which the HUD renders as no prompt rather than
-    // crashing.
+    // HUD prompt assets are private serialized fields, so they're borrowed from any
+    // CarryablesSocketActor on the ship; an empty InteractionInfo renders as no prompt.
     private static InteractionInfo _insertInfo;
     private static InteractionInfo _defaultInfo;
     private static InteractionInfo _commitInfo;
@@ -94,19 +74,15 @@ public class ForgeInteractable : AbstractInteractable
         };
     }
 
-    // Not a ForgeInteractableKind — ForgeDeconstructInteractable isn't part of the
-    // click-decision matrix ForgeInteractionPolicy routes (it's its own hold gesture,
-    // not something a player's carried payload can target), so it doesn't need a
-    // policy-routed kind, just a HUD prompt built the same way.
+    // Not a ForgeInteractableKind: deconstruct is its own hold gesture, not something a
+    // carried payload can target, so it needs a HUD prompt but no policy-routed kind.
     public static InteractionInfo DeconstructInfo()
     {
         EnsureInfos();
         return _deconstructInfo;
     }
 
-    // Shown on a tube or socket that currently holds something — the click hands it
-    // back rather than inserting. Not a ForgeInteractableKind: retrieval is decided
-    // by the anchor's occupancy, not by which anchor it is.
+    // Not a ForgeInteractableKind: retrieval is decided by occupancy, not by which anchor it is.
     private static InteractionInfo RetrieveInfo()
     {
         EnsureInfos();
@@ -129,8 +105,7 @@ public class ForgeInteractable : AbstractInteractable
 
         _insertInfo ??= EmptyInfo();
         _defaultInfo ??= EmptyInfo();
-        // Hold, not Press — ForgeCommitInteractable requires a completed hold
-        // (see its doc comment), so the HUD prompt should say so.
+        // Hold, not Press: ForgeCommitInteractable requires a completed hold.
         _commitInfo = ActionInfo("Commit", InteractionDescription.EInteractionType.Hold);
         _alloyInfo = ActionInfo("Feed Alloy");
         _deconstructInfo = ActionInfo("Deconstruct", InteractionDescription.EInteractionType.Hold);
@@ -144,15 +119,10 @@ public class ForgeInteractable : AbstractInteractable
         return info;
     }
 
-    // CommitButton/AlloyTerminal have no vanilla InteractionInfo to borrow, so build
-    // one from _insertInfo's key binding with our own label swapped in.
-    //
-    // For Hold prompts the Key must NOT be borrowed: KeyBindVE.Init resolves its icon
-    // by looking up Key.FallBackString BY NAME as an InputAction, and _insertInfo's
-    // Key names the click action, not the separate HoldAction that Commit and
-    // Deconstruct listen on — so the HUD showed the click icon even with
-    // InteractionType set to Hold. Built fresh from the Hold action's own live name,
-    // so a rebind can't desync it.
+    // For Hold prompts the Key must NOT be borrowed: KeyBindVE.Init resolves its icon by
+    // looking up Key.FallBackString by name as an InputAction, and _insertInfo's Key names the
+    // click action, not the HoldAction. Built from the Hold action's live name so a rebind
+    // can't desync it.
     private static InteractionInfo ActionInfo(string label, InteractionDescription.EInteractionType? interactionType = null)
     {
         var info = ScriptableObject.CreateInstance<InteractionInfo>();

@@ -1,24 +1,22 @@
 namespace VoidCrewTerminus.Escalation;
 
-// The single answer to "how much extra pressure applies right now?" — replaces
-// five call sites that each re-read IsScalingActive/DifficultyScalar/cap/rate
-// inline, with the cap default alone duplicated in six places.
+// The single answer to "how much extra pressure applies right now?".
 //
-// Snapshot semantics: Current reads ambient state ONCE, so a patch that checks
-// the gate and then computes a multiplier can't observe a scalar that changed
-// in between. The constructor takes every input explicitly — that's the seam
-// tests use, since Current reaches into two static singletons and the config.
+// Snapshot semantics: Current reads ambient state ONCE, so a patch that checks the gate and
+// then computes a multiplier can't observe a scalar that changed in between. The constructor
+// takes every input explicitly, which is the seam tests use, since Current reaches into two
+// static singletons and the config.
 public readonly struct EscalationIntensity
 {
-    // Loot tier biasing deliberately ignores this — see LootTableEscalationPatch
-    // — so it is NOT folded into the other members.
+    // Loot tier biasing deliberately ignores this (see LootTableEscalationPatch), so it is
+    // NOT folded into the other members.
     public bool Active { get; }
 
     // Uncapped scalar, as it drives loot tiers and dev display.
     public int RawScalar { get; }
 
-    // Scalar after the enemy-scaling cap. Every enemy-pressure calculation should
-    // use this one, not RawScalar — otherwise a deep run spawns unbounded ships.
+    // Scalar after the enemy-scaling cap. Every enemy-pressure calculation must use this
+    // rather than RawScalar, or a deep run spawns unbounded ships.
     public int Scalar { get; }
 
     public float StatRate { get; }
@@ -42,8 +40,8 @@ public readonly struct EscalationIntensity
 
     public bool AffectsEnemies => Active && Scalar > 0;
 
-    // Checked separately from AffectsEnemies: a zero/negative rate is also a
-    // no-op, and applying a zero-value StatMod would register a modifier for nothing.
+    // Checked separately from AffectsEnemies: a zero or negative rate is also a no-op, and a
+    // zero-value StatMod would register a modifier for nothing.
     public float StatBonus => Scalar * StatRate;
 
     public float StatMultiplier => 1f + StatBonus;

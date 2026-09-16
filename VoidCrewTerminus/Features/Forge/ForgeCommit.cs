@@ -24,19 +24,16 @@ internal readonly struct RelicFacts
         CursedBurden = cursedBurden;
     }
 
-    // A relic that stopped existing between docking and committing — a second
-    // player grabbing it, a networked despawn. Still occupies its FIFO slot but
-    // contributes nothing: Common is the floor tier, a null name matches no
-    // signature, and None cannot trigger a burden.
+    // A relic destroyed between docking and committing. Still occupies its FIFO slot but
+    // contributes nothing: Common is the floor tier, a null name matches no signature.
     internal static RelicFacts Missing => new(RelicTier.Common, null, BurdenType.None);
 }
 
-// A resolved commit: what to tell the player, and what to persist.
 internal readonly struct CommitResolution
 {
     internal CommitOutcome Outcome { get; }
 
-    // Identical to the input when the outcome failed — nothing is half-applied.
+    // Identical to the input when the outcome failed; nothing is half-applied.
     internal ForgeSnapshot Updated { get; }
 
     internal CommitResolution(CommitOutcome outcome, ForgeSnapshot updated)
@@ -46,22 +43,13 @@ internal readonly struct CommitResolution
     }
 }
 
-// Committing an upgrade: everything between the crew pressing the button and the
-// module reading Mk VII. Split on the Unity line:
-//
-//   Execute — reads the scene (which box, which relics, what is on them), saves
-//             the result, tells the network. Untestable by construction.
-//   Resolve — decides what the commit does. Pure.
-//
-// Lives here rather than on UpgradeForgeBehavior because it never needed an
-// instance: the host resolving a client's request has no docked box of its own
-// (docking is a local interaction), so the box and relics always arrive as
-// arguments.
+// Split on the Unity line: Execute reads the scene and is untestable by construction; Resolve
+// is pure. Static rather than on UpgradeForgeBehavior because the host resolving a client's
+// request has no docked box of its own, so box and relics always arrive as arguments.
 internal static class ForgeCommit
 {
-    // Runs on the authority only. Does NOT consume relics — the operator, who
-    // owns them, does that after this returns (their ownership is what makes the
-    // networked destroy propagate).
+    // Runs on the authority only. Does NOT consume relics: the operator owns them and does
+    // that after this returns, which is what makes the networked destroy propagate.
     internal static CommitOutcome Execute(BuildBox box, IReadOnlyList<GameObject> relics)
     {
         if (box == null) return CommitOutcome.Failure(CommitStatus.NoModule);
@@ -106,10 +94,8 @@ internal static class ForgeCommit
         return outcome;
     }
 
-    // The scene, as facts. Every read is guarded rather than assumed: a docked
-    // relic can be destroyed at any point before the commit lands, and the host
-    // resolving a remote request may fail to resolve some of the ViewIDs it was
-    // sent.
+    // Every read is guarded: a docked relic can be destroyed before the commit lands, and the
+    // host resolving a remote request may fail to resolve some of the ViewIDs it was sent.
     private static RelicFacts[] ReadRelics(IReadOnlyList<GameObject> relics)
     {
         int n = relics?.Count ?? 0;
@@ -136,9 +122,8 @@ internal static class ForgeCommit
             : new CommitResolution(outcome, current);
     }
 
-    // The calculator takes one parallel FIFO array per fact, where RelicFacts
-    // keeps a relic's three facts together. Unpacked in exactly one place, so the
-    // arrays cannot fall out of alignment anywhere else.
+    // The calculator takes one parallel FIFO array per fact. Unpacked in exactly one place,
+    // so the arrays cannot fall out of alignment anywhere else.
     private static CommitRequest ToRequest(
         ForgeSnapshot current, int currentLevel, ForgeCategory category,
         IReadOnlyList<RelicFacts> relics)
@@ -156,15 +141,9 @@ internal static class ForgeCommit
         return new CommitRequest(currentLevel, tiers, names, burdens, category, current.PerkSlots);
     }
 
-    // The overlay edit a successful outcome implies: the new level, plus whichever
-    // of the two independent rolls landed. An edit, not a replacement — perks and
-    // burdens from earlier commits ride through untouched.
-    //
-    // Private on purpose. Exposing it would buy sharper tests for the two folds
-    // that Resolve already reaches (level, burden) without buying the third: a
-    // test cannot produce a non-null RolledPerk either way, since PerkPool's pools
-    // need the game runtime and PerkDefinition's constructor names StatType, which
-    // the test project does not reference. See ForgeCommitTests for the gap.
+    // An edit, not a replacement: perks and burdens from earlier commits ride through
+    // untouched. Private on purpose; exposing it would not buy the perk fold a test, since a
+    // test cannot produce a non-null RolledPerk without the game runtime. See ForgeCommitTests.
     private static ForgeSnapshot Apply(ForgeSnapshot current, CommitOutcome outcome)
     {
         var updated = current.WithLevel(outcome.NewLevel);
@@ -175,10 +154,8 @@ internal static class ForgeCommit
         return updated;
     }
 
-    // Proves whether the perk came from a flagship relic's signature or from the
-    // category pool. Without this the two are indistinguishable — !perks shows
-    // the resulting slot either way, and the signature-vs-pool unit test is
-    // skipped (StatType init), so this line is the only evidence the path works.
+    // The signature-vs-pool unit test is skipped (StatType init), so these lines are the only
+    // evidence of which path produced the perk.
     private static void LogPerkCausalChain(CommitOutcome outcome, IReadOnlyList<RelicFacts> relics)
     {
         if (!outcome.RollAttempted)

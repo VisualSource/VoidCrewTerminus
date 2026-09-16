@@ -10,18 +10,16 @@ using VoidManager.Utilities;
 
 namespace VoidCrewTerminus.Commands;
 
-// Exercises the Leech dynamics end to end. This is the smoke test for the one
-// thing static reading could not settle: whether a runtime-constructed
-// ModDynamicValue actually drives Mod.Amount in the shipped game.
+// Exercises the Leech dynamics end to end: whether a runtime-constructed ModDynamicValue
+// actually drives Mod.Amount in the shipped game.
 internal class LeechPerkCommand : PublicCommand
 {
     private const float PerLeechScaling = 0.10f;
     private const int GateThreshold = 3;
 
-    // Each condition-bearing mod needs its own source. ModDynamicCondition.Init
-    // makes itself the mod's source, so a shared source across several such mods
-    // would let one removal strip the rest — and RemoveModifier alone leaves no
-    // handle to call DestroyDynamicRules with, so we track them ourselves.
+    // Each condition-bearing mod needs its own source: ModDynamicCondition.Init makes
+    // itself the mod's source, so a shared one lets a single removal strip the rest.
+    // RemoveModifier leaves no handle for DestroyDynamicRules, hence the tracking.
     private sealed class TestPerkSource : IModifierSource
     {
     }
@@ -82,9 +80,8 @@ internal class LeechPerkCommand : PublicCommand
             new StatMod(new FloatModifier(0.25f, ModifierType.AdditiveMultiplier, gatedSource), StatType.MaxHitPoints.Id),
             GateThreshold);
 
-        // Plural overload on purpose: it re-asserts the source AFTER the condition's
-        // Init has overwritten it. The singular ApplyModifier would leave the gated
-        // mod owned by its own condition and impossible to remove.
+        // Plural overload on purpose: it re-asserts the source AFTER the condition's Init
+        // overwrites it, where the singular would leave the mod impossible to remove.
         module.Stats.ApplyModifiers(new List<StatMod> { scaling }, scalingSource);
         module.Stats.ApplyModifiers(new List<StatMod> { gated }, gatedSource);
 
@@ -117,8 +114,8 @@ internal class LeechPerkCommand : PublicCommand
         {
             if (module != null) module.Stats.RemoveModifier(source);
 
-            // RemoveModifier does not do this, and without it the dynamic stays
-            // subscribed to AttachedCountChanged for the rest of the session.
+            // RemoveModifier does not do this, and the dynamic would stay subscribed to
+            // AttachedCountChanged for the rest of the session.
             mod?.DestroyDynamicRules();
         }
 

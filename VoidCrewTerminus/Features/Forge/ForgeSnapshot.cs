@@ -3,13 +3,8 @@ using System.Collections.Generic;
 
 namespace VoidCrewTerminus.Forge;
 
-// Opaque, immutable value carrying a module's forge overlay across the deconstruct
-// → reconstruct bridge. Also the shape ForgeCommit folds commit outcomes into
-// before saving.
-//
-// Any change to what a "forge overlay" contains happens here; the two conversion
-// points on ForgeModuleState (Snapshot / ApplySnapshot) then fail to compile until
-// they match — the compiler is the forcing function against shape drift.
+// Immutable overlay carried across the deconstruct/reconstruct bridge. Any change to what an
+// overlay contains happens here; ForgeModuleState's two conversions then fail to compile.
 public sealed class ForgeSnapshot
 {
     public int Level { get; }
@@ -28,8 +23,7 @@ public sealed class ForgeSnapshot
         Burdens = burdens;
     }
 
-    // The vanilla-baseline snapshot: L3, no perks, no burdens. Used as the
-    // read-modify-save starting point when no snapshot exists yet for a box.
+    // The read-modify-save starting point when no snapshot exists yet for a box.
     public static ForgeSnapshot Empty { get; } = new(
         ForgeCostCurve.MinLevel,
         new string[PerkPool.SlotCount],
@@ -63,8 +57,7 @@ public sealed class ForgeSnapshot
         return new ForgeSnapshot(Level, next, (BurdenType[])_burdens.Clone());
     }
 
-    // Idempotent — if the type is already present (or `burden == None`), returns
-    // `this` unchanged. Different burden types stack; identical types don't.
+    // Idempotent. Different burden types stack; identical types don't.
     public ForgeSnapshot WithBurdenAdded(BurdenType burden)
     {
         if (burden == BurdenType.None) return this;
@@ -77,31 +70,16 @@ public sealed class ForgeSnapshot
         return new ForgeSnapshot(Level, (string[])_perkSlots.Clone(), next);
     }
 
-    // ---- wire form -----------------------------------------------------------
+    // Layout: [int viewId, int level, string[] perkSlots, int[] burdens, int relicsConsumed].
+    // viewId keys a BuildBox for commit results and a CellModule for installed overlays;
+    // relicsConsumed is 0 for late-joiner pushes, which replay state rather than report a commit.
     //
-    // The CommitResult and ModuleOverlay messages both carry a snapshot plus a
-    // two-field envelope: the PhotonView ViewID the snapshot is keyed to (a
-    // BuildBox for commit results, a CellModule for installed overlays), and a
-    // relics-consumed count — 0 for the late-joiner pushes, which replay existing
-    // state rather than report a fresh commit.
-    //
-    // Layout: [int viewId, int level, string[] perkSlots, int[] burdens, int relicsConsumed]
-    //
-    // This lives HERE rather than in the net layer because the net layer had three
-    // hand-rolled copies of it, so adding a field to a snapshot used to compile fine
-    // and then silently drop it on the wire.
-    //
-    // Unlike the ForgeModuleState conversions above, the compiler can't catch that
-    // hole: Create() takes its arguments positionally, so a new field simply isn't
-    // passed and nothing fails to build. The guard is
-    // ToPayload_CarriesEveryPublicSnapshotField in ForgeSnapshotTests, which
-    // reflects over this type's public properties — keep it updated alongside the
-    // two methods below.
+    // Create() takes its arguments positionally, so a new snapshot field simply isn't passed
+    // and nothing fails to build. ToPayload_CarriesEveryPublicSnapshotField guards that.
     public const int PayloadLength = 5;
 
-    // Empty perk slots travel as "" rather than null; TryFromPayload normalises
-    // them back. Both spellings read as empty everywhere else in the mod, but
-    // only one should ever cross the wire.
+    // Empty perk slots travel as "" rather than null, and TryFromPayload normalises them
+    // back. Both read as empty elsewhere, but only one spelling should cross the wire.
     public object[] ToPayload(int viewId, int relicsConsumed)
     {
         var perks = new string[_perkSlots.Length];
@@ -115,9 +93,8 @@ public sealed class ForgeSnapshot
         return new object[] { viewId, Level, perks, burdens, relicsConsumed };
     }
 
-    // Returns false with every out parameter at a safe default when the payload is
-    // absent or too short — an arity check is the only validation the wire has ever
-    // had. Level clamping and burden dedup come free via Create.
+    // An arity check is the only validation the wire has; out parameters take safe defaults
+    // when it fails. Level clamping and burden dedup come free via Create.
     public static bool TryFromPayload(
         object[] payload, out int viewId, out ForgeSnapshot snapshot, out int relicsConsumed)
     {

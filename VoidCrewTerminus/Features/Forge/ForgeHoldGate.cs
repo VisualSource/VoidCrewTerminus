@@ -7,29 +7,17 @@ using UnityEngine;
 
 namespace VoidCrewTerminus.Forge;
 
-// A hold-to-confirm timer with a duration WE choose.
-//
-// HoldClickerInteractable — what the Forge's commit and deconstruct levers used to
-// extend — has no duration of its own: it subscribes to the global
-// InputActionReferences.HoldAction and fires whenever the Input System's single
-// shared Hold interaction completes. That is the short generic "hold F" used for
-// every incidental prompt in the game, and far too quick for two irreversible
-// actions.
-//
-// Vanilla's own module deconstruct doesn't use it either. It runs on Lever, which
-// accumulates LeverPosition += pullSpeed * deltaTime and fires at triggerThreshold —
-// a per-prefab duration, which is why deconstructing a real module takes noticeably
-// longer than the generic hold. This reproduces that: accumulate, fire at the
-// threshold, and drive the HUD reticle ring with the same OnCustomHoldInteractionStarted
-// publish Lever uses so the ring matches the real wait instead of the generic one.
+// A hold-to-confirm timer with a duration we choose. The global HoldAction fires on the Input
+// System's single shared Hold interaction, the short generic "hold F", which is far too quick
+// for an irreversible action. Vanilla's own deconstruct doesn't use it either: Lever
+// accumulates to a per-prefab threshold, which this reproduces, HUD ring publish included.
 internal sealed class ForgeHoldGate
 {
     private float _elapsed;
     private float _duration;
     private bool _active;
 
-    // Progress 0..1, for driving a lever animation so it tracks the real hold rather
-    // than finishing early at some unrelated fixed speed.
+    // 0..1, so a lever animation tracks the real hold rather than a fixed speed.
     internal float Progress => _active && _duration > 0f ? Mathf.Clamp01(_elapsed / _duration) : 0f;
     internal bool IsHolding => _active;
 
@@ -71,8 +59,7 @@ internal sealed class ForgeHoldGate
     {
         var action = HoldAction();
         if (action == null) return;
-        // keepDisplayed: false — matches Lever, so the prompt clears once the hold
-        // resolves rather than sticking on the reticle.
+        // keepDisplayed: false, matching Lever, so the prompt clears once the hold resolves.
         ViewEventBus.Instance?.OnCustomHoldInteractionStarted?.Publish(action, duration, false);
     }
 
@@ -85,12 +72,9 @@ internal sealed class ForgeHoldGate
         return service?.InputActionReferences?.HoldAction?.action;
     }
 
-    // How long vanilla's own module deconstruct takes, measured off a real
-    // ExtruderLever in the scene rather than hardcoded — pullSpeed and
-    // triggerThreshold are private [SerializeField]s authored per prefab, so the
-    // number exists only in asset data and cannot be read offline. Measuring keeps
-    // the Forge matched to vanilla across a retune, the same way ForgeGhosts borrows
-    // the live hologram material instead of shipping a copy.
+    // Measured off a real ExtruderLever rather than hardcoded: pullSpeed and triggerThreshold
+    // are private [SerializeField]s authored per prefab, so the number exists only in asset
+    // data. Measuring keeps the Forge matched to vanilla across a retune.
     private static float _vanillaDeconstructSeconds;
     private static bool _loggedFallback;
 
@@ -122,10 +106,9 @@ internal sealed class ForgeHoldGate
         }
     }
 
-    // Lever fires at LeverPosition > triggerThreshold, climbing from startPosition at
-    // pullSpeed per second. Note this is the time to TRIGGER, which is what the player
-    // experiences — Lever's own HUD publish uses (1 - position)/pullSpeed instead, so
-    // vanilla's ring actually runs slightly past the moment the action fires.
+    // Time to TRIGGER, which is what the player experiences: Lever climbs from startPosition
+    // at pullSpeed and fires past triggerThreshold. Lever's own HUD publish uses
+    // (1 - position)/pullSpeed, so vanilla's ring runs slightly past the moment it fires.
     private static bool TryMeasure(ExtruderLever lever, out float seconds)
     {
         seconds = 0f;

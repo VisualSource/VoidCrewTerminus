@@ -10,22 +10,11 @@ using VoidCrewTerminus.Loot;
 
 namespace VoidCrewTerminus.Patches;
 
-// Surfaces mod state (forge level, perks, burdens, relic curse) in the game's
-// hover tooltips.
-//
-// One patch point covers relics, build boxes, and installed modules: all three
-// descend from AbstractCloneStarObject and resolve their tooltip through
-// ContextInfoProvider.ContextInfo, which is also what ContextInfoDisplay calls
-// for both the world-hover and held-carryable paths, so patching here keeps
-// carried and hovered items in sync for free. The getter allocates a fresh
-// ContextInfoViewModel per call, so mutating __result can't accumulate.
-//
-// Deliberately not a ContextInfoModifier (the game's own extension point):
-// registering one needs reflection into a private [SerializeReference] list plus
-// a replay of the Awake-time Init() lifecycle, which would miss objects that
-// already awoke (late joiners, pre-spawned relics) — and everything displayed
-// here is fixed at commit time anyway, so the modifier's refresh machinery buys
-// nothing.
+// One patch point covers relics, build boxes and installed modules: all three resolve their
+// tooltip through this getter, which allocates a fresh ContextInfoViewModel per call, so
+// mutating __result can't accumulate. Not a ContextInfoModifier (the game's own extension
+// point): registering one needs a replay of the Awake-time Init() that already-awake objects
+// would miss, and everything shown here is fixed at commit time anyway.
 [HarmonyPatch(typeof(ContextInfoProvider), nameof(ContextInfoProvider.ContextInfo), MethodType.Getter)]
 internal static class ForgeHoverUiPatch
 {
@@ -33,9 +22,8 @@ internal static class ForgeHoverUiPatch
     // could break tooltips wholesale, so failures are swallowed after one report.
     private static bool _loggedFailure;
 
-    // Raw vanilla header formats aren't inspectable offline (display names live in
-    // asset bundles), so ForgeLabels.RewriteMark has to guess whether a mark is
-    // already embedded. Log each distinct header once to settle it from a playtest.
+    // Vanilla header formats aren't inspectable offline, so RewriteMark has to guess whether
+    // a mark is already embedded. Each distinct header is logged once to settle that.
     private static readonly HashSet<string> _loggedHeaders = new();
 
     static void Postfix(ContextInfoProvider __instance, ref ContextInfoViewModel __result)
@@ -47,8 +35,7 @@ internal static class ForgeHoverUiPatch
             var go = __instance.gameObject;
             if (go == null) return;
 
-            // Installed module first, then loose box, then relic. A given object is
-            // only ever one of these.
+            // A given object is only ever one of these.
             var module = go.GetComponent<CellModule>();
             if (module != null) { ApplyModule(module, __result); return; }
 
@@ -65,23 +52,19 @@ internal static class ForgeHoverUiPatch
         }
     }
 
-    // Installed module: state lives in the per-CellModule table.
     private static void ApplyModule(CellModule module, ContextInfoViewModel vm)
     {
         if (!ForgeStateStore.TryGet(module, out var state)) return;
         Decorate(vm, state.Level, state.PerkSlots, state.Burdens);
     }
 
-    // Loose build box: state lives in the ViewID-keyed snapshot store.
     private static void ApplyBox(BuildBox box, ContextInfoViewModel vm)
     {
         if (box.photonView == null) return;
 
-        // Read the snapshot directly rather than going through
-        // UpgradeForgeBehavior.LevelOfBox: that walks the entire
-        // UpgradableAssetDataTable to resolve a vanilla mark, which is far too
-        // expensive for a getter that runs every hover frame. A missing snapshot
-        // already means "nothing forged here", which is exactly the no-op case.
+        // Read the snapshot directly rather than through LevelOfBox, which walks the whole
+        // UpgradableAssetDataTable: far too expensive for a getter that runs every hover
+        // frame. A missing snapshot already means "nothing forged here".
         if (!ForgeStateStore.TryPeekSnapshot(box.photonView.ViewID, out var snap)) return;
         Decorate(vm, snap.Level, snap.PerkSlots, snap.Burdens);
     }
@@ -89,9 +72,8 @@ internal static class ForgeHoverUiPatch
     private static void Decorate(ContextInfoViewModel vm, int level,
         IReadOnlyList<string> perks, IReadOnlyList<BurdenType> burdens)
     {
-        // Untouched modules render byte-identical to vanilla. This is also the
-        // path a client takes before forge state has synced, so a desynced client
-        // shows vanilla rather than a wrong level.
+        // Untouched modules render byte-identical to vanilla. This is also the path a client
+        // takes before forge state has synced, so it shows vanilla rather than a wrong level.
         if (!ForgeLabels.HasOverlay(level, perks, burdens)) return;
 
         LogHeaderOnce(vm.Header);
@@ -99,13 +81,12 @@ internal static class ForgeHoverUiPatch
         vm.Body += ForgeLabels.BuildOverlayBody(level, perks, burdens);
     }
 
-    // Relic: cursed marker on the instance, tier keyed by prefab name.
+    // Cursed marker on the instance, tier keyed by prefab name.
     private static void ApplyRelic(GameObject go, ContextInfoViewModel vm)
     {
         if (!RelicTierData.TryGet(go.name, out var entry)) return;
         vm.Body += ForgeLabels.BuildRelicBody(entry.Tier, CursedRelicMarker.GetBurden(go));
-        // vm.Rarity is left alone on purpose — that's vanilla's own rarity, which
-        // is authored separately from the mod's forge tier. See ForgeLabels.
+        // vm.Rarity is vanilla's own, authored separately from the mod's forge tier.
     }
 
     private static void LogHeaderOnce(string header)

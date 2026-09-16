@@ -235,24 +235,18 @@ internal class ForgeCommitCommand : PublicCommand
         var forge = ForgeCommandHelper.FindNearestForge();
         if (forge == null) { Messaging.Notification("No Upgrade Forge found."); return; }
 
-        // Deliberately renders the same lines the in-world commit button shows —
-        // a dev testing !forgecommit should be reading exactly what a player
-        // reads, not a parallel set of paraphrases.
+        // Renders the same lines the in-world commit button shows, so a dev testing this
+        // reads exactly what a player reads.
         var outcome = forge.TryCommit();
         foreach (var line in ForgeLabels.DescribeCommit(outcome, forge.CurrentBoxLevel, forge.RelicCount))
             Messaging.Notification(line);
     }
 }
 
-// Spawns the Forge's BuildBox via CustomModuleRegistry.EnsureTemplatesReady, which
-// clones a live vanilla donor and presets moduleRef on the template before any
-// instance's Awake runs. A custom-grafted prefab was tried first, but its
-// Rigidbody never connected into MovingSpacePlatform's simulated PhysicsScene
-// (root cause never pinned down), so it fell through the ship floor forever;
-// cloning a real donor — which already has correct physics/rendering — sidesteps
-// that entirely. The donor guid is found once and cached
-// (RegisteredModule.TryFindDonorGuid); a per-spawn scan of the whole module
-// registry previously caused a !forgespawn lag spike.
+// Spawns the Forge's BuildBox from a cloned live vanilla donor, which already has correct
+// physics: a custom-grafted prefab's Rigidbody never connects into MovingSpacePlatform's
+// simulated PhysicsScene and falls through the ship floor. The donor guid is cached, since a
+// per-spawn scan of the whole module registry is a visible lag spike.
 internal class ForgeSpawnCommand : PublicCommand
 {
     public override string[] CommandAliases() => new[] { "forgespawn" };
@@ -273,12 +267,9 @@ internal class ForgeSpawnCommand : PublicCommand
         { Messaging.Notification("Forge BuildBox not ready yet — no vanilla BuildBox donor found (is a module installed on the ship?)."); return; }
 
         var spawnPos = player.transform.position + player.transform.forward * 2f + Vector3.up * 0.5f;
-        // Guarded like !spawn: SpawnUtils.SpawnCarryable throws, not returns null,
-        // when the game won't take a spawn (mid-jump). See TrySpawnGuarded.
-        //
-        // The guard owns both "refused" outcomes — the throw and a null return — so what
-        // is left below is the third one: something spawned, but it isn't a BuildBox,
-        // which means boxGuid resolves to the wrong prefab in RuntimeAssetsRegister.
+        // The guard owns both refusal outcomes, the throw and a null return, so what is left
+        // below is the third: something spawned but isn't a BuildBox, meaning boxGuid
+        // resolves to the wrong prefab in RuntimeAssetsRegister.
         if (!SpawnItemCommand.TrySpawnGuarded(boxGuid, "Forge BuildBox", spawnPos, out var spawnMessage, out var spawned))
         { Messaging.Notification(spawnMessage); return; }
 
@@ -290,9 +281,7 @@ internal class ForgeSpawnCommand : PublicCommand
         Messaging.Notification("Spawned Forge BuildBox. Carry to an empty socket to install.");
     }
 
-    // Walks AssetLoader's runtime asset register for the GameObject whose name
-    // matches the shipped prefab name. Internal so BossDefeatHook's award-on-2nd-boss
-    // reuses the same lookup for the box GUID.
+    // Internal so BossDefeatHook's reward path reuses the same lookup for the box GUID.
     internal static bool TryFindForgeAssetGuid(string prefabName, out GUIDUnion guid)
     {
         guid = default;
@@ -310,10 +299,8 @@ internal class ForgeSpawnCommand : PublicCommand
     }
 }
 
-// Triggers the boss-defeat care-package reward directly, without needing to defeat
-// two bosses first. Same delivery path as the real thing
-// (Patches.BossDefeatHook.AwardForgeBuildBox spawns a care package that, once
-// opened/destroyed, drops the Forge BuildBox via LootOnDeathDropper).
+// Triggers the boss-defeat care-package reward directly, down the same delivery path as the
+// real thing, without needing to defeat two bosses first.
 internal class ForgeBoxDropCommand : PublicCommand
 {
     public override string[] CommandAliases() => new[] { "forgeboxdrop" };

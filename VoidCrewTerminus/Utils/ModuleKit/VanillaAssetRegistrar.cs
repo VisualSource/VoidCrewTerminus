@@ -10,10 +10,9 @@ using UnityEngine;
 
 namespace VoidCrewTerminus.ModuleKit;
 
-// Four independent registries, hit by vanilla code with no null-check on a miss. A guid
-// present in one and absent from another surfaces as "missing description" hover text,
-// no rarity band, a wrong category material, or a KeyNotFoundException every tick out of
-// sector-map marker creation.
+// Four independent registries, hit by vanilla code with no null-check on a miss. A guid in
+// one and absent from another surfaces as missing hover text, no rarity band, a wrong
+// category material, or a KeyNotFoundException every tick from sector-map marker creation.
 internal static class VanillaAssetRegistrar
 {
     private static CloneStarObjectContainer Objects =>
@@ -27,9 +26,8 @@ internal static class VanillaAssetRegistrar
 
     internal static UnityEngine.Object GetAsset(GUIDUnion guid) => RuntimeAssetsRegister.Instance.GetAsset(guid);
 
-    // The register the game's own converter uses for carryables, making the object
-    // resolvable by CustomObjectPool ("#guid" PUN instantiation) and ResourceAssetRef
-    // lookups. Add-only — see TryReplaceAsset.
+    // The register the game's own converter uses for carryables, making the object resolvable
+    // by CustomObjectPool ("#guid" PUN instantiation). Add-only; see TryReplaceAsset.
     internal static void RegisterAssetIfAbsent(GUIDUnion guid, UnityEngine.Object asset, string displayName)
     {
         if (RuntimeAssetsRegister.Instance.HasAsset(guid)) return;
@@ -41,9 +39,8 @@ internal static class VanillaAssetRegistrar
     }
 
     // RuntimeAssetsRegister exposes no update or remove: RegisterAsset's TryAdd keeps the
-    // existing value (logging an error), and its info dictionary uses Add, which throws
-    // outright on a duplicate key. The backing dictionary's type arguments are both
-    // public, so an existing entry is corrected through it directly.
+    // existing value, and its info dictionary uses Add, which throws on a duplicate key.
+    // The backing dictionary is reached directly so an existing entry can be corrected.
     internal static bool TryReplaceAsset(GUIDUnion guid, UnityEngine.Object asset)
     {
         var assets = AccessTools.Field(typeof(RuntimeAssetsRegister), "_assets")
@@ -54,14 +51,10 @@ internal static class VanillaAssetRegistrar
         return true;
     }
 
-    // Corrects an existing entry rather than skipping it: the game's own runtime-asset
-    // import scans the same bundle, so it can get here first with a Path resolved off the
-    // wrong object — and Path is what ObjectFactory.InstantiateSpaceObjectByGUID names
-    // every spawned instance from. Any entry under one of our guids is ours by
-    // construction, so overwriting is safe.
-    //
-    // IsRuntime on the correction path too: Path is a RuntimeAssetsRegister key, not a
-    // Resources path, and a def marked non-runtime resolves through neither.
+    // Corrects an existing entry rather than skipping it: the game's own import scans the same
+    // bundle and can get here first with a Path resolved off the wrong object, and Path is
+    // what every spawned instance is named from. IsRuntime is set on the correction path too,
+    // because Path is a RuntimeAssetsRegister key and a non-runtime def resolves through neither.
     internal static void RegisterObjectDef(GUIDUnion guid, string path, ContextInfo context)
     {
         var def = Objects.GetAssetDefById(guid, verbose: false);
@@ -76,9 +69,9 @@ internal static class VanillaAssetRegistrar
         BepinPlugin.Log.LogDebug($"[ModuleKit] CloneStarObject def for {path} ({guid.AsHex()}) {(fresh ? "registered" : "corrected")}.");
     }
 
-    // The hover subtitle's category band is this lookup, not ContextInfo — and
-    // BuildBoxActor.Awake reads it too, for the crate's category material. try/catch:
-    // thinly exercised against live ModuleContainer wiring, so fail loud but survivable.
+    // The hover subtitle's category band is this lookup, not ContextInfo, and BuildBoxActor
+    // reads it for the crate's material. Caught rather than thrown: thinly exercised against
+    // live ModuleContainer wiring, so it should fail loud but survivable.
     internal static void RegisterModuleDef(GUIDUnion guid, string path, ECategory category)
     {
         try
@@ -100,8 +93,8 @@ internal static class VanillaAssetRegistrar
         }
     }
 
-    // Defaults to no band at all for an unregistered guid. Add-only: UnlockItemDef holds
-    // no object reference, so an entry from a previous load survives a hot-reload intact.
+    // An unregistered guid gets no band at all. Add-only: UnlockItemDef holds no object
+    // reference, so an entry from a previous load survives a hot-reload intact.
     internal static void RegisterRarity(GUIDUnion guid, string path, RarityType rarity)
     {
         if (Unlocks.HasItem(guid)) return;
@@ -117,13 +110,10 @@ internal static class VanillaAssetRegistrar
         }
     }
 
-    // A plain `def.Path = path` does not stick. The setter writes ResourceAssetRef's
-    // _pathCache but leaves _cachedPathGuid at its constructed Empty, so the next getter
-    // sees them disagree, re-resolves through ResourcePaths — which knows nothing about a
-    // runtime guid — and overwrites the assignment with "". Reading once first makes the
-    // getter reconcile the two, after which the assignment survives. Observed twice as
-    // `def path=''` in the template-ready line, leaving spawned instances to fall back on
-    // vanilla naming (#34).
+    // A plain `def.Path = path` does not stick: the setter writes _pathCache but leaves
+    // _cachedPathGuid at Empty, so the next getter sees them disagree, re-resolves through
+    // ResourcePaths (which knows nothing about a runtime guid) and overwrites with "".
+    // Reading once first reconciles the two, after which the assignment survives.
     private static void AssignPath(ResourceAssetRef reference, string path)
     {
         _ = reference.Path;

@@ -28,7 +28,7 @@ internal static class LeechEncounterController
 
     internal static int AttachedCount => Attached.Count;
 
-    // Phase 2.5's ModDynamicValue reads this; raised on every transition.
+    // ModDynamicValue reads this; raised on every transition.
     internal static event Action<int> AttachedCountChanged;
 
     internal static bool AtCapacity => AttachedCount >= TerminusConfig.LeechCap;
@@ -45,8 +45,7 @@ internal static class LeechEncounterController
 
         if (AtCapacity)
         {
-            // The Concurrency Safety Rail: impact still reads as an impact, it just
-            // carries no payload. In fiction, hull EM noise.
+            // The impact still reads as an impact, it just carries no payload.
             BepinPlugin.Log.LogDebug($"[Leech] impact absorbed — already at the cap of {TerminusConfig.LeechCap}.");
             return;
         }
@@ -123,9 +122,8 @@ internal static class LeechEncounterController
         AttachedCountChanged?.Invoke(AttachedCount);
     }
 
-    // Vanilla clobbers the ship's runtimeTags often — seat sit/stand, void jumps,
-    // sector twists — so these are re-asserted on every transition rather than
-    // written once. A marker StatMod backstop is still owed; see Phase 2.5.
+    // Vanilla clobbers the ship's runtimeTags often (seat sit/stand, void jumps, sector
+    // twists), so these are re-asserted on every transition rather than written once.
     private static void SyncShipTags()
     {
         PlayerControlledShip ship = ClientGame.Current?.PlayerShip;
@@ -154,8 +152,8 @@ internal static class LeechEncounterController
         }
     }
 
-    // Phase 6 replaces this with the real DifficultyScalar band lookup; until then
-    // every band read takes the first entry, which is the scalar 2-3 value.
+    // Every band read takes the first entry, the scalar 2-3 value, until the real
+    // DifficultyScalar band lookup lands.
     private static float ParseLeadBand(string raw, float fallback)
         => float.TryParse(raw?.Split(',').FirstOrDefault(), System.Globalization.NumberStyles.Float,
             System.Globalization.CultureInfo.InvariantCulture, out float value)

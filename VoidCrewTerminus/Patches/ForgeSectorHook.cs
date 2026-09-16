@@ -6,16 +6,10 @@ using VoidManager.Utilities;
 
 namespace VoidCrewTerminus.Patches;
 
-// Passive Forge Meter fill: +ForgeMeterPerSectorJump when the ship leaves a
-// sector for the void, landing during warp so the crew has transit time to react
-// to a level-up. Not a Harmony patch — GameSessionSectorManager.OnSectorExited is
-// a public static event, fired with the sector being left.
-//
-// Bookkeeping is self-contained (no reliance on VoidManager event timing or the
-// game's SectorVisited flag): new runs are detected by GameSession identity, and
-// each sector pays out its departure at most once per run so bouncing between
-// two sectors can't farm the meter. Only a Completed objective pays out; leaving
-// a sector Started (abandoned), Failed, or with NoObjective burns the payout.
+// Passive Forge Meter fill on sector exit, landing during warp so the crew has transit time
+// to react to a level-up. Not a Harmony patch: OnSectorExited is a public static event.
+// New runs are detected by GameSession identity and each sector pays out at most once per
+// run, so bouncing between two sectors can't farm the meter. Only a Completed objective pays.
 internal static class ForgeSectorHook
 {
     private static bool _initialized;
@@ -41,7 +35,7 @@ internal static class ForgeSectorHook
         GameSessionSectorManager.OnSectorEntered -= OnSectorEnteredDiagnostic;
     }
 
-    // Diagnostic only — confirms enter events flow while we award on exits.
+    // Diagnostic only: confirms enter events flow while awards happen on exit.
     private static void OnSectorEnteredDiagnostic(GameSessionSector sector) =>
         BepinPlugin.Log.LogDebug($"[Forge] SectorEntered: id={(sector == null ? "null" : sector.Id.ToString())}");
 
@@ -61,8 +55,7 @@ internal static class ForgeSectorHook
 
             if (session == null || session.IsHub) return;
 
-            // Host-authoritative: this event fires on every client, but only the
-            // master awards and increments; others receive it via the broadcast.
+            // This event fires on every client, but only the master awards and increments.
             if (!Net.ForgeNetSync.IsAuthority)
             {
                 BepinPlugin.Log.LogDebug($"[Forge] Sector {departed.Id} exit — client defers meter/scalar to host.");
@@ -71,8 +64,8 @@ internal static class ForgeSectorHook
 
             if (!ReferenceEquals(session, _lastSession))
             {
-                // First exit of a new run = leaving the empty starting zone to go
-                // pick the first mission. Nothing accomplished yet — no award.
+                // The first exit of a run leaves the empty starting zone, with nothing
+                // accomplished yet, so it earns no award.
                 _lastSession = session;
                 _awardedSectorIds.Clear();
                 _awardedSectorIds.Add(departed.Id);
@@ -80,9 +73,8 @@ internal static class ForgeSectorHook
                 return;
             }
 
-            // Deliberately no destination check: Endless jumps go through the exit
-            // gate without plotting a map destination, so DestinationSector is
-            // legitimately unset (-1) at spin-up — gating on it ate every award.
+            // Deliberately no destination check: Endless jumps leave DestinationSector
+            // legitimately unset at spin-up, so gating on it would eat every award.
             if (!_awardedSectorIds.Add(departed.Id))
             {
                 BepinPlugin.Log.LogInfo($"[Forge] Sector {departed.Id} already paid out — no meter award.");
@@ -109,12 +101,10 @@ internal static class ForgeSectorHook
             ForgeMeterController.AddMeter(
                 TerminusConfig.MeterPerSectorJump, "sector jump");
 
-            // Sector-jump scalar bumps only count after the escalation activation
-            // threshold has been crossed; meter fill (Forge Level) is unaffected —
-            // that's Forge state, not escalation state. Unlike the meter award
-            // above, this is NOT gated on Forge presence: escalation accumulates
-            // in the background so a Forge installed mid-run picks up whatever
-            // scalar has already built up.
+            // Scalar bumps only count after the activation threshold; meter fill is Forge
+            // state, not escalation state, and is unaffected. Unlike the meter award above,
+            // this is NOT gated on Forge presence, so one installed mid-run picks up the
+            // scalar already accumulated.
             if (SectorEscalation.IsScalingActive)
                 ForgeMeterController.IncrementDifficultyScalar();
 

@@ -16,27 +16,17 @@ using VoidCrewTerminus.Utils;
 
 namespace VoidCrewTerminus.Patches;
 
-// Binds the runtime UpgradeForgeBehavior to Forge module instances as they build,
-// and routes in-world clicks on the Forge's interactables into it.
-//
-// The prefab (Assets/voidcrewterminus.metem → UpgradeForgeModuleCell.prefab) is
-// loaded through the RuntimeAssets pipeline and carries only named anchor
-// transforms (RelicTubeTarget x6, InputTarget, optional CommitTarget) — no game
-// components. When the crew constructs it via a BuildBox, the postfixes below
-// attach a live UpgradeForgeBehavior and spawn ForgeInteractable click targets
-// on the anchors.
+// The metem prefab carries only named anchor transforms and no game components, so the
+// postfixes below attach UpgradeForgeBehavior and spawn click targets as modules build.
 [HarmonyPatch(typeof(BuildBox), nameof(BuildBox.BuildModule))]
 internal static class ForgeBuildBoxAttachBehavior
 {
     static void Postfix(CellModule __result) => ForgeAttachHelper.TryAttach(__result);
 }
 
-// Vanilla BuildBox.BuildModule resolves moduleRef through the CloneStarObjectContainer
-// and dereferences the resulting def — null for runtime-registered assets like the
-// Forge, so it would NRE right after instantiating. Runtime assets get their own
-// factory path (RuntimeAssetsRegister-backed) instead when moduleRef.IsRuntime;
-// every normal module still takes the vanilla flow, and the BuildModule postfixes
-// (level restore, behavior attach) still run either way.
+// Vanilla BuildModule dereferences a def that is null for runtime-registered assets and would
+// NRE right after instantiating, so runtime assets take their own factory path. Normal modules
+// still take the vanilla flow, and the BuildModule postfixes run either way.
 [HarmonyPatch(typeof(BuildBox), nameof(BuildBox.BuildModule))]
 internal static class ForgeBuildBoxRuntimeModulePatch
 {
@@ -65,13 +55,9 @@ internal static class ForgeCompositeBuildBoxAttachBehavior
     static void Postfix(CellModule __result) => ForgeAttachHelper.TryAttach(__result);
 }
 
-// CarryableInteract.StartInteraction is the game's single dispatch point for the
-// player's primary interact input, both empty-handed and while carrying. When the
-// target is one of our ForgeInteractables we take over completely (insert relic /
-// load box) and skip the vanilla flow. Everything else — including grabbing docked
-// items back out of the Forge, and the Commit button (held via a different input
-// pathway, EnvironmentInteract, not this Ability) — stays vanilla; UpgradeForgeBehavior.Update
-// reconciles state afterwards.
+// The game's single dispatch point for primary interact, empty-handed or carrying. Forge
+// interactables are taken over completely; everything else stays vanilla, including grabbing
+// docked items back out and the Commit button (held through EnvironmentInteract instead).
 [HarmonyPatch(typeof(CarryableInteract), nameof(CarryableInteract.StartInteraction))]
 internal static class ForgeCarryableInteractPatch
 {
@@ -94,9 +80,8 @@ internal static class ForgeCarryableInteractPatch
 
 internal static class ForgeAttachHelper
 {
-    // MovingSpacePlatform.colliderObjects — private; reflected only so
-    // RegisterShipPlatformCollision can log whether AddColliderObject actually
-    // did something or found the module already registered.
+    // Private; reflected only so RegisterShipPlatformCollision can log whether
+    // AddColliderObject did something or found the module already registered.
     private static readonly FieldInfo _colliderObjectsField =
         AccessTools.Field(typeof(MovingSpacePlatform), "colliderObjects");
 
@@ -120,20 +105,16 @@ internal static class ForgeAttachHelper
         }
         behavior.BuildInteractables();
 
-        // Bundle prefabs get none of the mediator wiring vanilla modules do, so the
-        // Forge's light had no idea the ship's power system existed.
+        // Bundle prefabs get none of the mediator wiring vanilla modules do, power included.
         ForgePowerLights.Attach(module);
 
         bool relayered = RelayerHullColliders(module);
         RegisterShipPlatformCollision(module, forceRebuild: relayered);
     }
 
-    // The bundle prefab's solid colliders are all on layer 0 (Default), which the
-    // game's collision matrix doesn't pair with carryables — dropped items fall
-    // through the Forge. Vanilla module hull geometry is on "MovingPlatform".
-    // Forced by name at runtime for the same reason BuildAnchorClickRegion forces
-    // "InteractiveObjects": the SDK's layer table doesn't match the game's. The
-    // interaction colliders are already triggers by this point and are skipped.
+    // Bundle colliders arrive on layer 0, which the collision matrix doesn't pair with
+    // carryables, so dropped items fall through. Vanilla hull geometry is on "MovingPlatform",
+    // resolved by name because the SDK's layer table doesn't match the game's.
     private static bool RelayerHullColliders(CellModule module)
     {
         int mp = LayerMask.NameToLayer("MovingPlatform");
@@ -156,12 +137,10 @@ internal static class ForgeAttachHelper
         return changed > 0;
     }
 
-    // A module riding the ship only gets solid-geometry collision through
-    // MovingSpacePlatform's own PhysicsScene, which mirrors in only the colliders
-    // explicitly handed to AddColliderObject (normally done by CellModule.OnPhotonInstantiate
-    // -> BuildSocket.SetModule). Since a bundle-loaded module has repeatedly turned
-    // out not to get things vanilla modules get for free (see ModulePrefabGrafter),
-    // this registers defensively rather than trusting that chain blind.
+    // Solid-geometry collision comes only from MovingSpacePlatform's PhysicsScene, which
+    // mirrors in just the colliders handed to AddColliderObject (normally via
+    // BuildSocket.SetModule). Registered defensively because bundle-loaded modules miss
+    // wiring vanilla modules get for free.
     private static void RegisterShipPlatformCollision(CellModule module, bool forceRebuild = false)
     {
         var platform = module.GetComponentInParent<MovingSpacePlatform>();
@@ -174,12 +153,9 @@ internal static class ForgeAttachHelper
         bool alreadyRegistered = _colliderObjectsField?.GetValue(platform) is IDictionary dict
             && dict.Contains(module.gameObject);
 
-        // AddColliderObject is NOT idempotent: it clones fresh shadow colliders into
-        // the sim scene before colliderObjects.TryAdd(obj, list), and silently drops
-        // the clones it just made if the key's already present — they stay in the
-        // scene untracked, leaking an uncollectable set every call. So Add only when
-        // missing; to relayer, Remove first (which destroys the tracked clones) then
-        // Add so the rebuilt shadows carry the new layer.
+        // AddColliderObject is NOT idempotent: it clones shadow colliders before the TryAdd
+        // and silently drops the clones if the key is present, leaking them into the scene
+        // untracked. So add only when missing; to relayer, Remove first then Add.
         if (!alreadyRegistered)
             platform.AddColliderObject(module.gameObject);
         else if (forceRebuild)
@@ -206,10 +182,8 @@ internal static class ForgeAttachHelper
         module.CsTags != null &&
         System.Array.IndexOf(module.CsTags, CsTagRegistry.ForgeModule) >= 0;
 
-    // Tag check first; otherwise fall back to the prefab name. The name fallback
-    // can't be replaced by a tag-only check: the metem prefab carries only the
-    // VoidCrewAsset marker and anchor transforms — game CsTag assets can't be
-    // serialized into it, so a fresh build's CellModule arrives untagged.
+    // The name fallback can't be replaced by a tag-only check: game CsTag assets can't be
+    // serialized into a metem prefab, so a fresh build's CellModule arrives untagged.
     private static bool IsForgeModule(CellModule module)
     {
         if (module == null) return false;

@@ -4,24 +4,17 @@ using VoidCrewTerminus.Loot;
 
 namespace VoidCrewTerminus.Forge;
 
-// The single place forge state turns into player-facing text. Every UI surface
-// (hover tooltips, fabricator panel, dev commands) formats through here so the
-// vocabulary can't drift between them.
-//
-// Mk numbering maps DIRECTLY onto module level: L3 = Mk III (vanilla's cap),
-// L10 = Mk X. The mod extends vanilla's existing Mk ladder rather than running a
-// parallel scale — a forged "Mk VII" reads as strictly better than a vanilla
-// "Mk III" with no translation needed.
+// The single place forge state turns into player-facing text, so vocabulary can't drift
+// between surfaces. Mk numbering maps directly onto module level: L3 = Mk III (vanilla's
+// cap), L10 = Mk X, extending vanilla's ladder rather than running a parallel scale.
 public static class ForgeLabels
 {
-    // Colours kept close to vanilla's own tooltip palette (it uses #BDE7FBFF for
-    // hints and plain red for warnings).
+    // Close to vanilla's tooltip palette, which uses #BDE7FBFF for hints and red for warnings.
     private const string ForgeColor = "#7FD4FF";
     private const string BurdenColor = "#FF6B6B";
     private const string MutedColor = "#9AA5AD";
 
-    // Level range is bounded 3-10 (ForgeCostCurve) and vanilla marks are 1-3, so
-    // a lookup table beats a general roman-numeral algorithm here.
+    // Levels are bounded 3-10 and vanilla marks 1-3, so a table beats a numeral algorithm.
     private static readonly string[] _roman =
         { "0", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X" };
 
@@ -30,17 +23,13 @@ public static class ForgeLabels
 
     public static string MarkLabel(int level) => "Mk " + Roman(level);
 
-    // Matches a mark already present at the END of a name: "Mk III", "MK3",
-    // "Mk. VII". Anchored so it can only ever strip a trailing mark token.
-    // English-centric by necessity — vanilla's display names live inside asset
-    // bundles and aren't inspectable, so a localised name just fails to match and
-    // falls through to a plain append (may duplicate, never corrupts). Case-insensitive
-    // since exact vanilla casing is unknown and over-matching is the safe direction.
+    // Anchored so it can only ever strip a trailing mark token ("Mk III", "MK3", "Mk. VII").
+    // English-centric by necessity: vanilla display names live inside asset bundles, so a
+    // localised name fails to match and falls through to a plain append, never a corruption.
     private static readonly Regex _trailingMark =
         new(@"\s*mk\.?\s*([ivxlc]+|\d+)\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
-    // Replace any trailing mark in a vanilla display name with the forge level's
-    // mark. Safe whether or not the name already carries one.
+    // Safe whether or not the name already carries a mark.
     public static string RewriteMark(string header, int level)
     {
         string mark = MarkLabel(level);
@@ -48,8 +37,7 @@ public static class ForgeLabels
         return _trailingMark.Replace(header, "") + " " + mark;
     }
 
-    // "1 relic" / "2 relics". Shared so the commit lines, the host-committed
-    // notification and anything else counting relics pluralise the same way.
+    // Shared so every relic count pluralises the same way.
     public static string Plural(int count, string noun) =>
         $"{count} {noun}{(count == 1 ? "" : "s")}";
 
@@ -67,10 +55,8 @@ public static class ForgeLabels
         _ => tier.ToString(),
     };
 
-    // True when this state is worth surfacing at all. Mirrors ForgeModuleState's
-    // own private HasAnyOverlay predicate — an untouched module renders exactly
-    // as vanilla, so "unforged" and "not yet synced on a client" collapse to the
-    // same silent path.
+    // Mirrors ForgeModuleState's private HasAnyOverlay. An untouched module renders as
+    // vanilla, so "unforged" and "not yet synced on a client" collapse to one silent path.
     public static bool HasOverlay(int level, IReadOnlyList<string> perkSlots, IReadOnlyList<BurdenType> burdens)
     {
         if (level > ForgeCostCurve.MinLevel) return true;
@@ -81,10 +67,8 @@ public static class ForgeLabels
         return false;
     }
 
-    // The forge block appended to a build box / module tooltip body.
-    // Perk and burden NAMES only — the perks' actual effects already appear in
-    // vanilla's stat block just above as real StatMods, so descriptions here
-    // would restate them at double the length.
+    // Names only: the perks' effects already appear as real StatMods in vanilla's stat block
+    // just above, so descriptions here would restate them.
     public static string BuildOverlayBody(int level, IReadOnlyList<string> perkSlots, IReadOnlyList<BurdenType> burdens)
     {
         var sb = new System.Text.StringBuilder();
@@ -114,13 +98,9 @@ public static class ForgeLabels
         return sb.ToString();
     }
 
-    // "Forge Tier" is deliberately NOT called rarity: the relic already shows a
-    // vanilla RarityType (different criteria, different shape — it includes Epic).
-    // This value instead governs how many perk slots a commit can unlock.
-    //
-    // The curse line states no odds: only the FIRST cursed relic in a commit
-    // contributes its burden, and a per-relic tooltip can't see what else is
-    // loaded in the tube, so a probability here would often be wrong.
+    // Deliberately not called rarity: the relic already shows a vanilla RarityType with
+    // different criteria. The curse line states no odds because only the first cursed relic
+    // in a commit contributes, and a per-relic tooltip can't see what else is loaded.
     public static string BuildRelicBody(RelicTier tier, BurdenType curse)
     {
         var sb = new System.Text.StringBuilder();
@@ -130,13 +110,9 @@ public static class ForgeLabels
         return sb.ToString();
     }
 
-    // Human-readable perk-roll summary. Reads Name / Description straight off the
-    // outcome's own PerkDefinition rather than looking the id up in PerkPool —
-    // that lookup forces PerkPool's static initialiser, which touches game
-    // StatTypes and so cannot run in the test host.
-    //
-    // The "no roll" string is only ever reached by the causal log line in
-    // ForgeCommit.Execute; DescribeCommit gates it out of player-facing text.
+    // Reads Name/Description off the outcome's own PerkDefinition rather than looking the id
+    // up in PerkPool: that lookup forces a static initialiser that can't run in the test host.
+    // The "no roll" string reaches only ForgeCommit.Execute's log line, never the player.
     public static string DescribePerkResult(CommitOutcome outcome)
     {
         if (outcome.RolledPerk != null)
@@ -147,13 +123,10 @@ public static class ForgeLabels
         return "no roll";
     }
 
-    // The notification lines for a commit attempt, in display order. Both commit
-    // entry points render through here — the in-world commit button and the
-    // !forgecommit dev command — so their wording can't drift apart.
-    //
-    // `relicsRemaining` is the Forge's relic count AFTER the attempt. Nothing is
-    // consumed on a failure, so on those arms it's equally the count that was
-    // there all along — which is what InsufficientRelics needs to report.
+    // Both commit entry points render through here so their wording can't drift apart.
+    // `relicsRemaining` is the count AFTER the attempt; nothing is consumed on a failure, so
+    // on those arms it is equally the count that was always there, which InsufficientRelics
+    // reports.
     public static IReadOnlyList<string> DescribeCommit(
         CommitOutcome outcome, int currentLevel, int relicsRemaining)
     {
@@ -166,8 +139,7 @@ public static class ForgeLabels
                     $"(consumed {Plural(outcome.RelicsConsumed, "relic")}, {relicsRemaining} remaining). " +
                     "Rebuild the module to apply.",
                 };
-                // A commit with no eligible slot shouldn't announce a non-event,
-                // so an unattempted roll stays silent.
+                // An unattempted roll stays silent rather than announcing a non-event.
                 if (outcome.RolledPerk != null || outcome.RollAttempted)
                     lines.Add(DescribePerkResult(outcome));
                 return lines;

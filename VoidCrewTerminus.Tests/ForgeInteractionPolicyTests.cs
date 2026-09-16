@@ -3,15 +3,8 @@ using Xunit;
 
 namespace VoidCrewTerminus.Tests;
 
-// The Upgrade Forge's click matrix — the rules that used to sit inline in
-// UpgradeForgeBehavior.HandleInteraction, where a MonoBehaviour body cannot be
-// JIT-compiled in the test host and so nothing could reach them. Every arm below
-// was previously verifiable only by standing in front of a Forge and clicking.
-//
-// No [Collection] attribute: the policy is pure and writes no statics. It reads
-// TerminusConfig.CostCurveRaw through ForgeCostCurve, which falls back to the
-// shipped default (1,1,2,2,3,3,4) when BepInEx has bound nothing — the same
-// assumption UpgradeCommitCalculatorTests documents.
+// No [Collection]: the policy is pure and writes no statics. It reads the cost curve through
+// ForgeCostCurve, which falls back to the shipped default (1,1,2,2,3,3,4) under the test host.
 public class ForgeInteractionPolicyTests
 {
     private const int DefaultCapacity = 4;
@@ -26,10 +19,8 @@ public class ForgeInteractionPolicyTests
         bool occupied = false, int carriedBoxLevel = ForgeCostCurve.MinLevel) =>
         new(payload, carriedBoxLevel, target, occupied);
 
-    // ---- carrying a module box -------------------------------------------
-
-    // A mismatch names the target that would have worked rather than just
-    // refusing — the tubes and the commit button are inches apart in-world.
+    // A mismatch names the target that works rather than just refusing; the tubes and the
+    // commit button are inches apart in-world.
     [Theory]
     [InlineData(ForgeInteractableKind.RelicTube)]
     [InlineData(ForgeInteractableKind.CommitButton)]
@@ -53,8 +44,7 @@ public class ForgeInteractionPolicyTests
         Assert.Equal("The Forge already holds a module box.", d.Message);
     }
 
-    // The level quoted is the CARRIED box's, not the socket's — the socket reads
-    // level 0 until the load lands, so sourcing it from there would announce "L0".
+    // The level quoted is the carried box's: the socket reads 0 until the load lands.
     [Fact]
     public void Module_box_loads_and_reports_the_carried_box_level()
     {
@@ -65,8 +55,6 @@ public class ForgeInteractionPolicyTests
         Assert.Equal(ForgeAction.LoadModule, d.Action);
         Assert.Equal("Module loaded (L5). Insert relics and commit to upgrade.", d.Message);
     }
-
-    // ---- carrying a relic -------------------------------------------------
 
     [Theory]
     [InlineData(ForgeInteractableKind.ModuleSocket)]
@@ -124,9 +112,8 @@ public class ForgeInteractionPolicyTests
         Assert.Contains("Relic inserted (1/4).", d.Message);
     }
 
-    // Same for the projection: two relics on the default curve (1,1,...) carry an
-    // L3 module to L5, and the second insert must say so rather than quote the L4
-    // it was worth a moment ago.
+    // Same for the projection: two relics on the default curve carry an L3 module to L5,
+    // and the second insert must say so rather than quote the L4 of a moment ago.
     [Fact]
     public void Relic_insert_projects_from_the_post_insert_count()
     {
@@ -137,8 +124,6 @@ public class ForgeInteractionPolicyTests
         Assert.Equal(ForgeAction.InsertRelic, d.Action);
         Assert.Equal("Relic inserted (2/4). Projected level: L5.", d.Message);
     }
-
-    // ---- carrying anything else -------------------------------------------
 
     [Theory]
     [InlineData(ForgeInteractableKind.RelicTube)]
@@ -152,8 +137,6 @@ public class ForgeInteractionPolicyTests
         Assert.Equal(ForgeAction.None, d.Action);
         Assert.Equal("The Forge only accepts relics and module boxes.", d.Message);
     }
-
-    // ---- empty-handed ------------------------------------------------------
 
     [Fact]
     public void Empty_handed_on_an_empty_socket_explains_how_to_fill_it()
@@ -177,9 +160,8 @@ public class ForgeInteractionPolicyTests
         Assert.Null(d.Message);
     }
 
-    // Retrieval is the Forge's own action, not the player grabbing the docked item
-    // past the machine's hull — an occluding hull collider is what made the module
-    // box unretrievable while the shallower tubes still worked.
+    // Retrieval is the Forge's own action, not the player reaching past the machine's hull,
+    // which occludes the ray to a deeply-socketed box.
     [Theory]
     [InlineData(ForgeInteractableKind.ModuleSocket)]
     [InlineData(ForgeInteractableKind.RelicTube)]
@@ -252,8 +234,6 @@ public class ForgeInteractionPolicyTests
         Assert.Equal("Forge: no module loaded, 0/4 relics.", d.Message);
     }
 
-    // ---- commit ------------------------------------------------------------
-
     // The three refusals delegate their wording to ForgeLabels rather than
     // carrying copies — asserting against DescribeCommit is the point, since a
     // literal here would be a fourth copy of the string.
@@ -276,9 +256,7 @@ public class ForgeInteractionPolicyTests
             d.Message);
     }
 
-    // The invariant the split exists to protect: the client path used to keep
-    // private copies of these refusals, and answered a box with no network
-    // identity with "load a module box" — wrong, and different from the host.
+    // The invariant the split exists to protect: host and client must refuse identically.
     [Theory]
     [InlineData(false, true, 1)]
     [InlineData(true, false, 1)]
@@ -311,7 +289,7 @@ public class ForgeInteractionPolicyTests
         Assert.Null(d.Message);
     }
 
-    // Phase 8-C: cursed markers and RNG live on the host, so a client asks.
+    // Cursed markers and RNG live on the host, so a client asks.
     [Fact]
     public void A_client_asks_the_host_to_commit()
     {

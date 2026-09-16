@@ -3,21 +3,13 @@ using VoidManager.Utilities;
 
 namespace VoidCrewTerminus.Forge.Burdens;
 
-// RandomShutoff burden — periodically cuts power to the module. It ONLY ever
-// turns the module OFF; restoring it is the crew's job, and the burden never
-// touches an already-off module, so it can't fight a crew decision.
+// Only ever turns the module OFF; restoring is the crew's job, and it never touches an
+// already-off module, so it can't fight a crew decision.
 //
-// Authority: OWNER-ONLY. CellModule.TurnOff() is PowerDrain.IsOn.RequestChange(),
-// a local ChangeResponsive request that can be vetoed by ChangeValidators, and
-// whose value is owner-authoritative and replicated by the game's PowerDrain
-// sync. Ticking on every client would mutate local state the owner's sync then
-// overwrites (thrash), so only the owner drives the schedule.
-//
-// Verification: RequestChange exposes onSuccess/onFail. A vetoed request is
-// otherwise a silent no-op, so declines are logged loudly. The "powered down"
-// notification is driven by the module's REAL power state
-// (PowerDrain.IsOn.OnChange), never by the timer, so a declined request can
-// never announce a shutoff that didn't happen.
+// Owner-only: TurnOff is a RequestChange whose value is owner-authoritative and replicated by
+// the game's PowerDrain sync, so ticking on every client would thrash. The "powered down"
+// notification comes from PowerDrain.IsOn.OnChange, never the timer, so a request vetoed by a
+// ChangeValidator can't announce a shutoff that didn't happen.
 public sealed class RandomShutoffBehavior : MaintenanceBurdenBehavior
 {
     public override BurdenType BurdenType => BurdenType.RandomShutoff;
@@ -26,10 +18,8 @@ public sealed class RandomShutoffBehavior : MaintenanceBurdenBehavior
     private float _nextShutoffAt;
     private bool _triggerNextImmediately;
 
-    // Earliest Time.time at which a shutoff may land. Set when the crew restores
-    // power, so a shutoff can't fire the instant someone walks over and switches
-    // the module back on — that reads as the burden trolling the player rather
-    // than as a maintenance tax.
+    // Earliest Time.time a shutoff may land, set when the crew restores power so one can't
+    // fire the instant someone switches the module back on.
     private float _graceUntil;
 
     // True only for the instant we apply our own IsOn change, so the OnChange
@@ -54,17 +44,15 @@ public sealed class RandomShutoffBehavior : MaintenanceBurdenBehavior
             Module.PowerDrain.IsOn.OnChange -= OnPowerStateChanged;
     }
 
-    // Announce only OUR shutoff, and only once the real value has actually flipped
-    // (so a vetoed request stays silent). We never announce power-on — restoring
-    // is the crew's action, not the burden's.
+    // Announces only our own shutoff, and only once the real value has flipped, so a vetoed
+    // request stays silent. Power-on is never announced: restoring is the crew's action.
     private void OnPowerStateChanged(bool isOn)
     {
         if (_applyingOwnChange && !isOn)
             Messaging.Notification($"{ModuleName()} powered down — switch it back on manually.");
 
-        // Crew (or anything that isn't us) restored power: start the grace window
-        // and re-roll the interval from now, so the countdown measures UPTIME
-        // rather than having elapsed invisibly while the module sat dark.
+        // Someone other than us restored power: start the grace window and re-roll from now,
+        // so the countdown measures uptime rather than elapsing while the module sat dark.
         if (isOn && !_applyingOwnChange)
         {
             _graceUntil = Time.time + TerminusConfig.BurdenRestoreGrace;
@@ -73,11 +61,10 @@ public sealed class RandomShutoffBehavior : MaintenanceBurdenBehavior
         }
     }
 
-    // Called by !triggerburden — forces the next shutoff on the next Update tick.
+    // Called by !triggerburden; forces the next shutoff on the next Update tick.
     public void TriggerImmediately() => _triggerNextImmediately = true;
 
-    // !listburdens helpers. IsShutOff reflects the module's real power state — the
-    // burden doesn't "hold" a shutoff, so this is just "is it currently off".
+    // IsShutOff reflects real power state: the burden doesn't "hold" a shutoff.
     public float SecondsUntilNextShutoff => Mathf.Max(0f, _nextShutoffAt - Time.time);
     public bool IsShutOff => !IsPowered();
 
@@ -88,10 +75,8 @@ public sealed class RandomShutoffBehavior : MaintenanceBurdenBehavior
 
         LogOwnershipOnce();
 
-        // Nothing to do while the module is dark, and crucially we do NOT run the
-        // countdown here — rescheduling against an already-off module would let
-        // the interval elapse invisibly while it sat dark. The schedule instead
-        // restarts from OnPowerStateChanged when power actually comes back.
+        // The countdown deliberately does NOT run while the module is dark; it restarts from
+        // OnPowerStateChanged when power comes back, so the interval measures uptime.
         if (!IsPowered())
         {
             LogIdleOnce();
@@ -102,7 +87,7 @@ public sealed class RandomShutoffBehavior : MaintenanceBurdenBehavior
         bool forced = _triggerNextImmediately;
         if (!forced)
         {
-            // Grace window after a crew restore — see _graceUntil.
+            // Grace window after a crew restore; see _graceUntil.
             if (Time.time < _graceUntil) return;
             if (Time.time < _nextShutoffAt) return;
         }
@@ -124,8 +109,8 @@ public sealed class RandomShutoffBehavior : MaintenanceBurdenBehavior
             $"[Burden] {ModuleName()} is off — burden idle until the crew restores power.");
     }
 
-    // Ownership is the gate for who drives the schedule; recording it once per
-    // instance lets a multi-client run confirm exactly one machine claims it.
+    // Recorded once per instance so a multi-client run can confirm exactly one machine
+    // claims the schedule.
     private void LogOwnershipOnce()
     {
         if (_loggedOwnership) return;
@@ -137,13 +122,9 @@ public sealed class RandomShutoffBehavior : MaintenanceBurdenBehavior
 
     private bool IsPowered() => Module != null && Module.PowerDrain != null && Module.PowerDrain.IsOn.Value;
 
-    // Requests the shutoff and surfaces the result. A declined request would
-    // otherwise be invisible; log it so a validator veto can't quietly neuter
-    // the burden. ForgeModuleState.CanCarry already keeps this burden off
-    // AutoPowerOn modules (the one veto we know about), so a decline here means
-    // some OTHER ChangeValidator is blocking it — worth knowing about, but not
-    // worth a warning every retry-interval for the rest of the run, so this
-    // logs only the first decline per power-cycle (reset in OnPowerStateChanged).
+    // CanCarry already keeps this burden off AutoPowerOn modules, so a decline here means some
+    // other ChangeValidator is blocking it. Logged once per power-cycle: a veto is otherwise
+    // invisible, but not worth a warning every interval for the rest of the run.
     private void RequestPowerOff()
     {
         if (Module == null || Module.PowerDrain == null) return;

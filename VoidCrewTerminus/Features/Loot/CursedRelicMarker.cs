@@ -3,11 +3,9 @@ using VoidCrewTerminus.Forge;
 
 namespace VoidCrewTerminus.Loot;
 
-// Marker component attached to relic GameObjects flagged cursed at spawn time.
-// Presence of the component = cursed. Once attached, the flag AND the baked
-// burden type are immutable for the lifetime of that specific relic instance —
-// the burden is a property of the relic, picked from its RelicTierEntry.
-// BurdenAffinity at spawn, not re-rolled at commit time.
+// Presence of the component means cursed. Once attached, the flag and the baked burden are
+// immutable for that relic instance: the burden is picked at spawn from the relic's
+// BurdenAffinity, never re-rolled at commit time.
 public sealed class CursedRelicMarker : MonoBehaviour
 {
     public BurdenType BakedBurden { get; private set; } = BurdenType.RandomShutoff;
@@ -22,7 +20,7 @@ public sealed class CursedRelicMarker : MonoBehaviour
         return marker != null ? marker.BakedBurden : BurdenType.None;
     }
 
-    // If already present, no-op — the baked burden is immutable once set.
+    // No-op if already present: the baked burden is immutable once set.
     public static void MarkCursed(GameObject go, BurdenType burden)
     {
         if (go == null) return;
@@ -33,7 +31,7 @@ public sealed class CursedRelicMarker : MonoBehaviour
         marker.BakedBurden = burden;
     }
 
-    // Only used by dev commands — production cursed state is baked in at spawn.
+    // Dev commands only; production cursed state is baked in at spawn.
     public static void Uncurse(GameObject go)
     {
         if (go == null) return;

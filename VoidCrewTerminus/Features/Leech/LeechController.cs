@@ -16,9 +16,8 @@ internal enum LeechVariant
     HullBiter,
 }
 
-// One attached parasite. Damage is host-authoritative; every client runs the
-// MonoBehaviour so the visual and the debuff exist everywhere, but only the master
-// mutates hit points.
+// Every client runs the MonoBehaviour so the visual and the debuff exist everywhere, but
+// only the master mutates hit points.
 internal sealed class LeechController : MonoBehaviour
 {
     internal LeechVariant Variant { get; private set; } = LeechVariant.ModuleBiter;
@@ -85,9 +84,8 @@ internal sealed class LeechController : MonoBehaviour
         }
         else
         {
-            // Ranged rather than fixed so several Hull-Biters don't bite in lockstep.
-            // Deliberately not scalar-scaled — chomp damage already scales, and
-            // compounding cadence on top inverts the intent.
+            // Ranged rather than fixed so several Hull-Biters don't bite in lockstep, and
+            // deliberately not scalar-scaled: chomp damage already scales.
             _nextTickAt = Time.time + RandomChompDelay();
             Chomp();
         }
@@ -95,8 +93,8 @@ internal sealed class LeechController : MonoBehaviour
 
     private float RandomChompDelay() => Random.Range(_chompMin, _chompMax);
 
-    // Module HP damage stacks by design — each Leech ticks its own bite, unlike the
-    // effectiveness debuff which the applicator ref-counts to a single application.
+    // Stacks by design: each Leech ticks its own bite, unlike the effectiveness debuff the
+    // applicator ref-counts to a single application.
     private void BiteModule()
     {
         float damage = TargetModule.MaxHitPointsValue * _damageFraction;
@@ -108,18 +106,17 @@ internal sealed class LeechController : MonoBehaviour
             $"[Leech] bit {TargetModule.name} for {damage:0.#} — {TargetModule.HitPoints:0}/{TargetModule.MaxHitPointsValue:0} left.");
     }
 
-    // Routes through the ship's ordinary damage path so resistances apply and
-    // breaches accrue by vanilla's own accounting. A Leech must never promote a
-    // breach itself: repairing one restores 10-20% of max HP, so a breach-creating
-    // Leech would net-heal the ship.
+    // Routes through the ship's ordinary damage path so resistances apply and breaches accrue
+    // by vanilla's accounting. A Leech must never promote a breach itself: repairing one
+    // restores 10-20% of max HP, so a breach-creating Leech would net-heal the ship.
     private void Chomp()
     {
         float max = _ship.MaxHitPointsValue;
         float floor = max * TerminusConfig.LeechHullFloor;
         float damage = max * _damageFraction;
 
-        // The Hull Floor: Leeches strip survival margin but never land the killing
-        // blow. Ordinary combat damage still kills freely.
+        // Leeches strip survival margin but never land the killing blow; ordinary combat
+        // damage still kills freely.
         float allowed = Mathf.Max(0f, _ship.HitPoints - floor);
         if (allowed <= 0f)
         {
@@ -140,8 +137,8 @@ internal sealed class LeechController : MonoBehaviour
             $"[Leech] chomped hull for {damage:0.#} — {_ship.HitPoints:0}/{max:0}, floor {floor:0}.");
     }
 
-    // Removal, self-destruct and teardown all land here so the ref count can never
-    // be left holding a debuff for a leech that no longer exists.
+    // Removal, self-destruct and teardown all land here, so the ref count can never be left
+    // holding a debuff for a leech that is gone.
     internal void Remove()
     {
         Detach();

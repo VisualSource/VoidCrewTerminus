@@ -10,19 +10,16 @@ using VoidCrewTerminus.Forge;
 
 namespace VoidCrewTerminus.Patches;
 
-// Hooks LootManager's per-sector list build. Runs once per sector on every
-// client — the mutation is seeded from quest+sector so all clients converge on
-// the same reshaped lists deterministically. Only the host actually consumes
-// the lists to spawn drops.
+// Runs once per sector on every client, seeded from quest+sector so all clients converge on
+// the same reshaped lists. Only the host consumes them to spawn drops.
 [HarmonyPatch(typeof(LootManager), "SetupCurrentSectorLootLists")]
 internal static class LootTableEscalationPatch
 {
     private static readonly AccessTools.FieldRef<LootManager, Dictionary<LootRarities, List<CraftableItemRef>>> LootListsRef =
         AccessTools.FieldRefAccess<LootManager, Dictionary<LootRarities, List<CraftableItemRef>>>("CurrentSectorLootLists");
 
-    // Surfaced by !lootdump so the effect of the boss-count ceiling is visible
-    // even when it's a deliberate no-op (e.g. at 2 bosses the ceiling is
-    // Legendary, so nothing downgrades — the summary says so).
+    // Surfaced by !lootdump so the ceiling's effect is visible even when it is a deliberate
+    // no-op, as at 2 bosses where the ceiling is already Legendary.
     public static string LastReshapeSummary { get; private set; } = "(no sector reshaped yet)";
 
     static void Postfix(LootManager __instance)
@@ -32,20 +29,17 @@ internal static class LootTableEscalationPatch
             var lists = LootListsRef(__instance);
             if (lists == null) return;
 
-            // Bosses are only defeatable in EndlessQuest (see BossDefeatHook), so in
-            // other quest types BossesDefeated is permanently 0, which would crush
-            // every sector's loot to Common forever — skip non-Endless runs.
+            // Bosses are only defeatable in EndlessQuest, so elsewhere BossesDefeated stays
+            // 0 and would crush every sector's loot to Common forever.
             if (!(GameSessionManager.ActiveSession?.ActiveQuest is EndlessQuest))
             {
                 LastReshapeSummary = "(non-Endless quest — loot biasing skipped)";
                 return;
             }
 
-            // Deliberately not gated on escalation warm-up (unlike density/HP/damage):
-            // the relic ceiling is driven by boss count from the very first sector.
-            // Gating on IsScalingActive (>= 2 bosses) would suppress this exactly
-            // until the ceiling is already Legendary, making the downgrade a
-            // permanent no-op.
+            // Deliberately not gated on the escalation warm-up, unlike density and HP: the
+            // relic ceiling is driven by boss count from the first sector, and gating on
+            // IsScalingActive would suppress this until the ceiling is already Legendary.
             int scalar = ForgeMeterController.DifficultyScalar;
             int bosses = SectorEscalation.BossesDefeated;
             int seed = ResolveSeed();
@@ -93,8 +87,8 @@ internal static class LootTableEscalationPatch
         }
     }
 
-    // Non-relic entries are ignored for the tier counts but tracked separately so
-    // the summary can distinguish "no relics" from "ceiling allows all".
+    // Non-relic entries are ignored, so the summary can distinguish "no relics" from
+    // "ceiling allows all".
     private readonly struct TierHistogram
     {
         public readonly int Common, Rare, Legendary;
@@ -119,8 +113,8 @@ internal static class LootTableEscalationPatch
         return new TierHistogram(c, r, l);
     }
 
-    // Mirrors the vanilla shuffle's seed (quest.Seed + sector.Id) so the reshape
-    // is deterministic across clients and stable within a run.
+    // Mirrors the vanilla shuffle's seed so the reshape is deterministic across clients and
+    // stable within a run.
     private static int ResolveSeed()
     {
         int seed = 0;

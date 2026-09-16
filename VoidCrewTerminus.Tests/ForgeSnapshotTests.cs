@@ -102,8 +102,6 @@ public class ForgeSnapshotTests
             () => ForgeSnapshot.Empty.WithPerk(PerkPool.SlotCount, "x"));
     }
 
-    // ---- burdens (Phase 7-C) --------------------------------------------
-
     [Fact]
     public void Empty_HasNoBurdens()
     {
@@ -173,18 +171,8 @@ public class ForgeSnapshotTests
         Assert.Equal(BurdenType.RandomShutoff, snap.Burdens[0]);
     }
 
-    // ---- wire form -------------------------------------------------------
-    //
-    // These are the tests the net layer never had. The payload layout used to be
-    // hand-rolled in three places inside ForgeNetSync, so adding a field here
-    // compiled fine and silently dropped it on the wire — producing a client
-    // rendering a stale overlay, the hardest class of bug in this mod to
-    // diagnose.
-    //
-    // The round-trip test alone would NOT catch that: it asserts the fields it
-    // already knows about, which is exactly how the hand-rolled copies stayed
-    // green while dropping state. ToPayload_CarriesEveryPublicSnapshotField is
-    // the actual guard — it fails on a field nobody taught the codec about.
+    // The round-trip test alone cannot catch a dropped field: it asserts only the fields it
+    // already knows about. ToPayload_CarriesEveryPublicSnapshotField is the actual guard.
 
     // Fails the moment ForgeSnapshot gains (or loses) a public instance property.
     // Fixing it means three things in lock-step: carry the field in ToPayload,
@@ -225,10 +213,8 @@ public class ForgeSnapshotTests
         Assert.Equal(original.Burdens, decoded.Burdens);
     }
 
-    // Empty slots cross the wire as "" and must come back as null. Both spellings
-    // read as empty elsewhere in the mod, but only one may cross — the two decode
-    // sites used to disagree about this (the commit-result path normalised, the
-    // module-overlay path did not).
+    // Empty slots cross the wire as "" and must come back as null. Both read as empty
+    // elsewhere in the mod, but only one spelling may cross.
     [Fact]
     public void TryFromPayload_NormalisesEmptyStringSlotsBackToNull()
     {

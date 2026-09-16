@@ -2,23 +2,16 @@ using System;
 
 namespace VoidCrewTerminus.Loot;
 
-// Pure math for the spawn-time cursed roll. Kept Unity-free so the chance
-// formula is testable without the game runtime.
+// Pure and Unity-free so the chance formula is testable without the game runtime.
+// Total chance = clamp(baseChance + perRelicModifier + scalarBonus, 0, maxChance), rolled
+// against a caller-supplied nextRandom in [0,1).
 //
-// Total chance = clamp(baseChance + perRelicModifier + scalarBonus, 0, maxChance).
-// Roll happens against a provided nextRandom (0..1) from the caller — patches
-// use UnityEngine.Random; tests pass a stub.
+// Deliberately NOT gated on IsScalingActive: a curse is a property of the relic, so the risk
+// exists from the first sector. DifficultyScalar only climbs once escalation activates, which
+// yields a flat warm-up baseline and rising risk with depth without an on/off switch.
 //
-// Curses are deliberately NOT gated on SectorEscalation.IsScalingActive: a
-// cursed relic is a property of the relic, so the risk exists from the first
-// sector. DifficultyScalar only starts climbing after escalation activates,
-// which means this naturally yields a flat baseline during warm-up and rising
-// risk with depth — without a hard on/off switch.
-//
-// maxChance is the load-bearing part: DifficultyScalar is uncapped and climbs
-// ~1/sector, so an unbounded formula reaches 100% cursed in a long run (every
-// relic cursed forever). The ceiling keeps curses a risk rather than a
-// certainty.
+// maxChance is the load-bearing part: DifficultyScalar is uncapped and climbs ~1/sector, so
+// an unbounded formula reaches 100% cursed in a long run.
 public static class CursedRelicRoll
 {
     public static float ChanceFor(

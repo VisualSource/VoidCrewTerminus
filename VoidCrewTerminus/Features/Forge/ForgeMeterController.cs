@@ -3,32 +3,25 @@ using VoidManager.Utilities;
 
 namespace VoidCrewTerminus.Forge;
 
-// The Forge levels up by filling a meter from two sources — passive (sector
-// jumps, see ForgeSectorHook) and active (alloys fed to the Alloy Terminal).
-// Level is the Forge's relic capacity, which gates how big an upgrade step a
-// single commit can afford (e.g. L9→L10 costs 4 relics → needs Forge L4).
+// The meter fills from sector jumps and alloys. Level is the Forge's relic capacity, which
+// gates how big an upgrade step one commit can afford (L9→L10 costs 4 relics, so needs L4).
 public static class ForgeMeterController
 {
     // Raised on level change so installed Forges can update tube visibility.
     public static event Action<int> LevelChanged;
 
-    // Raised on ANY meter change, level-up or not — LevelChanged alone misses
-    // in-between progress (e.g. a single alloy feed that doesn't cross a
-    // threshold), which a live progress display (ForgeScreenDisplay) needs to
-    // track. Fired from every path that mutates Meter: AddMeter (authority)
-    // and ApplyNetworkState (client mirror).
+    // Raised on ANY meter change: LevelChanged alone misses in-between progress, which a
+    // live progress display needs. Fired from every path that mutates Meter.
     public static event Action MeterChanged;
 
-    // Swappable so ApplyNetworkState and AddMeter stay callable from the unit test
-    // host: Messaging.Notification reaches into real Gameplay.Chat types that don't
-    // exist there, which would otherwise crash any test exercising either path (see
-    // ForgeNetSyncGateTests, which installs a no-op). Production never reassigns this.
+    // Swappable so ApplyNetworkState and AddMeter stay callable from the test host, where
+    // Messaging.Notification reaches Gameplay.Chat types that don't exist. Never reassigned
+    // in production.
     internal static Action<string> Notify = message => Messaging.Notification(message);
 
     public const int MinLevel = 1;
-    // One level per relic tube on the prefab. Levels beyond 4 don't unlock bigger
-    // single steps (the priciest cost-curve step is 4 relics) but allow multi-step
-    // commits — e.g. 6 relics = L3→L7 in one go.
+    // One level per relic tube on the prefab. Levels beyond 4 don't unlock bigger single
+    // steps (the priciest curve step is 4 relics) but do allow multi-step commits.
     public const int MaxLevel = 6;
 
     public static int Level { get; private set; } = MinLevel;
@@ -76,15 +69,9 @@ public static class ForgeMeterController
         BepinPlugin.Log.LogDebug($"[Forge] DifficultyScalar set to {DifficultyScalar} (dev)");
     }
 
-    // Client-side apply of a host-authoritative state broadcast. Never call on the
-    // authority; that path goes through AddMeter/IncrementDifficultyScalar.
-    //
-    // A level-up DOES get a Notification here, unlike every other field applied
-    // silently: Messaging.Notification only ever inserts into the caller's own
-    // chat window (VoidManager doesn't broadcast it), so without this the
-    // "Forge reached level N" line would only ever show up on whichever machine
-    // actually spent the alloys, never on other clients — even though the
-    // level-up applies to the whole crew's Forge.
+    // Client-side apply of a host broadcast; never call on the authority. The level-up alone
+    // is announced here because Messaging.Notification only inserts into the caller's own chat
+    // window, so the line would otherwise appear only on the machine that spent the alloys.
     internal static void ApplyNetworkState(int scalar, float meter, int level)
     {
         DifficultyScalar = Math.Max(0, scalar);
@@ -133,10 +120,8 @@ public static class ForgeMeterController
         ? $"The Forge reached level {level} — maximum capacity ({level} relics)."
         : $"The Forge reached level {level} — capacity {level} relics.";
 
-    // Mirrors the Fabricator's payment flow (GameSessionSuppliesManager.
-    // ModifyAlloyCount), which silently no-ops for non-master clients — hence
-    // the IsMine gate with an honest message routing non-hosts through the
-    // network request below instead.
+    // Mirrors the Fabricator's payment flow, whose ModifyAlloyCount silently no-ops for
+    // non-master clients; hence the IsMine gate routing them through the network request.
     public static bool TrySpendAlloys(out string message)
     {
         if (IsMaxed)
@@ -153,9 +138,7 @@ public static class ForgeMeterController
         }
         if (!supplies.photonView.IsMine)
         {
-            // Alloys are spent against the host's authoritative supplies; a client
-            // asks the host to spend on its behalf and gets the result via the
-            // state broadcast.
+            // Alloys are spent against the host's authoritative supplies, so a client asks.
             Net.ForgeNetSync.RequestAlloySpend();
             message = "Requested the host feed the Forge — the meter will update shortly.";
             return false;

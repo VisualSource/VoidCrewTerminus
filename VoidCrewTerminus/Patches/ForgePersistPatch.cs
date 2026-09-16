@@ -31,17 +31,13 @@ internal static class DeconstructCreateBuildBoxPatch
         var snap = state.Snapshot();
         ForgeStateStore.SaveSnapshot(__result.photonView.ViewID, snap);
 
-        // Deconstruct.CreateBuildBox ends in PhotonNetwork.Instantiate, so this
-        // postfix only runs on the machine that did the deconstructing — every
-        // other client's copy of the box arrives through Photon's remote-instantiation
-        // path and never computes this snapshot locally, so without broadcasting
-        // it here they'd see a vanilla-labeled box until someone re-forges it.
+        // CreateBuildBox ends in PhotonNetwork.Instantiate, so this postfix runs only on the
+        // deconstructing machine; without the broadcast every other client shows a vanilla box.
         if (__result.photonView != null)
             Net.ForgeNetSync.BroadcastBoxOverlay(__result.photonView.ViewID, snap);
     }
 }
 
-// Reconstruction: restore forge level onto the newly spawned CellModule.
 [HarmonyPatch(typeof(BuildBox), nameof(BuildBox.BuildModule))]
 internal static class BuildBoxBuildModulePatch
 {
@@ -56,7 +52,6 @@ internal static class CompositeWeaponBuildBoxBuildModulePatch
         ForgePersistPatchHelper.RestoreSnapshot(__instance, __result);
 }
 
-// Recycle: scale alloy payout by forge level.
 [HarmonyPatch(typeof(CarryableFactoryLogic), nameof(CarryableFactoryLogic.Recycle))]
 internal static class FabricatorRecyclePatch
 {
@@ -70,14 +65,10 @@ internal static class FabricatorRecyclePatch
     }
 }
 
-// Recycle: show the scaled payout in the fabricator panel. FabricatorRecyclePatch
-// above scales what a forged box actually pays out, but the panel keeps
-// rendering the unscaled CraftableItemDef value, so this closes that display gap.
-//
-// RecycleTab has no direct handle on the box instance (PurchasableItem is
-// GUID-keyed, not per-instance), so it's resolved the same way as the payout
-// patch: through the fabricator logic's recycle socket. Both hops are
-// non-public, hence the reflection.
+// FabricatorRecyclePatch scales what a forged box pays out, but the panel keeps rendering
+// the unscaled CraftableItemDef value. RecycleTab has no handle on the box instance
+// (PurchasableItem is GUID-keyed), so it is resolved through the fabricator logic's recycle
+// socket instead; both hops are non-public, hence the reflection.
 
 [HarmonyPatch(typeof(RecycleTab), "SocketChanged")]
 internal static class RecycleTabDisplayPatch
@@ -127,8 +118,8 @@ internal static class ForgePersistPatchHelper
         if (!ForgeStateStore.TryTakeSnapshot(box.photonView.ViewID, out var snap)) return;
         ForgeStateStore.GetOrCreate(module).ApplySnapshot(snap);
 
-        // Only this machine ran BuildModule, so nobody else can make the
-        // box->module connection; announce it or remote clients show a vanilla module.
+        // Only this machine ran BuildModule, so nobody else can make the box-to-module
+        // connection; without the announcement remote clients show a vanilla module.
         if (module.photonView != null)
             Net.ForgeNetSync.BroadcastModuleOverlay(module.photonView.ViewID, snap);
     }

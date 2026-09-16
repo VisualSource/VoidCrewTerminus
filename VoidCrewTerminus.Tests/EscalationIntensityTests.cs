@@ -3,20 +3,14 @@ using Xunit;
 
 namespace VoidCrewTerminus.Tests;
 
-// EscalationIntensity replaced a four-line preamble that five separate patch
-// sites each carried their own copy of. These tests pin the combined gate/cap/
-// multiplier behaviour so the copies can't drift back in.
-//
-// Everything goes through the explicit constructor. EscalationIntensity.Current
-// reads two static singletons plus the config and is the ambient convenience for
-// production; the constructor is the seam that makes the logic testable at all.
+// Pins the combined gate, cap and multiplier behaviour so per-patch copies can't drift back
+// in. Everything goes through the explicit constructor: Current reads two static singletons
+// plus the config, and the constructor is the seam that makes the logic testable at all.
 public class EscalationIntensityTests
 {
     private static EscalationIntensity Active(int rawScalar, int cap = 0,
         float statRate = 0.05f, float densityRate = 0.12f) =>
         new(active: true, rawScalar, cap, statRate, densityRate);
-
-    // ---- the cap ---------------------------------------------------------
 
     // Enemy pressure has to plateau: the raw scalar climbs all run, and an
     // uncapped density multiplier would spawn unbounded networked ships.
@@ -44,8 +38,6 @@ public class EscalationIntensityTests
         Assert.Equal(10, e.Scalar);
     }
 
-    // ---- the shared gate -------------------------------------------------
-
     [Fact]
     public void AffectsEnemies_FalseWhileDormant() =>
         Assert.False(new EscalationIntensity(active: false, 8, 10, 0.05f, 0.12f).AffectsEnemies);
@@ -70,8 +62,6 @@ public class EscalationIntensityTests
         Assert.False(e.AffectsEnemies);
         Assert.Equal(7, e.Scalar);
     }
-
-    // ---- multipliers -----------------------------------------------------
 
     [Fact]
     public void StatBonus_IsCappedScalarTimesRate() =>
@@ -103,8 +93,6 @@ public class EscalationIntensityTests
         Assert.True(e.AffectsEnemies);   // gate passes...
         Assert.True(e.StatBonus <= 0f);  // ...but there is nothing to apply
     }
-
-    // ---- density scaling -------------------------------------------------
 
     // Callers apply this unconditionally, so a dormant run must pass the
     // scenario's own value straight through.

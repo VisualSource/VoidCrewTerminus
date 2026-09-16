@@ -4,11 +4,8 @@ using CG.Ship.Modules;
 
 namespace VoidCrewTerminus.Forge;
 
-// The single owner of per-module forge state AND of snapshots riding BuildBoxes
-// between deconstruct and reconstruct. Callers never see the storage shape — only
-// ForgeModuleState (per-instance) and ForgeSnapshot (opaque value at the seam).
-//
-// Keys are held weakly (ConditionalWeakTable) so destroyed modules don't prevent GC.
+// The single owner of per-module forge state and of snapshots riding BuildBoxes between
+// deconstruct and reconstruct. Keys are held weakly so destroyed modules don't prevent GC;
 // _allStates keeps strong refs, needed only for clean enumeration during ClearAll.
 public static class ForgeStateStore
 {
@@ -31,12 +28,10 @@ public static class ForgeStateStore
     public static bool TryGet(CellModule module, out ForgeModuleState state) =>
         _table.TryGetValue(module, out state);
 
-    // Overwrites any prior snapshot for the box.
     public static void SaveSnapshot(int boxViewId, ForgeSnapshot snapshot) =>
         _snapshots[boxViewId] = snapshot ?? ForgeSnapshot.Empty;
 
-    // Removes the entry. Used by the reconstruct patch to hand the snapshot off to
-    // a freshly-created ForgeModuleState.
+    // Removes the entry, handing the snapshot off to a fresh ForgeModuleState.
     public static bool TryTakeSnapshot(int boxViewId, out ForgeSnapshot snapshot)
     {
         if (!_snapshots.TryGetValue(boxViewId, out snapshot)) return false;
@@ -44,13 +39,10 @@ public static class ForgeStateStore
         return true;
     }
 
-    // Used by TryCommit (folding outcome into current state) and the recycle-alloy
-    // scaling patch (reads .Level for the multiplier).
     public static bool TryPeekSnapshot(int boxViewId, out ForgeSnapshot snapshot) =>
         _snapshots.TryGetValue(boxViewId, out snapshot);
 
-    // All live box snapshots, for the late-joiner overlay push. Copy so callers
-    // can't mutate the store while enumerating.
+    // Copied so callers can't mutate the store while enumerating.
     public static IReadOnlyList<KeyValuePair<int, ForgeSnapshot>> AllSnapshots()
     {
         var list = new List<KeyValuePair<int, ForgeSnapshot>>(_snapshots.Count);
@@ -58,9 +50,8 @@ public static class ForgeStateStore
         return list;
     }
 
-    // Every installed module's overlay keyed by its PhotonView ViewID, for the
-    // late-joiner push. Modules whose view is gone (destroyed, or not yet
-    // networked) are skipped rather than sent with a bogus key.
+    // Keyed by PhotonView ViewID for the late-joiner push. A module whose view is gone is
+    // skipped rather than sent with a bogus key.
     public static IReadOnlyList<(int ViewId, ForgeSnapshot Snapshot)> AllModuleStates()
     {
         var list = new List<(int, ForgeSnapshot)>();

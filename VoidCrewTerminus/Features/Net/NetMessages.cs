@@ -3,10 +3,8 @@ using VoidManager.ModMessages;
 
 namespace VoidCrewTerminus.Net;
 
-// VoidManager discovers these by type (same scan that finds chat commands) and
-// routes an incoming message to the matching class's Handle() by its
-// GetIdentifier() (namespace.name). Payloads are object[] of Photon-serializable
-// primitives.
+// VoidManager routes an incoming message to the matching class by GetIdentifier()
+// (namespace.name), so renaming or moving one of these changes its wire identity.
 
 // Host → clients: authoritative meter/escalation snapshot.
 // arguments: [int scalar, int bosses, float meter, int level]
@@ -16,9 +14,7 @@ public class ForgeStateSyncMessage : ModMessage
         => ForgeNetSync.ApplyIncomingState(arguments);
 }
 
-// Placer → everyone else: an installed module's forge overlay, keyed by the
-// MODULE's ViewID. Needed because BuildBox.BuildModule only runs on the machine
-// that placed the box, so remote clients otherwise never restore the snapshot.
+// Placer → everyone else: an installed module's overlay, keyed by the MODULE's ViewID.
 // arguments: [int moduleViewID, int level, string[] perkSlots, int[] burdens, int unused]
 public class ModuleOverlayMessage : ModMessage
 {
@@ -26,9 +22,7 @@ public class ModuleOverlayMessage : ModMessage
         => ForgeNetSync.ApplyIncomingModuleOverlay(arguments);
 }
 
-// Operator → everyone else: a relic or build box was docked into / pulled out of
-// a Forge. Docking is a local interaction, so without this every other player
-// sees an empty Forge regardless of what's loaded.
+// Operator → everyone else: a relic or build box was docked into / pulled out of a Forge.
 // arguments: [int forgeViewID, int itemViewID, int anchorIndex (-1 = module socket), bool docked]
 public class ForgeDockMessage : ModMessage
 {
@@ -36,22 +30,17 @@ public class ForgeDockMessage : ModMessage
         => ForgeNetSync.ApplyIncomingDock(arguments);
 }
 
-// Client → host (MasterClient): "spend alloys on my behalf." No payload — the
-// host runs the spend against its own authoritative supplies and the resulting
-// meter/level reaches the requester via the state broadcast.
+// Client → host: spend alloys on my behalf. No payload.
 public class AlloySpendRequestMessage : ModMessage
 {
-    // Only the actor number crosses into the sync logic — keeping Photon's Player
-    // out of it is what lets the handler be driven from a test.
+    // Only the actor number crosses into the sync logic; keeping Photon's Player out is
+    // what lets the handler be driven from a test.
     public override void Handle(object[] arguments, Player sender)
         => ForgeNetSync.HandleAlloySpendRequest(sender?.ActorNumber ?? 0);
 }
 
-// Host → requester: the outcome of an AlloySpendRequestMessage. The state
-// broadcast on success already updates the requester's meter/level, but says
-// nothing about WHY, and on failure (not enough alloys, already maxed, …) the
-// requester previously heard nothing back at all — the last thing they ever saw
-// was their own "Requested the host feed the Forge…" line. This closes that gap.
+// Host → requester: the outcome of an AlloySpendRequestMessage. The state broadcast alone
+// says nothing on failure and gives no reason on success.
 // arguments: [bool ok, string message]
 public class AlloySpendResultMessage : ModMessage
 {
@@ -77,10 +66,8 @@ public class CommitRequestMessage : ModMessage
         => ForgeNetSync.HandleCommitRequest(arguments, sender?.ActorNumber ?? 0);
 }
 
-// Host → all: authoritative commit result as a full box snapshot. Every client
-// overwrites its snapshot for the box; the operator (the client holding the
-// relics) also consumes them. Also reused for the late-joiner overlay push
-// (relicsConsumed = 0).
+// Host → all: authoritative commit result as a full box snapshot. Every client overwrites
+// its snapshot; the operator also consumes. Reused for the late-joiner push, relicsConsumed=0.
 // arguments: [int boxViewID, int level, string[] perkSlots, int[] burdens, int relicsConsumed]
 public class CommitResultMessage : ModMessage
 {

@@ -3,23 +3,13 @@ using System.Collections.Generic;
 
 namespace VoidCrewTerminus.Escalation;
 
-// Sector Escalation loot half. Reshapes relic entries in the sector's vanilla
-// loot pool so early sectors flood Common relics and later sectors admit
-// Rare/Legendary. Non-relic entries pass through untouched. The max allowed
-// tier is the higher of a scalar-based ceiling (natural progression) and a
-// boss-based ceiling (guaranteed unlock on boss kills) — see TierFromScalar
-// and TierFromBossCount. Relics over the max are swapped for a random
-// same-list relic at the max tier (seeded from quest+sector for MP
-// determinism); dropped if the list has no candidate at that tier.
+// Reshapes relic entries in the sector's vanilla loot pool: a relic above the max allowed
+// tier is swapped for a random same-list relic at that tier, seeded from quest+sector so
+// every client agrees, and dropped when the list has no candidate. The max is the higher of
+// a scalar ceiling and a boss ceiling.
 //
-// BossesDefeated lives here rather than on the Forge because bosses affect
-// loot table tier, not the Forge module itself.
-//
-// Activation gate: all escalation systems (density, HP, damage, loot bias)
-// stay dormant until BossesDefeated reaches the configured threshold — the
-// player has to prove out vanilla difficulty first. Scalar and boss count
-// still accumulate during the warm-up period, so scaling activates at
-// whatever intensity has already piled up the moment the threshold is crossed.
+// Escalation stays dormant until BossesDefeated reaches the configured threshold. Scalar and
+// boss count still accumulate during warm-up, so it activates at full accumulated intensity.
 public static class SectorEscalation
 {
     public static int BossesDefeated { get; private set; }
@@ -41,12 +31,11 @@ public static class SectorEscalation
         BepinPlugin.Log?.LogDebug($"[Escalation] BossesDefeated set to {BossesDefeated} (dev)");
     }
 
-    // Client-side apply of the host-authoritative boss count. Silent (no
-    // notification) — the host owns the count and drives the unlock messages.
+    // Silent on purpose: the host owns the count and drives the unlock messages.
     internal static void ApplyNetworkBosses(int bosses) => BossesDefeated = System.Math.Max(0, bosses);
 
-    // Generic over the item ref type so tests can pass plain strings; production
-    // callers pass CraftableItemRef and a name extractor reading .Filename.
+    // Generic over the item ref type so tests can pass plain strings; production callers
+    // pass CraftableItemRef and a name extractor reading .Filename.
     public static void DowngradeRelics<T>(
         List<T> entries,
         Func<T, string> getName,
@@ -93,8 +82,8 @@ public static class SectorEscalation
         }
     }
 
-    // The four-argument overload below takes thresholds explicitly so the tier
-    // table can be tested without config bound; production callers use this one.
+    // The overload below takes thresholds explicitly so the tier table can be tested with
+    // no config bound; production callers use this one.
     public static Loot.RelicTier MaxAllowedTier(int scalar, int bossesDefeated) =>
         MaxAllowedTier(scalar, bossesDefeated,
             TerminusConfig.RareUnlockScalar, TerminusConfig.LegendaryUnlockScalar);

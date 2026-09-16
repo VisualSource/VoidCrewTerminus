@@ -5,18 +5,14 @@ using Xunit;
 
 namespace VoidCrewTerminus.Tests;
 
-// The two halves of a commit that are not the calculator: the projection of relic
-// facts into a request, and the fold of the outcome back into the module's
-// overlay. Both used to sit inside a static method on a MonoBehaviour, between a
-// heavily-tested calculator and a playtested game, reachable from neither.
+// The two halves of a commit that are not the calculator: the projection of relic facts into
+// a request, and the fold of the outcome back into the module's overlay.
 //
-// Defaults come from the shipped config values (curve 1,1,2,2,3,3,4; burden
-// chance 0.75) since TerminusConfig is not initialised in the test host — the
-// same assumption UpgradeCommitCalculatorTests documents.
+// Defaults come from the shipped config (curve 1,1,2,2,3,3,4; burden chance 0.75), since
+// TerminusConfig is not initialised in the test host.
 //
-// No [Collection]: nothing here writes a static. Resolve is pure, and
-// ForgeCommit.Execute — which reads the scene, saves and broadcasts — is never
-// called from a test.
+// No [Collection]: nothing here writes a static. Resolve is pure, and ForgeCommit.Execute,
+// which reads the scene, is never called from a test.
 public class ForgeCommitTests
 {
     private const string ExistingPerk = "weapon_overclocked_coils";
@@ -25,9 +21,8 @@ public class ForgeCommitTests
         string name = "Relic_Test", BurdenType curse = BurdenType.None) =>
         new(tier, name, curse);
 
-    // The calculator draws in a fixed order: the perk gate first, then — only when
-    // a CONSUMED relic is cursed — the burden gate. Anything past the end repeats
-    // the last value.
+    // The calculator draws in a fixed order: the perk gate first, then the burden gate,
+    // and only when a CONSUMED relic is cursed. Anything past the end repeats the last.
     private static Func<float> Draws(params float[] values)
     {
         int i = 0;
@@ -36,8 +31,6 @@ public class ForgeCommitTests
 
     private const float GateMisses = 1f;   // >= any chance
     private const float GateLands = 0f;    // < any chance
-
-    // ---- the outcome reaches the snapshot ----------------------------------
 
     [Fact]
     public void Resolve_saves_the_level_the_outcome_reports()
@@ -91,8 +84,6 @@ public class ForgeCommitTests
     // is covered directly in ForgeSnapshotTests; what stays unproven is that this
     // path passes it the right slot, and only when a perk actually landed.
 
-    // ---- relic facts reach the calculator in order -------------------------
-
     // Position is meaning: the tier driving the roll comes from the relics the cost
     // curve actually consumed, in order. RelicFacts keeps each relic's three facts
     // together precisely so that alignment cannot drift.
@@ -125,8 +116,6 @@ public class ForgeCommitTests
         Assert.Equal(RelicTier.Common, resolution.Outcome.BestTier);
         Assert.Empty(resolution.Updated.Burdens);
     }
-
-    // ---- burdens ------------------------------------------------------------
 
     [Fact]
     public void Resolve_applies_a_burden_from_a_consumed_cursed_relic()

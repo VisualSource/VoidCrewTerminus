@@ -14,8 +14,7 @@ public enum CommitStatus
     MissingViewId,
 }
 
-// Inputs to a commit. Built by UpgradedForgeBehavior from its scene state so the
-// calculator stays free of Unity types.
+// Built from scene state elsewhere so the calculator stays free of Unity types.
 public readonly struct CommitRequest
 {
     public int CurrentLevel { get; }
@@ -42,9 +41,7 @@ public readonly struct CommitRequest
     }
 }
 
-// Result of a commit attempt. The caller applies successful outcomes to its state
-// (mutate pending, destroy relics). Failure carries only a Status; success fields
-// (NewLevel, RelicsConsumed, ...) are populated.
+// Failure carries only a Status; the remaining fields are populated only when Status is Ok.
 public readonly struct CommitOutcome
 {
     public CommitStatus Status { get; }
@@ -52,15 +49,14 @@ public readonly struct CommitOutcome
     public int RelicsConsumed { get; }
     public Loot.RelicTier BestTier { get; }
 
-    // Perk-roll fields — RolledPerk is null when no roll was attempted OR when the
-    // roll gate failed. RollAttempted disambiguates.
+    // RolledPerk is null both when no roll was attempted and when the gate failed;
+    // RollAttempted disambiguates.
     public PerkDefinition RolledPerk { get; }
     public int TargetSlot { get; }        // -1 unless RolledPerk != null
     public float RollChance { get; }
     public bool RollAttempted { get; }
 
-    // Independent of the perk roll. AppliedBurden = None means no burden was
-    // rolled or the roll failed; anything else is the burden to add to the snapshot.
+    // Independent of the perk roll. None means no burden was rolled or the roll failed.
     public BurdenType AppliedBurden { get; }
 
     private CommitOutcome(
@@ -96,9 +92,8 @@ public readonly struct CommitOutcome
             rolledPerk, targetSlot, rollChance, rollAttempted, appliedBurden);
 }
 
-// Pure commit algorithm — cost curve walk, best-tier tie-break, perk roll.
-// Unity-free. RNG is injected so both branches of the roll (gate + pool pick) are
-// deterministic in tests.
+// Pure and Unity-free. RNG is injected so both branches of the roll, gate and pool pick,
+// are deterministic in tests.
 public static class UpgradeCommitCalculator
 {
     // nextRandom returns uniform [0, 1) values; default delegates to UnityEngine.Random.value.
@@ -122,8 +117,7 @@ public static class UpgradeCommitCalculator
         int newLevel = ForgeCostCurve.MaxReachable(currentLevel, request.RelicTiers.Count);
         int relicsConsumed = ForgeCostCurve.RelicsRequired(currentLevel, newLevel);
 
-        // Best tier among the relics actually consumed drives the perk gamble.
-        // Multi-relic commits roll once, at the quality of their best relic.
+        // Multi-relic commits roll once, at the quality of their best consumed relic.
         var bestTier = Loot.RelicTier.Common;
         int scanUpTo = Math.Min(relicsConsumed, request.RelicTiers.Count);
         for (int i = 0; i < scanUpTo; i++)
@@ -131,18 +125,15 @@ public static class UpgradeCommitCalculator
 
         var perkOutcome = RollPerk(newLevel, relicsConsumed, bestTier, request, nextRandom);
 
-        // Perk and burden outcomes are orthogonal — a commit can land a perk with
-        // no burden, fire a burden with no perk, both, or neither.
+        // Orthogonal to the perk roll: a commit can land either, both, or neither.
         var burden = RollBurden(relicsConsumed, request, nextRandom);
         return WithBurden(perkOutcome, burden);
     }
 
     private static BurdenType RollBurden(int relicsConsumed, CommitRequest request, Func<float> nextRandom)
     {
-        // Curse identity is fixed at spawn — each cursed relic already carries a
-        // specific burden type. Walk consumed relics in FIFO order and grab the
-        // first cursed one's baked burden (consistent with the signature FIFO
-        // tie-break below).
+        // Curse identity is fixed at spawn, so the first cursed relic in FIFO order supplies
+        // the burden, matching the signature tie-break below.
         int scanUpTo = Math.Min(relicsConsumed, request.RelicCursedBurden.Count);
         BurdenType baked = BurdenType.None;
         for (int i = 0; i < scanUpTo; i++)
@@ -180,8 +171,7 @@ public static class UpgradeCommitCalculator
             return CommitOutcome.Success(newLevel, relicsConsumed, bestTier,
                 rolledPerk: null, targetSlot: -1, rollChance: chance, rollAttempted: true);
 
-        // Multi-relic commits use the earliest flagship relic's signature —
-        // matches the FIFO consumption order and keeps the rule simple to reason about.
+        // Multi-relic commits use the earliest flagship relic's signature, matching FIFO order.
         var signaturePerk = PickSignature(relicsConsumed, request, nextRandom);
         if (signaturePerk != null)
             return CommitOutcome.Success(newLevel, relicsConsumed, bestTier,
@@ -200,8 +190,7 @@ public static class UpgradeCommitCalculator
             rolledPerk: perk, targetSlot: slot, rollChance: chance, rollAttempted: true);
     }
 
-    // For each consumed relic in FIFO order, checks for authored signature perks;
-    // first flagship wins. Returns null if none exist, and the caller falls back
+    // First flagship in FIFO order wins. Null when none exist, and the caller falls back
     // to the category pool.
     private static PerkDefinition PickSignature(
         int relicsConsumed, CommitRequest request, Func<float> nextRandom)

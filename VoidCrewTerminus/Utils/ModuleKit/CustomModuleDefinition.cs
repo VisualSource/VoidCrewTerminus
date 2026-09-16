@@ -11,8 +11,8 @@ public sealed class CustomModuleDefinition
     // components, so the name is the only signal available to tell them apart at load time.
     public string ModulePrefabName { get; set; }
 
-    // Marker only — its guid and flavor text are kept and the GameObject discarded. The
-    // real crate is cloned from a live vanilla donor.
+    // Marker only: the guid and flavor text are kept, the GameObject discarded, and the
+    // real crate cloned from a live vanilla donor.
     public string BuildBoxPrefabName { get; set; }
 
     public string BuildBoxDisplayName { get; set; }
@@ -20,8 +20,7 @@ public sealed class CustomModuleDefinition
     public RarityType Rarity { get; set; } = RarityType.Common;
 
     // A Func, not a CsTag: tags resolve against the game's CsTagTable, which doesn't exist
-    // yet when definitions are constructed at plugin Awake. Donor selection prefers a crate
-    // whose module carries this tag so the borrowed crate's category label reads right;
-    // null takes any non-weapon BuildBox.
+    // when definitions are constructed at plugin Awake. Donor selection prefers a crate whose
+    // module carries this tag, so the borrowed crate's category label reads right.
     public Func<CsTag> PreferredDonorTag { get; set; }
 }

@@ -8,20 +8,9 @@ using VoidCrewTerminus.UI;
 
 namespace VoidCrewTerminus.Forge;
 
-// Renders the Forge's level/alloy readout onto AlloyTerminalScreen's mesh —
-// same RenderTexture-via-UIDocument pipeline vanilla's CG.Client.UI.Terminals.
-// WorldSpaceUI uses for in-world terminals, minus everything that pipeline
-// exists for (pointer-event forwarding, PanelEventHandler lookup): this screen
-// takes no input, so none of that applies.
-//
-// Layout (VisualTreeAsset) and PanelSettings are Unity-authored bundled assets
-// (AssetLoader.ForgeScreenVisualTree / ForgeScreenPanelSettingsTemplate). This
-// component owns the plumbing only — RenderTexture, PanelSettings clone,
-// UIDocument, material wiring — and hands the actual VisualElement tree to
-// ModuleUpgradePanel (UI/ModuleUpgradePanel.cs), which builds the decorative
-// elements the UXML can't (meander bars, grid lines, pips) and drives the
-// level/ring/pip visuals from ApplyState, plus the powered/unpowered look from
-// SetPowered.
+// Renders the level/alloy readout onto AlloyTerminalScreen via the same RenderTexture and
+// UIDocument pipeline vanilla's WorldSpaceUI uses, minus the pointer-event forwarding that
+// pipeline exists for: this screen takes no input. ModuleUpgradePanel owns the element tree.
 public class ForgeScreenDisplay : MonoBehaviour
 {
     [SerializeField] private int _panelWidth = 1152;
@@ -33,8 +22,7 @@ public class ForgeScreenDisplay : MonoBehaviour
     private Material _material;
     private ModuleUpgradePanel _panel;
 
-    // The Forge's own CellModule.PowerDrain. Resolved from a parent because this
-    // component lives on the screen mesh, several FBX nodes below the module root.
+    // Resolved from a parent: this component lives on the screen mesh, below the module root.
     private PowerDrain _powerDrain;
 
     private void Awake()
@@ -43,8 +31,8 @@ public class ForgeScreenDisplay : MonoBehaviour
         ForgeMeterController.MeterChanged += Refresh;
         ForgeMeterController.LevelChanged += OnLevelChanged;
         Refresh();
-        // After Refresh, so SetPowered picks the Filling-vs-Max variant off a level
-        // that already reflects the real meter rather than the field's initial 1.
+        // After Refresh, so SetPowered picks the Filling-vs-Max variant off a level that
+        // already reflects the real meter rather than the field's initial 1.
         WirePower();
     }
 
@@ -57,12 +45,9 @@ public class ForgeScreenDisplay : MonoBehaviour
         DestroyGeneratedAssets();
     }
 
-    // PowerDrain.IsOn is the single source that covers both ways the Forge can stop
-    // running: a manually switched-off module, and the whole ship going dark —
-    // PowerPropagator pushes an outage down through ParentConnectionStateChanged,
-    // which lands on IsOn. It's also the same drain ForgePowerLights hands
-    // PoweredLightSource for the interior light, so the screen and the light can
-    // never disagree about whether this module has power.
+    // IsOn covers both ways the Forge stops running: a switched-off module, and a ship-wide
+    // outage pushed down by PowerPropagator. ForgePowerLights hands the same drain to the
+    // interior light, so the screen and the light can never disagree.
     private void WirePower()
     {
         if (_panel == null) return;
@@ -77,11 +62,10 @@ public class ForgeScreenDisplay : MonoBehaviour
 
         _powerDrain.IsOn.OnChange += OnPowerChanged;
 
-        // Seeded from the live value rather than assumed on: a freshly built module
-        // sits at IsOn=false until BuildSocket connects it to the power system and
-        // it finishes booting, and that turn-on arrives as an OnChange we're already
-        // subscribed to. Reading .Value (not assigning it) — the setter is
-        // RequestChange, so writing here would try to switch the module on.
+        // Seeded from the live value: a freshly built module sits at IsOn=false until
+        // BuildSocket connects it, and that turn-on arrives as an OnChange we already
+        // subscribe to. Read .Value, never assign: the setter is RequestChange and would
+        // try to switch the module on.
         _panel.SetPowered(_powerDrain.IsOn.Value);
     }
 
@@ -117,8 +101,8 @@ public class ForgeScreenDisplay : MonoBehaviour
 
         _renderTexture = new RenderTexture(_panelWidth, _panelHeight, 24) { name = "ForgeScreen-RenderTexture" };
 
-        // Cloned per instance (not shared) — PanelSettings.targetTexture is
-        // per-panel, and a Forge module could in principle be duplicated.
+        // Cloned per instance: PanelSettings.targetTexture is per-panel, and a Forge module
+        // could in principle be duplicated.
         _panelSettings = Instantiate(panelSettingsTemplate);
         _panelSettings.name = "ForgeScreen-PanelSettings";
         _panelSettings.targetTexture = _renderTexture;
@@ -127,45 +111,26 @@ public class ForgeScreenDisplay : MonoBehaviour
         _document.panelSettings = _panelSettings;
         _document.visualTreeAsset = visualTree;
 
-        // UIDocument's root VisualElement is focusable=true by default — so a
-        // freshly opened menu is immediately keyboard-navigable. This screen is a
-        // passive readout, never meant to take focus, but that default lets it
-        // grab focus anyway the moment it's created: PanelEventHandler.OnElementFocus
-        // calls EventSystem.SetSelectedGameObject on the panel's first FocusEvent,
-        // and EventSystem.currentSelectedGameObject is ONE piece of global state
-        // shared by every panel in the scene, UI Toolkit or uGUI — including other
-        // menus like the fabricator. Once our root claims it, nothing hands it
-        // back, so every other menu's isCurrentFocusedPanel reads false forever.
+        // UIDocument roots are focusable by default, and EventSystem.currentSelectedGameObject
+        // is one piece of global state shared by every panel in the scene. Once this passive
+        // readout claims focus nothing hands it back, and every other menu's
+        // isCurrentFocusedPanel reads false forever.
         _document.rootVisualElement.focusable = false;
 
-        // Unity also auto-spawns a PanelEventHandler+PanelRaycaster for every
-        // runtime panel, texture-targeted or not, wired into that same shared
-        // EventSystem. This screen never forwards pointer events anywhere, so
-        // left enabled it's still a redundant hit-test target for other UI's
-        // clicks. Vanilla's WorldSpaceUI disables its own panel's raycaster the
-        // same way, but does it as a single synchronous check right here — safe
-        // for them only because their terminal input comes through a separate
-        // manual 3D-raycast path, so a missed match is invisible. We have no
-        // fallback, and the handler isn't guaranteed to exist the same frame the
-        // UIDocument is added, so retry across a few frames instead of checking once.
+        // Unity auto-spawns a PanelEventHandler+PanelRaycaster for every runtime panel,
+        // leaving this screen a redundant hit-test target for other UI's clicks. The handler
+        // isn't guaranteed to exist the same frame the UIDocument is added, so this retries
+        // across a few frames rather than checking once.
         StartCoroutine(DisableInputRaycaster());
 
-        // Added after the UIDocument is fully configured — Unity runs Awake+
-        // OnEnable synchronously for a component added to an already-active
-        // GameObject, so ModuleUpgradePanel.OnEnable (which reads
-        // GetComponent<UIDocument>().rootVisualElement) sees a working panel
-        // immediately, not a half-configured one from ordering luck.
+        // After the UIDocument is configured: AddComponent on an active GameObject runs Awake
+        // and OnEnable synchronously, and ModuleUpgradePanel.OnEnable reads rootVisualElement.
         _panel = gameObject.AddComponent<ModuleUpgradePanel>();
 
-        // .material (not sharedMaterial) instances it — the bundled Unlit asset
-        // itself stays untouched, matching WorldSpaceUI.RebuildPanel's approach.
-        //
-        // _EmissiveColorMap, not _UnlitColorMap (vanilla's WorldSpaceUI target,
-        // and this component's first draft): the authored ModuleScreen material
-        // drives the RenderTexture through HDRP/Unlit's Emission inputs instead
-        // of its plain Color map, specifically so Exposure Weight can be pinned
-        // near 0 — the screen stays equally readable regardless of scene exposure,
-        // which a base-color map doesn't get for free.
+        // .material, not sharedMaterial, so the bundled asset stays untouched.
+        // _EmissiveColorMap, not _UnlitColorMap: the authored ModuleScreen material drives the
+        // RenderTexture through HDRP/Unlit's Emission inputs so Exposure Weight can be pinned
+        // near 0 and the screen stays readable regardless of scene exposure.
         _material = meshRenderer.material;
         _material.SetTexture("_EmissiveColorMap", _renderTexture);
         meshRenderer.material = _material;

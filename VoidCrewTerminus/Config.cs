@@ -8,13 +8,9 @@ namespace VoidCrewTerminus;
 
 internal static class TerminusConfig
 {
-    // Every entry below is a triplet: a `const` default, the ConfigEntry bound to
-    // it, and a typed accessor that reads it. The accessors exist because a
-    // ConfigEntry is null until Init() runs (never, under the test host) — read
-    // config through the accessor, never `Entry?.Value ?? default` at the call
-    // site. The const is passed into the attribute (attribute args must be
-    // constant, and BindConfig takes `object`, so it boxes cleanly) to keep the
-    // default in exactly one place.
+    // Every entry is a triplet: a `const` default, the ConfigEntry bound to it, and a typed
+    // accessor. A ConfigEntry is null until Init() runs (never under the test host), so read
+    // config through the accessor, never `Entry?.Value ?? default` at the call site.
 
     // Fields below are assigned via reflection in Init(); suppress "never assigned".
 #pragma warning disable CS0649
@@ -83,8 +79,8 @@ internal static class TerminusConfig
     internal static ConfigEntry<float> PerkRollChanceLegendary;
     internal static float PerkChanceLegendary => PerkRollChanceLegendary?.Value ?? DefaultPerkRollChanceLegendary;
 
-    // The three enemy-pressure knobs below are read together on every scaling
-    // path — read via Escalation.EscalationIntensity.Current, not individually.
+    // The three enemy-pressure knobs below are read together on every scaling path, via
+    // EscalationIntensity.Current rather than individually.
     private const float DefaultEscalationStatScalarPerJump = 0.05f;
     [BindConfig("forge", DefaultEscalationStatScalarPerJump, "Fractional multiplier added to enemy HP and damage per DifficultyScalar tick (minor boost — density is the primary axis)")]
     internal static ConfigEntry<float> EscalationStatScalarPerJump;

@@ -5,19 +5,16 @@ using Xunit;
 
 namespace VoidCrewTerminus.Tests;
 
-// The Module-Biter / Hull-Biter split is positional, not random — the player is
-// meant to be able to angle the ship and earn Hull-Biters deliberately. A wrong
-// box test does not throw, it just quietly makes one variant unreachable, so the
-// geometry is pinned here.
-//
-// DistanceToBox takes loose floats rather than a Vector3 precisely so it can be
-// reached from the test host, where Unity's Vector3 constructor throws.
+// The Module-Biter / Hull-Biter split is positional, not random, so a player can angle the
+// ship and earn Hull-Biters deliberately. A wrong box test does not throw, it quietly makes
+// one variant unreachable, so the geometry is pinned here. DistanceToBox takes loose floats
+// so it can be reached from the test host, where Unity's Vector3 constructor throws.
 public sealed class LeechVariantAssignerTests
 {
     private const float Radius = 1.5f;
 
-    // Authored grid contract: cells are 4.0 units, so Small is 4x4x4, Medium 8x4x4
-    // and Large 8x4x8 — half-extents (2,2,2), (4,2,2), (4,2,4).
+    // Authored grid contract: cells are 4.0 units, so Small is 4x4x4, Medium 8x4x4 and
+    // Large 8x4x8, giving half-extents (2,2,2), (4,2,2), (4,2,4).
     private static (float X, float Y, float Z) Small => (2f, 2f, 2f);
     private static (float X, float Y, float Z) Large => (4f, 2f, 4f);
 
@@ -37,9 +34,8 @@ public sealed class LeechVariantAssignerTests
         Assert.Equal(1f, distance, 4);
     }
 
-    // This is the case that killed the centroid approach: centroid-to-end on a
-    // Large module is 4.90-6.00, so a Leech sitting on its far face would have
-    // classified as a Hull-Biter. Measured from the face it is plainly inside.
+    // A Leech on a Large module's far face sits 4.90-6.00 from its centroid, so a centroid
+    // test classifies it Hull-Biter. Measured from the face it is plainly inside.
     [Fact]
     public void A_leech_on_a_large_modules_far_face_is_a_module_biter()
     {
@@ -69,9 +65,8 @@ public sealed class LeechVariantAssignerTests
         Assert.Equal(expectedModuleBiter, distance <= Radius);
     }
 
-    // 2.0 is a structural ceiling, not a taste preference: at or above it the gap
-    // between adjacent 4.0-unit cells is fully covered, no anchor can land outside
-    // every footprint, and Hull-Biters stop occurring at all.
+    // 2.0 is a structural ceiling, not a preference: at or above it the gap between
+    // adjacent 4.0-unit cells is fully covered and Hull-Biters stop occurring at all.
     [Fact]
     public void A_radius_of_two_leaves_no_bare_hull_between_adjacent_cells()
     {
@@ -83,9 +78,8 @@ public sealed class LeechVariantAssignerTests
         Assert.False(distance > 2.0f, "at 2.0 the midpoint is swallowed and Hull-Biters die out");
     }
 
-    // BuildSize cannot be named here — GameLibs is a runtime-only dependency of the
-    // test project — so the enum values are reached by ordinal:
-    // Small = 0, Medium = 1, Large = 2.
+    // BuildSize cannot be named here (GameLibs is a runtime-only dependency), so the enum
+    // values are reached by ordinal: Small = 0, Medium = 1, Large = 2.
     [Theory]
     [InlineData(0, 2f, 2f, 2f)]
     [InlineData(1, 4f, 2f, 2f)]

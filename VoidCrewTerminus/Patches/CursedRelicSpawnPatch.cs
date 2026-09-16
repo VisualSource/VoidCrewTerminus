@@ -6,15 +6,12 @@ using VoidCrewTerminus.Loot;
 
 namespace VoidCrewTerminus.Patches;
 
-// Hooks OrbitObject.OnPhotonInstantiate rather than LootOnDeathDropper: every
-// relic reaches the world through Photon instantiation (enemy loot, POI loot,
-// shrines, !spawn) and fires exactly once per instance, so no idempotency
-// sentinel is needed. Walking the scene with FindObjectsOfType per drop (the
-// earlier design) was O(scene) on every enemy death and missed non-drop sources.
+// Hooks OnPhotonInstantiate rather than LootOnDeathDropper: every relic reaches the world
+// through Photon instantiation (enemy loot, POI loot, shrines, !spawn) and fires exactly
+// once per instance, so no idempotency sentinel is needed.
 //
-// Host rolls + marks + broadcasts; clients drain any buffered cursed flag that
-// arrived before this relic instantiated and only mirror the roll for awareness
-// (!cursedstatus / hover UI) — the host is authoritative.
+// The host rolls, marks and broadcasts. Clients drain any cursed flag buffered before this
+// relic instantiated and mirror the roll for awareness only.
 [HarmonyPatch(typeof(OrbitObject), nameof(OrbitObject.OnPhotonInstantiate))]
 internal static class CursedRelicSpawnPatch
 {
@@ -26,8 +23,8 @@ internal static class CursedRelicSpawnPatch
             var go = __instance.gameObject;
             if (go == null) return;
 
-            // The runtime GameObject name carries Unity's "(Clone)" suffix;
-            // NormalizeName strips it to the prefab base name RelicTierData is keyed by.
+            // The runtime name carries Unity's "(Clone)" suffix; RelicTierData is keyed
+            // by the prefab base name.
             var name = RelicTierData.NormalizeName(go.name);
             if (!RelicTierData.TryGet(name, out var entry)) return;
 

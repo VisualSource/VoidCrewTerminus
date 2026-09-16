@@ -3,18 +3,12 @@ using UnityEngine;
 
 namespace VoidCrewTerminus.Forge.Burdens;
 
-// Base MonoBehaviour for all Maintenance Burden types. Each burden type has its
-// own subclass; one instance per burden type is attached to the module
-// GameObject when the snapshot lists that burden.
-//
-// Burdens are OPERATIONAL, not statistical: they make the module annoying to
-// operate (random shutoffs, heat ticks, manual resets) without ever changing
-// its damage/defense/etc. numbers. Stat mods live on ForgeModuleState;
-// MonoBehaviours live here.
+// One subclass per burden type, one instance attached to the module when the snapshot lists
+// that burden. Burdens are OPERATIONAL, not statistical: they make a module annoying to
+// operate without ever changing its numbers. Stat mods live on ForgeModuleState.
 public abstract class MaintenanceBurdenBehavior : MonoBehaviour
 {
-    // Used by ForgeModuleState.SyncBurdenBehaviors to reconcile attached
-    // components against snapshot state.
+    // Reconciled against snapshot state by ForgeModuleState.SyncBurdenBehaviors.
     public abstract BurdenType BurdenType { get; }
 
     protected CellModule Module { get; private set; }

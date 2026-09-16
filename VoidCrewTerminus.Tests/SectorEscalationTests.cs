@@ -23,8 +23,6 @@ public class SectorEscalationTests
 
     private static List<string> MakeEntries(params string[] names) => new(names);
 
-    // ---- max-allowed tier -------------------------------------------------
-
     [Theory]
     [InlineData(0, RelicTier.Common)]
     [InlineData(2, RelicTier.Common)]
@@ -37,8 +35,6 @@ public class SectorEscalationTests
         Assert.Equal(expected,
             SectorEscalation.MaxAllowedTier(scalar, bossesDefeated: 0, rareUnlockScalar: 3, legendaryUnlockScalar: 6));
     }
-
-    // ---- downgrade behaviour ----------------------------------------------
 
     [Fact]
     public void Downgrade_AtScalarZero_RareBecomesCommon()
@@ -160,8 +156,6 @@ public class SectorEscalationTests
         SectorEscalation.DowngradeRelics<string>(null, s => s, scalar: 0, bossesDefeated: 0, seed: 42);
     }
 
-    // ---- boss unlock ceiling ----------------------------------------------
-
     [Fact]
     public void MaxAllowedTier_WithZeroBosses_UsesScalarThresholds()
     {
@@ -216,7 +210,6 @@ public class SectorEscalationTests
         Assert.Equal(new[] { CommonRelic1, RareRelic1 }, entries);
     }
 
-    // ---- activation gate --------------------------------------------------
     // IsScalingActive reads TerminusConfig.EscalationBossActivationThreshold,
     // which is null in the test host — the ?? 2 fallback kicks in, so the
     // default threshold is 2 (matches the shipped config default).
