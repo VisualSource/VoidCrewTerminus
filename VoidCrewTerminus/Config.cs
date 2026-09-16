@@ -188,18 +188,18 @@ internal static class TerminusConfig
     internal static float LeechProximityRadius => LeechVariantProximityRadius?.Value ?? DefaultLeechVariantProximityRadius;
 
     // Missile baselines. The band multipliers below scale these.
-    private const float DefaultLeechMissileBaseSpeed = 50f;
-    [BindConfig("leech", DefaultLeechMissileBaseSpeed, "Leech Missile speed in m/s before band scaling. Matches the vanilla SyncedProjectile default; point-defense tracks from 525 m with a ~2.25 s engagement cycle, so this value sets how many PD shots a missile eats on approach (~4 at 50 m/s)")]
+    private const float DefaultLeechMissileBaseSpeed = 110f;
+    [BindConfig("leech", DefaultLeechMissileBaseSpeed, "Leech Missile speed in m/s before band scaling. The primary anti-point-defence lever: a KPD Mk1 acquires at 600 m and lands an intercept roughly every 1.45 s (measured), so this sets how many intercepts the missile must survive to arrive — about 8 at the vanilla 50 m/s, about 4 at 110. Prefer moving this over LeechMissileBaseHitPoints, which is a cliff rather than a curve")]
     internal static ConfigEntry<float> LeechMissileBaseSpeed;
     internal static float LeechMissileSpeed => LeechMissileBaseSpeed?.Value ?? DefaultLeechMissileBaseSpeed;
 
-    private const float DefaultLeechMissileArcLength = 500f;
-    [BindConfig("leech", DefaultLeechMissileArcLength, "Leech Missile turn radius in world units, matching the vanilla GuidedProjectile default. This is an INVERSE control: vanilla derives angular velocity as distance/arcLength, so a SMALLER value turns harder. The LeechMissileTurnRateBands multipliers divide into this")]
+    private const float DefaultLeechMissileArcLength = 150f;
+    [BindConfig("leech", DefaultLeechMissileArcLength, "Leech Missile turn radius in metres. Vanilla turns at Speed/arcLength rad/s, so the speed cancels and this value IS the radius at any speed. An INVERSE control: SMALLER turns harder. The vanilla default of 500 gave a 500 m radius, which could not converge on a manoeuvring ship inside the missile's own lifetime — it orbited until it expired. The LeechMissileTurnRateBands multipliers divide into this")]
     internal static ConfigEntry<float> LeechMissileArcLength;
     internal static float LeechMissileTurnArc => LeechMissileArcLength?.Value ?? DefaultLeechMissileArcLength;
 
-    private const int DefaultLeechMissileBaseHitPoints = 2;
-    [BindConfig("leech", DefaultLeechMissileBaseHitPoints, "Leech Missile hit points before band scaling. This is a HIT COUNTER, not a damage pool — point-defense hardcodes its damage to float.MaxValue, so each intercept costs exactly one point. Above 3-4 effective HP the missile becomes PD-immune rather than PD-resistant, so this compounds with LeechMissileBaseSpeed and the two cannot be tuned independently")]
+    private const int DefaultLeechMissileBaseHitPoints = 3;
+    [BindConfig("leech", DefaultLeechMissileBaseHitPoints, "Leech Missile hit points before band scaling. This is a HIT COUNTER, not a damage pool — point-defense hardcodes its damage to float.MaxValue, so each intercept costs exactly one point. That makes it a CLIFF, not a curve: below the number of intercepts a KPD can land on the approach the missile is stopped every time, at or above it PD can never stop it. The threshold is set by LeechMissileBaseSpeed (600 m envelope, ~1.45 s per intercept), so prefer tuning speed or salvo size over this")]
     internal static ConfigEntry<int> LeechMissileBaseHitPoints;
     internal static int LeechMissileHitPoints => LeechMissileBaseHitPoints?.Value ?? DefaultLeechMissileBaseHitPoints;
 

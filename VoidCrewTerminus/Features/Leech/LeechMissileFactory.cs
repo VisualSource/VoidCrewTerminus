@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using CG.Space;
 using CG.Space.Projectiles;
+using Gameplay.Damage;
 using Photon.Pun;
 using UnityEngine;
 using UnityEngine.Rendering.HighDefinition;
@@ -74,7 +75,11 @@ internal static class LeechMissileFactory
 
         missile.ProjectileId = sync.GetNextProjectileIndex();
         missile.Source = source;
-        missile.Faction = source.Valid() ? source.Faction : 0;
+        // Hollow, not 0, when the dev command spawns one with no carrier behind it:
+        // SpaceCraftFaction.Neutral is 0, and IsObjectFromEnemyFaction short-circuits to
+        // false whenever either side is 0, so a faction-0 missile reads as nobody's enemy
+        // to every threat, marker and AI path that asks.
+        missile.Faction = source.Valid() ? source.Faction : (int)SpaceCraftFaction.Hollow;
         missile.SpawnTime = PhotonNetwork.ServerTimestamp;
 
         missile.Arm(target, hitPoints);
